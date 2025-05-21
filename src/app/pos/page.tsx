@@ -64,7 +64,10 @@ const createSalesTicketAPI = async (ticketData: Pick<SalesTicketDB, 'name' | 'ca
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(ticketData),
   });
-  if (!res.ok) throw new Error('Failed to create sales ticket');
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({ message: 'Failed to create sales ticket' }));
+    throw new Error(errorData.message || 'Failed to create sales ticket');
+  }
   return res.json();
 };
 
@@ -74,13 +77,19 @@ const updateSalesTicketAPI = async ({ ticketId, data }: { ticketId: string; data
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data),
   });
-  if (!res.ok) throw new Error('Failed to update sales ticket');
+   if (!res.ok) {
+    const errorData = await res.json().catch(() => ({ message: 'Failed to update sales ticket' }));
+    throw new Error(errorData.message || 'Failed to update sales ticket');
+  }
   return res.json();
 };
 
 const deleteSalesTicketAPI = async (ticketId: string): Promise<{ message: string }> => {
   const res = await fetch(`/api/sales-tickets/${ticketId}`, { method: 'DELETE' });
-  if (!res.ok) throw new Error('Failed to delete sales ticket');
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({ message: 'Failed to delete sales ticket' }));
+    throw new Error(errorData.message || 'Failed to delete sales ticket');
+  }
   return res.json();
 };
 
@@ -100,14 +109,14 @@ export default function POSPage() {
   const { data: salesTickets = [], isLoading: isLoadingSalesTickets, refetch: refetchSalesTickets } = useQuery<SalesTicketDB[], Error>({
     queryKey: ['salesTickets'],
     queryFn: fetchSalesTickets,
-    refetchOnWindowFocus: false,
+    refetchOnWindowFocus: false, // Keep this false to prevent too frequent refetches
   });
 
   const createTicketMutation = useMutation<SalesTicketDB, Error, Pick<SalesTicketDB, 'name' | 'cart_items' | 'status'>>({
     mutationFn: createSalesTicketAPI,
     onSuccess: (newTicket) => {
       queryClient.invalidateQueries({ queryKey: ['salesTickets'] });
-      setActiveTicketId(newTicket.id);
+      setActiveTicketId(newTicket.id); // Set new ticket as active immediately
       toast({ title: 'Ticket Created', description: `${newTicket.name} has been created.` });
     },
     onError: (error) => {
@@ -121,30 +130,29 @@ export default function POSPage() {
       queryClient.setQueryData(['salesTickets'], (oldData: SalesTicketDB[] | undefined) =>
         oldData ? oldData.map(t => t.id === updatedTicket.id ? updatedTicket : t) : []
       );
-      // Optimistically update the active ticket if it's the one being changed
-      if (activeTicket && activeTicket.id === updatedTicket.id) {
-        // This part might be tricky with optimistic updates if not careful
-      }
     },
     onError: (error) => {
       toast({ variant: 'destructive', title: 'Failed to Update Ticket', description: error.message });
-      refetchSalesTickets(); // Refetch to ensure consistency
+      refetchSalesTickets(); // Refetch to ensure consistency after error
     },
   });
 
   const deleteTicketMutation = useMutation<{ message: string }, Error, string>({
     mutationFn: deleteSalesTicketAPI,
     onSuccess: (data, ticketId) => {
-      queryClient.invalidateQueries({ queryKey: ['salesTickets'] });
-      toast({ title: 'Ticket Closed', description: data.message });
-      if (activeTicketId === ticketId) {
-        const remainingTickets = salesTickets.filter(t => t.id !== ticketId);
-        if (remainingTickets.length > 0) {
-          setActiveTicketId(remainingTickets.sort((a,b) => new Date(b.last_updated_at).getTime() - new Date(a.last_updated_at).getTime())[0].id);
-        } else {
-          handleCreateNewTicket(true); // Force create if none left
+      queryClient.invalidateQueries({ queryKey: ['salesTickets'] }).then(() => {
+        // This logic needs to run *after* salesTickets query is updated
+        const currentTickets = queryClient.getQueryData<SalesTicketDB[]>(['salesTickets']) || [];
+        if (activeTicketId === ticketId) {
+          if (currentTickets.length > 0) {
+            const sortedTickets = [...currentTickets].sort((a,b) => new Date(b.last_updated_at).getTime() - new Date(a.last_updated_at).getTime());
+            setActiveTicketId(sortedTickets[0].id);
+          } else {
+            handleCreateNewTicket(true);
+          }
         }
-      }
+      });
+      toast({ title: 'Ticket Closed', description: data.message });
     },
     onError: (error) => {
       toast({ variant: 'destructive', title: 'Failed to Close Ticket', description: error.message });
@@ -153,17 +161,16 @@ export default function POSPage() {
 
   const activeTicket = useMemo(() => salesTickets.find(t => t.id === activeTicketId), [salesTickets, activeTicketId]);
 
-  // Effect to set initial active ticket or create one if none exist
   useEffect(() => {
-    if (!isLoadingSalesTickets && salesTickets.length > 0) {
-      if (!activeTicketId || !salesTickets.find(t => t.id === activeTicketId)) {
-        // Sort by last_updated_at to pick the most recent one
-        const sortedTickets = [...salesTickets].sort((a,b) => new Date(b.last_updated_at).getTime() - new Date(a.last_updated_at).getTime());
-        setActiveTicketId(sortedTickets[0].id);
+    if (!isLoadingSalesTickets && salesTickets) { // ensure salesTickets is defined
+      if (salesTickets.length > 0) {
+        if (!activeTicketId || !salesTickets.find(t => t.id === activeTicketId)) {
+          const sortedTickets = [...salesTickets].sort((a, b) => new Date(b.last_updated_at).getTime() - new Date(a.last_updated_at).getTime());
+          setActiveTicketId(sortedTickets[0].id);
+        }
+      } else if (salesTickets.length === 0 && !createTicketMutation.isPending) {
+        handleCreateNewTicket(true);
       }
-    } else if (!isLoadingSalesTickets && salesTickets.length === 0 && !createTicketMutation.isPending) {
-      // If no tickets, create one
-      handleCreateNewTicket(true);
     }
   }, [salesTickets, isLoadingSalesTickets, activeTicketId, createTicketMutation.isPending]);
 
@@ -320,7 +327,7 @@ export default function POSPage() {
   const getTicketBadgeVariant = (status: SalesTicketDB['status']): "default" | "outline" | "secondary" | "destructive" | null | undefined => {
     switch(status) {
       case 'Active': return 'default';
-      case 'On Hold': return 'secondary'; // Changed 'On Hold' to secondary for better distinction
+      case 'On Hold': return 'secondary'; 
       case 'Pending Payment': return 'outline';
       default: return 'default';
     }
@@ -329,7 +336,7 @@ export default function POSPage() {
   const isProcessing = createTicketMutation.isPending || updateTicketMutation.isPending || deleteTicketMutation.isPending || saleApiMutation.isPending || isLoadingSalesTickets;
 
 
-  if (isLoadingSalesTickets && !salesTickets.length) {
+  if (isLoadingSalesTickets && (!salesTickets || salesTickets.length === 0)) {
     return (
       <AppLayout>
         <div className="flex justify-center items-center h-[calc(100vh-8rem)]">
@@ -360,7 +367,7 @@ export default function POSPage() {
                   className={cn(
                     "flex items-center justify-between rounded-md group text-sm min-h-[2.5rem] border transition-all", 
                     ticket.id === activeTicketId
-                      ? "bg-primary text-primary-foreground px-3 py-2 shadow-md ring-2 ring-primary ring-offset-2 ring-offset-background" 
+                      ? "bg-primary text-primary-foreground px-3 py-2 shadow-md" 
                       : "bg-card hover:bg-muted text-card-foreground px-[calc(0.75rem-1px)] py-[calc(0.5rem-1px)] hover:shadow-sm" 
                   )}
                 >
@@ -574,5 +581,7 @@ export default function POSPage() {
     </AppLayout>
   );
 }
+
+    
 
     
