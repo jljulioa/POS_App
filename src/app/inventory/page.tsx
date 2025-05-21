@@ -19,7 +19,8 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'; // Import useQ
 const fetchProducts = async (): Promise<Product[]> => {
   const res = await fetch('/api/products');
   if (!res.ok) {
-    throw new Error('Network response was not ok');
+    const errorData = await res.json().catch(() => ({ message: 'Network response was not ok and failed to parse error JSON.' }));
+    throw new Error(errorData.message || 'Network response was not ok');
   }
   return res.json();
 };
@@ -30,7 +31,7 @@ export default function InventoryPage() {
   const [filterCategory, setFilterCategory] = useState('all');
 
   // Use React Query to fetch products
-  const { data: products = [], isLoading, error } = useQuery<Product[], Error>({
+  const { data: products = [], isLoading, error, isError } = useQuery<Product[], Error>({
     queryKey: ['products'],
     queryFn: fetchProducts,
   });
@@ -64,11 +65,11 @@ export default function InventoryPage() {
     );
   }
 
-  if (error) {
+  if (isError) {
     return (
       <AppLayout>
         <PageHeader title="Inventory Management" description="Error loading products." />
-        <p className="text-destructive">Could not fetch products: {error.message}</p>
+        <p className="text-destructive">Could not fetch products: {error?.message || "An unknown error occurred."}</p>
       </AppLayout>
     );
   }
@@ -143,15 +144,17 @@ export default function InventoryPage() {
                 <TableCell>{product.brand}</TableCell>
                 <TableCell>{product.category}</TableCell>
                 <TableCell className="text-right">{product.stock}</TableCell>
-                <TableCell className="text-right">${product.price.toFixed(2)}</TableCell>
+                <TableCell className="text-right">${Number(product.price).toFixed(2)}</TableCell>
                 <TableCell className="text-center">
                   {product.stock === 0 ? <Badge variant="destructive">Out of Stock</Badge> :
                    product.stock < product.minStock ? <Badge variant="outline" className="border-yellow-500 text-yellow-600">Low Stock</Badge> :
                    <Badge variant="secondary" className="border-green-500 text-green-600 bg-green-100">In Stock</Badge>}
                 </TableCell>
                 <TableCell className="text-center">
-                  <Button variant="ghost" size="icon" className="hover:text-primary">
-                    <Edit3 className="h-4 w-4" />
+                  <Button variant="ghost" size="icon" className="hover:text-primary" asChild>
+                    <Link href={`/inventory/${product.id}/edit`}>
+                      <Edit3 className="h-4 w-4" />
+                    </Link>
                   </Button>
                   <Button variant="ghost" size="icon" className="hover:text-destructive">
                     <Trash2 className="h-4 w-4" />
