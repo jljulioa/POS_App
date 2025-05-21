@@ -8,12 +8,24 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
-import { PlusCircle, FileDown, Edit3, Trash2, Loader2 } from 'lucide-react';
+import { PlusCircle, FileDown, Edit3, Trash2, Loader2, AlertTriangle } from 'lucide-react';
 import Image from 'next/image';
 import { Badge } from '@/components/ui/badge';
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo } from 'react';
 import Link from 'next/link';
-import { useQuery, useQueryClient } from '@tanstack/react-query'; // Import useQuery
+import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
+import { useToast } from '@/hooks/use-toast';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 
 // API fetch function
 const fetchProducts = async (): Promise<Product[]> => {
@@ -25,21 +37,60 @@ const fetchProducts = async (): Promise<Product[]> => {
   return res.json();
 };
 
+// API delete function
+const deleteProduct = async (productId: string): Promise<{ message: string }> => {
+  const res = await fetch(`/api/products/${productId}`, {
+    method: 'DELETE',
+  });
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({ message: 'Failed to delete product and could not parse error.' }));
+    throw new Error(errorData.message || 'Failed to delete product.');
+  }
+  return res.json();
+};
+
 export default function InventoryPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterBrand, setFilterBrand] = useState('all');
   const [filterCategory, setFilterCategory] = useState('all');
+  const [productToDelete, setProductToDelete] = useState<Product | null>(null);
 
-  // Use React Query to fetch products
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+
   const { data: products = [], isLoading, error, isError } = useQuery<Product[], Error>({
     queryKey: ['products'],
     queryFn: fetchProducts,
   });
-  const queryClient = useQueryClient();
 
+  const deleteMutation = useMutation({
+    mutationFn: deleteProduct,
+    onSuccess: (data, variables) => {
+      toast({
+        title: "Product Deleted",
+        description: `${data.message}`,
+      });
+      queryClient.invalidateQueries({ queryKey: ['products'] });
+      setProductToDelete(null); // Close dialog
+    },
+    onError: (error: Error) => {
+      toast({
+        variant: "destructive",
+        title: "Failed to Delete Product",
+        description: error.message || "An unexpected error occurred.",
+      });
+      setProductToDelete(null); // Close dialog
+    },
+  });
 
-  const uniqueBrands = useMemo(() => ['all', ...new Set(products.map(p => p.brand))], [products]);
-  const uniqueCategories = useMemo(() => ['all', ...new Set(products.map(p => p.category))], [products]);
+  const handleDeleteConfirm = () => {
+    if (productToDelete) {
+      deleteMutation.mutate(productToDelete.id);
+    }
+  };
+
+  const uniqueBrands = useMemo(() => ['all', ...new Set(products.map(p => p.brand).filter(Boolean))], [products]);
+  const uniqueCategories = useMemo(() => ['all', ...new Set(products.map(p => p.category).filter(Boolean))], [products]);
 
   const filteredProducts = useMemo(() => {
     return products.filter(product => {
@@ -69,7 +120,13 @@ export default function InventoryPage() {
     return (
       <AppLayout>
         <PageHeader title="Inventory Management" description="Error loading products." />
-        <p className="text-destructive">Could not fetch products: {error?.message || "An unknown error occurred."}</p>
+        <div className="bg-destructive/10 border border-destructive text-destructive p-4 rounded-md">
+          <div className="flex items-center">
+            <AlertTriangle className="mr-2 h-6 w-6" />
+            <h3 className="font-semibold">Failed to Load Products</h3>
+          </div>
+          <p>{error?.message || "An unknown error occurred."}</p>
+        </div>
       </AppLayout>
     );
   }
@@ -156,9 +213,11 @@ export default function InventoryPage() {
                       <Edit3 className="h-4 w-4" />
                     </Link>
                   </Button>
-                  <Button variant="ghost" size="icon" className="hover:text-destructive">
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
+                  <AlertDialogTrigger asChild>
+                    <Button variant="ghost" size="icon" className="hover:text-destructive" onClick={() => setProductToDelete(product)}>
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </AlertDialogTrigger>
                 </TableCell>
               </TableRow>
             ))}
@@ -172,6 +231,31 @@ export default function InventoryPage() {
           </TableBody>
         </Table>
       </div>
+      
+      {productToDelete && (
+        <AlertDialog open={!!productToDelete} onOpenChange={(open) => !open && setProductToDelete(null)}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+              <AlertDialogDescription>
+                This action cannot be undone. This will permanently delete the product
+                <span className="font-semibold"> {productToDelete.name}</span> and remove its data from our servers.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel onClick={() => setProductToDelete(null)}>Cancel</AlertDialogCancel>
+              <AlertDialogAction 
+                onClick={handleDeleteConfirm} 
+                disabled={deleteMutation.isPending}
+                className="bg-destructive hover:bg-destructive/90 text-destructive-foreground"
+              >
+                {deleteMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                Delete
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      )}
     </AppLayout>
   );
 }

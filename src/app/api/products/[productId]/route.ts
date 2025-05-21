@@ -107,3 +107,29 @@ export async function PUT(request: NextRequest, { params }: { params: { productI
     return NextResponse.json({ message: 'Failed to update product', error: (error as Error).message }, { status: 500 });
   }
 }
+
+// DELETE handler to remove a product
+export async function DELETE(request: NextRequest, { params }: { params: { productId: string } }) {
+  const { productId } = params;
+  try {
+    // Before deleting, you might want to check if the product is part of any sales records
+    // or other entities, depending on your foreign key constraints (e.g., SET NULL, RESTRICT).
+    // For simplicity, we'll directly attempt deletion here.
+    // If there are foreign key constraints that prevent deletion, the query will fail.
+    const result = await query('DELETE FROM Products WHERE id = $1 RETURNING id', [productId]);
+
+    if (result.length === 0) {
+      return NextResponse.json({ message: 'Product not found or already deleted' }, { status: 404 });
+    }
+
+    return NextResponse.json({ message: `Product ${productId} deleted successfully` }, { status: 200 });
+  } catch (error) {
+    console.error(`Failed to delete product ${productId}:`, error);
+    // Handle potential foreign key violation errors if the product is referenced elsewhere
+    // PostgreSQL error code for foreign_key_violation is '23503'
+    if (error instanceof Error && (error as any).code === '23503') {
+        return NextResponse.json({ message: 'Failed to delete product: It is referenced in other records (e.g., sales).', error: (error as Error).message }, { status: 409 });
+    }
+    return NextResponse.json({ message: 'Failed to delete product', error: (error as Error).message }, { status: 500 });
+  }
+}
