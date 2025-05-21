@@ -12,7 +12,7 @@ import { Bike, LogIn } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
 export default function LoginPage() {
-  const [email, setEmail] = useState('cashier@motopoint.com');
+  const [email, setEmail] = useState('cashier@motofox.com');
   const [password, setPassword] = useState('password');
   const { login } = useAuth();
   const router = useRouter();
@@ -21,8 +21,8 @@ export default function LoginPage() {
   const handleSubmit = (event: FormEvent) => {
     event.preventDefault();
     // Mock authentication
-    if ((email === 'cashier@motopoint.com' || email === 'admin@motopoint.com') && password === 'password') {
-      const role = email === 'admin@motopoint.com' ? 'admin' : 'cashier';
+    if ((email === 'cashier@motofox.com' || email === 'admin@motofox.com') && password === 'password') {
+      const role = email === 'admin@motofox.com' ? 'admin' : 'cashier';
       login(role);
       toast({
         title: "Login Successful",
@@ -45,7 +45,7 @@ export default function LoginPage() {
           <div className="flex justify-center mb-4">
             <Bike className="h-12 w-12 text-primary" />
           </div>
-          <CardTitle className="text-3xl font-bold">MotoPoint POS</CardTitle>
+          <CardTitle className="text-3xl font-bold">MotoFox POS</CardTitle>
           <CardDescription>Enter your credentials to access the system</CardDescription>
         </CardHeader>
         <CardContent>

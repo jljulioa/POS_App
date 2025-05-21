@@ -16,7 +16,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: 'MotoPoint POS',
+  title: 'MotoFox POS',
   description: 'Point of Sale System for Motorcycle Parts Store',
 };
 

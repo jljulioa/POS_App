@@ -58,15 +58,15 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" className="relative h-10 w-10 rounded-full">
                 <Avatar className="h-9 w-9">
-                  <AvatarImage src="https://placehold.co/40x40.png" alt="@motopointuser" data-ai-hint="profile avatar" />
-                  <AvatarFallback>MP</AvatarFallback>
+                  <AvatarImage src="https://placehold.co/40x40.png" alt="@motofoxuser" data-ai-hint="profile avatar" />
+                  <AvatarFallback>MF</AvatarFallback>
                 </Avatar>
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent className="w-56" align="end" forceMount>
               <DropdownMenuLabel className="font-normal">
                 <div className="flex flex-col space-y-1">
-                  <p className="text-sm font-medium leading-none">MotoPoint User</p>
+                  <p className="text-sm font-medium leading-none">MotoFox User</p>
                   <p className="text-xs leading-none text-muted-foreground">
                     {userRole || 'user'}@example.com
                   </p>
