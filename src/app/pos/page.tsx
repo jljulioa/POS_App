@@ -8,9 +8,9 @@ import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/componen
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
-import { mockProducts, Product as ProductType, SaleItem, SalesTicket } from '@/lib/mockData';
+import type { Product as ProductType, SaleItem, SalesTicket } from '@/lib/mockData'; // Keep types
 import Image from 'next/image';
-import { Search, X, Plus, Minus, Save, ShoppingCart, CreditCard, DollarSign, PlusSquare, Trash2, Copy, ListFilter } from 'lucide-react';
+import { Search, X, Plus, Minus, Save, ShoppingCart, CreditCard, DollarSign, PlusSquare, Trash2, ListFilter, Loader2, AlertTriangle } from 'lucide-react';
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { Badge } from '@/components/ui/badge';
@@ -23,6 +23,17 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { cn } from '@/lib/utils';
+import { useQuery } from '@tanstack/react-query';
+
+// API fetch function for products
+const fetchProducts = async (): Promise<ProductType[]> => {
+  const res = await fetch('/api/products');
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({ message: 'Network response was not ok and failed to parse error JSON.' }));
+    throw new Error(errorData.message || 'Network response was not ok');
+  }
+  return res.json();
+};
 
 // Helper to generate unique IDs
 const generateId = () => Math.random().toString(36).substr(2, 9);
@@ -30,6 +41,11 @@ const generateId = () => Math.random().toString(36).substr(2, 9);
 export default function POSPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const { toast } = useToast();
+
+  const { data: products = [], isLoading: isLoadingProducts, error: productsError, isError: isProductsError } = useQuery<ProductType[], Error>({
+    queryKey: ['products'], // Use the same queryKey as inventory if you want shared caching
+    queryFn: fetchProducts,
+  });
 
   const initialTicket: SalesTicket = {
     id: generateId(),
@@ -46,15 +62,15 @@ export default function POSPage() {
   const activeTicket = useMemo(() => tickets.find(t => t.id === activeTicketId), [tickets, activeTicketId]);
 
   const searchResults = useMemo(() => {
-    if (!searchTerm.trim()) return [];
+    if (!searchTerm.trim() || isLoadingProducts || isProductsError) return [];
     const termLower = searchTerm.toLowerCase();
-    return mockProducts.filter(product =>
+    return products.filter(product =>
       product.name.toLowerCase().includes(termLower) ||
       product.code.toLowerCase().includes(termLower) ||
-      product.reference.toLowerCase().includes(termLower) || // Search by reference
+      product.reference.toLowerCase().includes(termLower) ||
       (product.barcode && product.barcode.includes(searchTerm))
     ).slice(0, 10);
-  }, [searchTerm]);
+  }, [searchTerm, products, isLoadingProducts, isProductsError]);
 
   const updateTicketCart = (ticketId: string, newCart: SaleItem[]) => {
     setTickets(prevTickets =>
@@ -66,33 +82,42 @@ export default function POSPage() {
 
   const addToCart = useCallback((product: ProductType) => {
     if (!activeTicket) return;
-    if (product.stock === 0) {
-      toast({ variant: "destructive", title: "Out of Stock", description: `${product.name} is currently out of stock.` });
+    const productInCatalog = products.find(p => p.id === product.id);
+    if (!productInCatalog) {
+        toast({ variant: "destructive", title: "Product Not Found", description: "This product is no longer available." });
+        return;
+    }
+
+    if (productInCatalog.stock === 0) {
+      toast({ variant: "destructive", title: "Out of Stock", description: `${productInCatalog.name} is currently out of stock.` });
       return;
     }
     
-    const existingItem = activeTicket.cart.find(item => item.productId === product.id);
+    const existingItem = activeTicket.cart.find(item => item.productId === productInCatalog.id);
     let newCart: SaleItem[];
 
     if (existingItem) {
-      if (existingItem.quantity < product.stock) {
+      if (existingItem.quantity < productInCatalog.stock) {
         newCart = activeTicket.cart.map(item =>
-          item.productId === product.id ? { ...item, quantity: item.quantity + 1, totalPrice: (item.quantity + 1) * item.unitPrice } : item
+          item.productId === productInCatalog.id ? { ...item, quantity: item.quantity + 1, totalPrice: (item.quantity + 1) * item.unitPrice } : item
         );
       } else {
-        toast({ variant: "destructive", title: "Stock Limit Reached", description: `Cannot add more ${product.name}. Available stock: ${product.stock}.` });
+        toast({ variant: "destructive", title: "Stock Limit Reached", description: `Cannot add more ${productInCatalog.name}. Available stock: ${productInCatalog.stock}.` });
         newCart = activeTicket.cart;
       }
     } else {
-      newCart = [...activeTicket.cart, { productId: product.id, productName: product.name, quantity: 1, unitPrice: product.price, totalPrice: product.price }];
+      newCart = [...activeTicket.cart, { productId: productInCatalog.id, productName: productInCatalog.name, quantity: 1, unitPrice: productInCatalog.price, totalPrice: productInCatalog.price }];
     }
     updateTicketCart(activeTicket.id, newCart);
-  }, [activeTicket, toast]);
+  }, [activeTicket, products, toast]);
 
   const updateQuantity = useCallback((productId: string, newQuantity: number) => {
     if (!activeTicket) return;
-    const productInCatalog = mockProducts.find(p => p.id === productId);
-    if (!productInCatalog) return;
+    const productInCatalog = products.find(p => p.id === productId);
+    if (!productInCatalog) {
+        toast({ variant: "destructive", title: "Product Not Found", description: "This product is no longer available." });
+        return;
+    }
 
     let newCart: SaleItem[];
     if (newQuantity <= 0) {
@@ -108,7 +133,7 @@ export default function POSPage() {
       );
     }
     updateTicketCart(activeTicket.id, newCart);
-  }, [activeTicket, toast]);
+  }, [activeTicket, products, toast]);
 
   const removeFromCart = (productId: string) => {
     if (!activeTicket) return;
@@ -168,12 +193,19 @@ export default function POSPage() {
       toast({ variant: "destructive", title: "Empty Cart", description: "Please add items to the cart before processing." });
       return;
     }
-    // Mock sale processing
-    console.log('Processing sale:', { ticketId: activeTicket.id, cart: activeTicket.cart, total: cartTotal, paymentMethod });
-    toast({ title: "Sale Processed", description: `Ticket ${activeTicket.name} total: $${cartTotal.toFixed(2)} via ${paymentMethod}.` });
+    // TODO: Implement actual sale processing with backend API call
+    // This would involve:
+    // 1. Sending sale data (activeTicket.cart, totalAmount, customerId, paymentMethod, etc.) to a '/api/sales' POST endpoint.
+    // 2. The backend would then:
+    //    a. Create a new Sale record.
+    //    b. Create SaleItem records for each item in the cart.
+    //    c. Update stock levels in the Products table for each item sold (within a transaction).
+    //    d. Return a success or error response.
+    console.log('Processing sale (mock):', { ticketId: activeTicket.id, cart: activeTicket.cart, total: cartTotal, paymentMethod });
+    toast({ title: "Sale Processed (Mock)", description: `Ticket ${activeTicket.name} total: $${cartTotal.toFixed(2)} via ${paymentMethod}. Stock not updated yet.` });
     
     const currentTicketId = activeTicket.id;
-    closeTicket(currentTicketId); // This will also handle switching or creating a new ticket
+    closeTicket(currentTicketId); 
     setSearchTerm('');
   };
   
@@ -206,10 +238,10 @@ export default function POSPage() {
                 <div
                   key={ticket.id}
                   className={cn(
-                    "flex items-center justify-between rounded-md group text-sm min-h-[2.5rem]", // min-h to match button height
+                    "flex items-center justify-between rounded-md group text-sm min-h-[2.5rem]", 
                     ticket.id === activeTicketId
-                      ? "bg-primary text-primary-foreground px-3 py-2" // Active ticket style (like default button)
-                      : "border bg-card hover:bg-muted text-card-foreground px-[calc(0.75rem-1px)] py-[calc(0.5rem-1px)]" // Inactive ticket style (like outline button)
+                      ? "bg-primary text-primary-foreground px-3 py-2" 
+                      : "border bg-card hover:bg-muted text-card-foreground px-[calc(0.75rem-1px)] py-[calc(0.5rem-1px)]" 
                   )}
                 >
                   <div
@@ -238,7 +270,7 @@ export default function POSPage() {
                             ? "text-primary-foreground hover:bg-primary-foreground/10"
                             : "text-muted-foreground hover:text-accent-foreground hover:bg-accent/80"
                         )}
-                        onClick={(e) => e.stopPropagation()} // Prevent click from bubbling to parent div
+                        onClick={(e) => e.stopPropagation()}
                       >
                         <ListFilter className="h-4 w-4" />
                       </Button>
@@ -277,17 +309,30 @@ export default function POSPage() {
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className="pl-8 py-3 text-base"
+                  disabled={isLoadingProducts}
                 />
               </div>
             </CardHeader>
             <CardContent className="flex-grow overflow-hidden">
               <ScrollArea className="h-full pr-3">
-                {searchResults.length > 0 ? (
+                {isLoadingProducts && (
+                  <div className="flex justify-center items-center h-full">
+                    <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                    <p className="ml-2 text-muted-foreground">Loading products...</p>
+                  </div>
+                )}
+                {isProductsError && (
+                  <div className="text-destructive p-4 border border-destructive rounded-md">
+                    <AlertTriangle className="mr-2 h-5 w-5 inline-block" />
+                    Failed to load products: {productsError?.message}
+                  </div>
+                )}
+                {!isLoadingProducts && !isProductsError && searchResults.length > 0 && (
                   <ul className="space-y-2">
                     {searchResults.map(product => (
                       <li key={product.id} className="flex items-center justify-between p-3 rounded-md border bg-card hover:bg-muted transition-colors">
                         <div className="flex items-center gap-3">
-                          <Image src={product.imageUrl} alt={product.name} width={40} height={40} className="rounded-sm object-cover" data-ai-hint={product.dataAiHint || "motorcycle part"}/>
+                          <Image src={product.imageUrl || `https://placehold.co/40x40.png?text=${product.name.substring(0,2)}`} alt={product.name} width={40} height={40} className="rounded-sm object-cover" data-ai-hint={product.dataAiHint || "motorcycle part"}/>
                           <div>
                             <p className="font-medium text-sm">{product.name}</p>
                             <p className="text-xs text-muted-foreground">Ref: {product.reference} | Code: {product.code} | Stock: {product.stock}</p>
@@ -299,9 +344,11 @@ export default function POSPage() {
                       </li>
                     ))}
                   </ul>
-                ) : searchTerm ? (
+                )}
+                {!isLoadingProducts && !isProductsError && searchTerm && searchResults.length === 0 && (
                   <p className="text-center text-muted-foreground py-4">No products found for "{searchTerm}".</p>
-                ) : (
+                )}
+                {!isLoadingProducts && !isProductsError && !searchTerm && (
                   <p className="text-center text-muted-foreground py-4">Start typing to search for products.</p>
                 )}
               </ScrollArea>
@@ -319,7 +366,6 @@ export default function POSPage() {
                         "capitalize text-xs ml-2",
                         activeTicketId === activeTicket.id && activeTicket.status === 'Active' && "border-primary-foreground/70 text-primary-foreground bg-transparent",
                         activeTicketId === activeTicket.id && activeTicket.status !== 'Active' && "border-primary-foreground/70 text-primary-foreground bg-transparent" 
-                        // Add other specific styles for badge on active ticket header if needed
                     )}
                   >
                     {activeTicket.status}
@@ -357,8 +403,8 @@ export default function POSPage() {
                               <Button variant="outline" size="icon" className="h-7 w-7" onClick={() => updateQuantity(item.productId, item.quantity + 1)}><Plus className="h-3 w-3"/></Button>
                             </div>
                           </TableCell>
-                          <TableCell className="text-right text-sm">${item.unitPrice.toFixed(2)}</TableCell>
-                          <TableCell className="text-right font-semibold text-sm">${item.totalPrice.toFixed(2)}</TableCell>
+                          <TableCell className="text-right text-sm">${Number(item.unitPrice).toFixed(2)}</TableCell>
+                          <TableCell className="text-right font-semibold text-sm">${Number(item.totalPrice).toFixed(2)}</TableCell>
                           <TableCell>
                             <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive" onClick={() => removeFromCart(item.productId)}><X className="h-4 w-4"/></Button>
                           </TableCell>
@@ -383,7 +429,7 @@ export default function POSPage() {
                     variant="outline" 
                     className="text-base py-6" 
                     onClick={() => updateTicketStatus(activeTicket.id, 'On Hold')}
-                    disabled={activeTicket.status === 'On Hold'}
+                    disabled={activeTicket.status === 'On Hold' || activeTicket.cart.length === 0}
                   >
                   <Save className="mr-2 h-5 w-5" /> Hold Ticket
                 </Button>
@@ -405,3 +451,5 @@ export default function POSPage() {
     </AppLayout>
   );
 }
+
+    
