@@ -68,7 +68,7 @@ export default function InventoryPage() {
     onSuccess: (data, variables) => {
       toast({
         title: "Product Deleted",
-        description: `${data.message}`,
+        description: `Product has been successfully deleted.`,
       });
       queryClient.invalidateQueries({ queryKey: ['products'] });
       setProductToDelete(null); // Close dialog
@@ -232,30 +232,32 @@ export default function InventoryPage() {
         </Table>
       </div>
       
-      {productToDelete && (
-        <AlertDialog open={!!productToDelete} onOpenChange={(open) => !open && setProductToDelete(null)}>
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
-              <AlertDialogDescription>
-                This action cannot be undone. This will permanently delete the product
-                <span className="font-semibold"> {productToDelete.name}</span> and remove its data from our servers.
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel onClick={() => setProductToDelete(null)}>Cancel</AlertDialogCancel>
-              <AlertDialogAction 
-                onClick={handleDeleteConfirm} 
-                disabled={deleteMutation.isPending}
-                className="bg-destructive hover:bg-destructive/90 text-destructive-foreground"
-              >
-                {deleteMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                Delete
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
-      )}
+      <AlertDialog open={!!productToDelete} onOpenChange={(isOpen) => {
+        if (!isOpen) {
+          setProductToDelete(null);
+        }
+      }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This action cannot be undone. This will permanently delete the product
+              <span className="font-semibold"> {productToDelete?.name}</span> and remove its data from our servers.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setProductToDelete(null)}>Cancel</AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={handleDeleteConfirm} 
+              disabled={deleteMutation.isPending}
+              className="bg-destructive hover:bg-destructive/90 text-destructive-foreground"
+            >
+              {deleteMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </AppLayout>
   );
 }
