@@ -167,7 +167,7 @@ export default function AddProductPage() {
                   <FormItem>
                     <FormLabel>Barcode (EAN/UPC)</FormLabel>
                     <FormControl>
-                      <Input placeholder="e.g., 1234567890123" {...field} />
+                      <Input placeholder="e.g., 1234567890123" {...field} value={field.value ?? ''} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -232,7 +232,7 @@ export default function AddProductPage() {
                   <FormItem>
                     <FormLabel>Maximum Stock</FormLabel>
                     <FormControl>
-                      <Input type="number" placeholder="e.g., 200" {...field} />
+                      <Input type="number" placeholder="e.g., 200" {...field} value={field.value ?? ''} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -271,7 +271,7 @@ export default function AddProductPage() {
                   <FormItem>
                     <FormLabel>Image URL</FormLabel>
                     <FormControl>
-                      <Input placeholder="https://placehold.co/100x100.png" {...field} />
+                      <Input placeholder="https://placehold.co/100x100.png" {...field} value={field.value ?? ''} />
                     </FormControl>
                      <FormDescription>
                       Enter a valid image URL or leave blank for a default placeholder.
@@ -287,7 +287,7 @@ export default function AddProductPage() {
                   <FormItem>
                     <FormLabel>AI Image Hint</FormLabel>
                     <FormControl>
-                      <Input placeholder="e.g., spark plug" {...field} />
+                      <Input placeholder="e.g., spark plug" {...field} value={field.value ?? ''} />
                     </FormControl>
                     <FormDescription>
                       Keywords for AI to find a relevant image (max 2 words).
@@ -313,3 +313,4 @@ export default function AddProductPage() {
     </AppLayout>
   );
 }
+
