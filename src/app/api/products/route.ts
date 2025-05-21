@@ -1,8 +1,9 @@
+
 // src/app/api/products/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { query } from '@/lib/db';
 import { z } from 'zod';
-import type { Product } from '@/lib/mockData'; // Using the existing Product type
+import type { Product } from '@/lib/mockData';
 
 // Zod schema for product creation, matching the frontend form
 const ProductCreateSchema = z.object({
@@ -21,10 +22,28 @@ const ProductCreateSchema = z.object({
   dataAiHint: z.string().max(50).optional(),
 });
 
+// Helper function to parse product fields from DB strings to numbers
+const parseProductFromDB = (dbProduct: any): Product => {
+  return {
+    ...dbProduct,
+    stock: parseInt(dbProduct.stock, 10),
+    minStock: parseInt(dbProduct.minstock, 10), // PostgreSQL column names are lowercase
+    maxStock: dbProduct.maxstock !== null ? parseInt(dbProduct.maxstock, 10) : 0, // Handle null for maxStock
+    cost: parseFloat(dbProduct.cost),
+    price: parseFloat(dbProduct.price),
+    // Ensure all other fields match the Product type, casing might differ from DB
+    // e.g. dbProduct.imageurl -> imageUrl
+    imageUrl: dbProduct.imageurl,
+    dataAiHint: dbProduct.dataaihint,
+  };
+};
+
 // GET handler to fetch all products
 export async function GET(request: NextRequest) {
   try {
-    const products = await query('SELECT * FROM Products ORDER BY name ASC');
+    // Assuming column names in DB are lowercase as is common in PostgreSQL
+    const dbProducts = await query('SELECT id, name, code, reference, barcode, stock, category, brand, "minStock", "maxStock", cost, price, "imageUrl", "dataAiHint" FROM Products ORDER BY name ASC');
+    const products: Product[] = dbProducts.map(parseProductFromDB);
     return NextResponse.json(products);
   } catch (error) {
     console.error('Failed to fetch products:', error);
@@ -47,16 +66,14 @@ export async function POST(request: NextRequest) {
         minStock, maxStock, cost, price, imageUrl, dataAiHint 
     } = validation.data;
 
-    // Generate a simple unique ID (in a real app, UUID or database auto-increment is better for primary keys not managed by DB)
-    // For PostgreSQL, if 'id' is SERIAL or similar, you might not need to generate it here if the table is set up for auto-generation.
-    // Assuming 'id' is a TEXT field that we provide for now.
     const id = `P${Date.now()}${Math.random().toString(36).substring(2, 7)}`;
     const finalImageUrl = imageUrl || `https://placehold.co/100x100.png?text=${name.substring(0,3)}`;
     const finalDataAiHint = dataAiHint || (name.split(' ').slice(0,2).join(' ') || "product");
 
-
+    // Ensure column names in the SQL query match your PostgreSQL table schema (likely lowercase)
+    // Use double quotes for mixed-case or special character column names if needed, but sticking to lowercase is simpler.
     const sql = `
-      INSERT INTO Products (id, name, code, reference, barcode, stock, category, brand, minStock, maxStock, cost, price, imageUrl, dataAiHint)
+      INSERT INTO products (id, name, code, reference, barcode, stock, category, brand, "minStock", "maxStock", cost, price, "imageUrl", "dataAiHint")
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
       RETURNING *
     `;
@@ -66,15 +83,14 @@ export async function POST(request: NextRequest) {
     ];
     
     const result = await query(sql, params);
-    const newProduct: Product = result[0]; // pg driver returns an array of rows
+    const dbNewProduct = result[0];
+    const newProduct: Product = parseProductFromDB(dbNewProduct);
 
     return NextResponse.json(newProduct, { status: 201 });
 
   } catch (error) {
     console.error('Failed to create product:', error);
-    // Check for unique constraint violation (e.g., duplicate product code)
-    // PostgreSQL error code for unique_violation is '23505'
-    if (error instanceof Error && (error as any).code === '23505') {
+    if (error instanceof Error && (error as any).code === '23505') { // PostgreSQL unique_violation
         return NextResponse.json({ message: 'Failed to create product: Product code might already exist.', error: (error as Error).message }, { status: 409 });
     }
     return NextResponse.json({ message: 'Failed to create product', error: (error as Error).message }, { status: 500 });
