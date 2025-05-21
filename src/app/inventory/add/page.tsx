@@ -5,7 +5,7 @@ import AppLayout from '@/components/layout/AppLayout';
 import { PageHeader } from '@/components/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+import { Label } from '@/components/ui/label'; // Not directly used but good for context
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from '@/components/ui/form';
 import { useForm } from 'react-hook-form';
@@ -13,9 +13,10 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useRouter } from 'next/navigation';
 import { useToast } from '@/hooks/use-toast';
-import { ArrowLeft, PackagePlus, Save } from 'lucide-react';
+import { ArrowLeft, PackagePlus, Save, Loader2 } from 'lucide-react';
 import Link from 'next/link';
-// import { mockProducts, Product } from '@/lib/mockData'; // For actual data addition
+import { useMutation, useQueryClient } from '@tanstack/react-query'; // Import useMutation
+import type { Product } from '@/lib/mockData'; // Use existing Product type
 
 const ProductFormSchema = z.object({
   name: z.string().min(3, { message: "Name must be at least 3 characters." }),
@@ -35,9 +36,27 @@ const ProductFormSchema = z.object({
 
 type ProductFormValues = z.infer<typeof ProductFormSchema>;
 
+// API mutation function
+const addProduct = async (newProduct: ProductFormValues): Promise<Product> => {
+  const response = await fetch('/api/products', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(newProduct),
+  });
+  if (!response.ok) {
+    const errorData = await response.json();
+    throw new Error(errorData.message || 'Failed to add product');
+  }
+  return response.json();
+};
+
+
 export default function AddProductPage() {
   const router = useRouter();
   const { toast } = useToast();
+  const queryClient = useQueryClient();
 
   const form = useForm<ProductFormValues>({
     resolver: zodResolver(ProductFormSchema),
@@ -50,7 +69,7 @@ export default function AddProductPage() {
       category: '',
       brand: '',
       minStock: 0,
-      maxStock: 0,
+      maxStock: undefined, // Set to undefined for optional numeric field
       cost: 0,
       price: 0,
       imageUrl: '',
@@ -58,24 +77,27 @@ export default function AddProductPage() {
     },
   });
 
-  const onSubmit = (data: ProductFormValues) => {
-    // For now, we'll simulate adding the product
-    console.log('New Product Data:', data);
-    
-    // In a real app, you would generate an ID and add to your data source
-    // const newProduct: Product = {
-    //   id: `P${Date.now()}`, // Simple ID generation
-    //   ...data,
-    //   maxStock: data.maxStock || 0, // Ensure maxStock is a number
-    //   imageUrl: data.imageUrl || `https://placehold.co/100x100.png?text=${data.name.substring(0,3)}`,
-    // };
-    // mockProducts.push(newProduct); // This won't persist or update UI effectively without state management
+  const mutation = useMutation<Product, Error, ProductFormValues>({
+    mutationFn: addProduct,
+    onSuccess: (data) => {
+      toast({
+        title: "Product Added Successfully",
+        description: `${data.name} has been added to the product list.`,
+      });
+      queryClient.invalidateQueries({ queryKey: ['products'] }); // Invalidate cache to refetch
+      router.push('/inventory');
+    },
+    onError: (error) => {
+      toast({
+        variant: "destructive",
+        title: "Failed to Add Product",
+        description: error.message || "An unexpected error occurred.",
+      });
+    },
+  });
 
-    toast({
-      title: "Product Added (Simulated)",
-      description: `${data.name} has been added to the product list.`,
-    });
-    router.push('/inventory');
+  const onSubmit = (data: ProductFormValues) => {
+    mutation.mutate(data);
   };
 
   return (
@@ -276,9 +298,13 @@ export default function AddProductPage() {
               />
             </CardContent>
             <CardFooter className="border-t px-6 py-4">
-              <Button type="submit" disabled={form.formState.isSubmitting}>
-                <Save className="mr-2 h-4 w-4" /> 
-                {form.formState.isSubmitting ? 'Saving...' : 'Save Product'}
+              <Button type="submit" disabled={mutation.isPending}>
+                {mutation.isPending ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <Save className="mr-2 h-4 w-4" /> 
+                )}
+                {mutation.isPending ? 'Saving...' : 'Save Product'}
               </Button>
             </CardFooter>
           </Card>
