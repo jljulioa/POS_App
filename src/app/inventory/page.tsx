@@ -12,6 +12,7 @@ import { PlusCircle, FileDown, Edit3, Trash2 } from 'lucide-react';
 import Image from 'next/image';
 import { Badge } from '@/components/ui/badge';
 import React, { useState, useMemo } from 'react';
+import Link from 'next/link';
 
 export default function InventoryPage() {
   const [searchTerm, setSearchTerm] = useState('');
@@ -37,8 +38,10 @@ export default function InventoryPage() {
   return (
     <AppLayout>
       <PageHeader title="Inventory Management" description="View and manage your product stock.">
-        <Button>
-          <PlusCircle className="mr-2 h-4 w-4" /> Add Product
+        <Button asChild>
+          <Link href="/inventory/add">
+            <PlusCircle className="mr-2 h-4 w-4" /> Add Product
+          </Link>
         </Button>
         <Button variant="outline">
           <FileDown className="mr-2 h-4 w-4" /> Export CSV
@@ -131,5 +134,3 @@ export default function InventoryPage() {
     </AppLayout>
   );
 }
-
-    
