@@ -26,7 +26,7 @@ export default function InventoryPage() {
       const searchTermLower = searchTerm.toLowerCase();
       const matchesSearch = product.name.toLowerCase().includes(searchTermLower) ||
                             product.code.toLowerCase().includes(searchTermLower) ||
-                            product.reference.toLowerCase().includes(searchTermLower) || // Search by reference
+                            product.reference.toLowerCase().includes(searchTermLower) ||
                             (product.barcode && product.barcode.toLowerCase().includes(searchTermLower));
       const matchesBrand = filterBrand === 'all' || product.brand === filterBrand;
       const matchesCategory = filterCategory === 'all' || product.category === filterCategory;
@@ -81,7 +81,7 @@ export default function InventoryPage() {
               <TableHead className="w-[80px]">Image</TableHead>
               <TableHead>Name</TableHead>
               <TableHead>Code</TableHead>
-              <TableHead>Reference</TableHead> {/* New Column */}
+              <TableHead>Reference</TableHead>
               <TableHead>Brand</TableHead>
               <TableHead>Category</TableHead>
               <TableHead className="text-right">Stock</TableHead>
@@ -98,7 +98,7 @@ export default function InventoryPage() {
                 </TableCell>
                 <TableCell className="font-medium">{product.name}</TableCell>
                 <TableCell>{product.code}</TableCell>
-                <TableCell>{product.reference}</TableCell> {/* New Cell */}
+                <TableCell>{product.reference}</TableCell>
                 <TableCell>{product.brand}</TableCell>
                 <TableCell>{product.category}</TableCell>
                 <TableCell className="text-right">{product.stock}</TableCell>
@@ -120,7 +120,7 @@ export default function InventoryPage() {
             ))}
              {filteredProducts.length === 0 && (
               <TableRow>
-                <TableCell colSpan={10} className="h-24 text-center"> {/* Adjusted colSpan */}
+                <TableCell colSpan={10} className="h-24 text-center">
                   No products found.
                 </TableCell>
               </TableRow>
