@@ -8,9 +8,10 @@ import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/componen
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
-import type { Product as ProductType, SaleItem, SalesTicket, Sale } from '@/lib/mockData';
+import type { Product as ProductType, SaleItem, Sale } from '@/lib/mockData';
+import type { SalesTicketDB } from '@/app/api/sales-tickets/route'; // Import DB type
 import Image from 'next/image';
-import { Search, X, Plus, Minus, Save, ShoppingCart, CreditCard, DollarSign, PlusSquare, Trash2, ListFilter, Loader2, AlertTriangle } from 'lucide-react';
+import { Search, X, Plus, Minus, Save, ShoppingCart, CreditCard, DollarSign, PlusSquare, Trash2, ListFilter, Loader2, AlertTriangle, Ticket } from 'lucide-react';
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { Badge } from '@/components/ui/badge';
@@ -24,7 +25,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { cn } from '@/lib/utils';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useAuth } from '@/hooks/useAuth'; // For cashierId
+import { useAuth } from '@/hooks/useAuth';
 
 // API fetch function for products
 const fetchProducts = async (): Promise<ProductType[]> => {
@@ -37,7 +38,7 @@ const fetchProducts = async (): Promise<ProductType[]> => {
 };
 
 // API mutation function to create a sale
-const createSale = async (saleData: Omit<Sale, 'id' | 'date' | 'items'> & { items: SaleItem[] }): Promise<Sale> => {
+const createSaleAPI = async (saleData: Omit<Sale, 'id' | 'date' | 'items'> & { items: SaleItem[] }): Promise<Sale> => {
   const response = await fetch('/api/sales', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -50,34 +51,122 @@ const createSale = async (saleData: Omit<Sale, 'id' | 'date' | 'items'> & { item
   return response.json();
 };
 
+// API functions for SalesTickets
+const fetchSalesTickets = async (): Promise<SalesTicketDB[]> => {
+  const res = await fetch('/api/sales-tickets');
+  if (!res.ok) throw new Error('Failed to fetch sales tickets');
+  return res.json();
+};
 
-// Helper to generate unique IDs for tickets (client-side only)
-const generateId = () => Math.random().toString(36).substr(2, 9);
+const createSalesTicketAPI = async (ticketData: Pick<SalesTicketDB, 'name' | 'cart_items' | 'status'>): Promise<SalesTicketDB> => {
+  const res = await fetch('/api/sales-tickets', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(ticketData),
+  });
+  if (!res.ok) throw new Error('Failed to create sales ticket');
+  return res.json();
+};
+
+const updateSalesTicketAPI = async ({ ticketId, data }: { ticketId: string; data: Partial<Pick<SalesTicketDB, 'name' | 'cart_items' | 'status'>> }): Promise<SalesTicketDB> => {
+  const res = await fetch(`/api/sales-tickets/${ticketId}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error('Failed to update sales ticket');
+  return res.json();
+};
+
+const deleteSalesTicketAPI = async (ticketId: string): Promise<{ message: string }> => {
+  const res = await fetch(`/api/sales-tickets/${ticketId}`, { method: 'DELETE' });
+  if (!res.ok) throw new Error('Failed to delete sales ticket');
+  return res.json();
+};
+
 
 export default function POSPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const { userRole } = useAuth(); // Assuming userRole could be cashierId, or you might have a more specific user ID
+  const { userRole } = useAuth();
+  const [activeTicketId, setActiveTicketId] = useState<string | null>(null);
 
   const { data: products = [], isLoading: isLoadingProducts, error: productsError, isError: isProductsError } = useQuery<ProductType[], Error>({
     queryKey: ['products'],
     queryFn: fetchProducts,
   });
 
-  const initialTicket: SalesTicket = {
-    id: generateId(),
-    name: 'Ticket 1',
-    cart: [],
-    status: 'Active',
-    createdAt: new Date().toISOString(),
-    lastUpdatedAt: new Date().toISOString(),
-  };
+  const { data: salesTickets = [], isLoading: isLoadingSalesTickets, refetch: refetchSalesTickets } = useQuery<SalesTicketDB[], Error>({
+    queryKey: ['salesTickets'],
+    queryFn: fetchSalesTickets,
+    refetchOnWindowFocus: false,
+  });
 
-  const [tickets, setTickets] = useState<SalesTicket[]>([initialTicket]);
-  const [activeTicketId, setActiveTicketId] = useState<string>(initialTicket.id);
+  const createTicketMutation = useMutation<SalesTicketDB, Error, Pick<SalesTicketDB, 'name' | 'cart_items' | 'status'>>({
+    mutationFn: createSalesTicketAPI,
+    onSuccess: (newTicket) => {
+      queryClient.invalidateQueries({ queryKey: ['salesTickets'] });
+      setActiveTicketId(newTicket.id);
+      toast({ title: 'Ticket Created', description: `${newTicket.name} has been created.` });
+    },
+    onError: (error) => {
+      toast({ variant: 'destructive', title: 'Failed to Create Ticket', description: error.message });
+    },
+  });
 
-  const activeTicket = useMemo(() => tickets.find(t => t.id === activeTicketId), [tickets, activeTicketId]);
+  const updateTicketMutation = useMutation<SalesTicketDB, Error, { ticketId: string; data: Partial<Pick<SalesTicketDB, 'name' | 'cart_items' | 'status'>> }>({
+    mutationFn: updateSalesTicketAPI,
+    onSuccess: (updatedTicket) => {
+      queryClient.setQueryData(['salesTickets'], (oldData: SalesTicketDB[] | undefined) =>
+        oldData ? oldData.map(t => t.id === updatedTicket.id ? updatedTicket : t) : []
+      );
+      // Optimistically update the active ticket if it's the one being changed
+      if (activeTicket && activeTicket.id === updatedTicket.id) {
+        // This part might be tricky with optimistic updates if not careful
+      }
+    },
+    onError: (error) => {
+      toast({ variant: 'destructive', title: 'Failed to Update Ticket', description: error.message });
+      refetchSalesTickets(); // Refetch to ensure consistency
+    },
+  });
+
+  const deleteTicketMutation = useMutation<{ message: string }, Error, string>({
+    mutationFn: deleteSalesTicketAPI,
+    onSuccess: (data, ticketId) => {
+      queryClient.invalidateQueries({ queryKey: ['salesTickets'] });
+      toast({ title: 'Ticket Closed', description: data.message });
+      if (activeTicketId === ticketId) {
+        const remainingTickets = salesTickets.filter(t => t.id !== ticketId);
+        if (remainingTickets.length > 0) {
+          setActiveTicketId(remainingTickets.sort((a,b) => new Date(b.last_updated_at).getTime() - new Date(a.last_updated_at).getTime())[0].id);
+        } else {
+          handleCreateNewTicket(true); // Force create if none left
+        }
+      }
+    },
+    onError: (error) => {
+      toast({ variant: 'destructive', title: 'Failed to Close Ticket', description: error.message });
+    },
+  });
+
+  const activeTicket = useMemo(() => salesTickets.find(t => t.id === activeTicketId), [salesTickets, activeTicketId]);
+
+  // Effect to set initial active ticket or create one if none exist
+  useEffect(() => {
+    if (!isLoadingSalesTickets && salesTickets.length > 0) {
+      if (!activeTicketId || !salesTickets.find(t => t.id === activeTicketId)) {
+        // Sort by last_updated_at to pick the most recent one
+        const sortedTickets = [...salesTickets].sort((a,b) => new Date(b.last_updated_at).getTime() - new Date(a.last_updated_at).getTime());
+        setActiveTicketId(sortedTickets[0].id);
+      }
+    } else if (!isLoadingSalesTickets && salesTickets.length === 0 && !createTicketMutation.isPending) {
+      // If no tickets, create one
+      handleCreateNewTicket(true);
+    }
+  }, [salesTickets, isLoadingSalesTickets, activeTicketId, createTicketMutation.isPending]);
+
 
   const searchResults = useMemo(() => {
     if (!searchTerm.trim() || isLoadingProducts || isProductsError) return [];
@@ -90,13 +179,6 @@ export default function POSPage() {
     ).slice(0, 10);
   }, [searchTerm, products, isLoadingProducts, isProductsError]);
 
-  const updateTicketCart = (ticketId: string, newCart: SaleItem[]) => {
-    setTickets(prevTickets =>
-      prevTickets.map(ticket =>
-        ticket.id === ticketId ? { ...ticket, cart: newCart, lastUpdatedAt: new Date().toISOString() } : ticket
-      )
-    );
-  };
 
   const addToCart = useCallback((product: ProductType) => {
     if (!activeTicket) return;
@@ -105,29 +187,28 @@ export default function POSPage() {
         toast({ variant: "destructive", title: "Product Not Found", description: "This product is no longer available." });
         return;
     }
-
     if (productInCatalog.stock === 0) {
       toast({ variant: "destructive", title: "Out of Stock", description: `${productInCatalog.name} is currently out of stock.` });
       return;
     }
     
-    const existingItem = activeTicket.cart.find(item => item.productId === productInCatalog.id);
-    let newCart: SaleItem[];
+    const existingItem = activeTicket.cart_items.find(item => item.productId === productInCatalog.id);
+    let newCartItems: SaleItem[];
 
     if (existingItem) {
       if (existingItem.quantity < productInCatalog.stock) {
-        newCart = activeTicket.cart.map(item =>
+        newCartItems = activeTicket.cart_items.map(item =>
           item.productId === productInCatalog.id ? { ...item, quantity: item.quantity + 1, totalPrice: (item.quantity + 1) * item.unitPrice } : item
         );
       } else {
         toast({ variant: "destructive", title: "Stock Limit Reached", description: `Cannot add more ${productInCatalog.name}. Available stock: ${productInCatalog.stock}.` });
-        newCart = activeTicket.cart;
+        newCartItems = activeTicket.cart_items;
       }
     } else {
-      newCart = [...activeTicket.cart, { productId: productInCatalog.id, productName: productInCatalog.name, quantity: 1, unitPrice: productInCatalog.price, totalPrice: productInCatalog.price }];
+      newCartItems = [...activeTicket.cart_items, { productId: productInCatalog.id, productName: productInCatalog.name, quantity: 1, unitPrice: productInCatalog.price, totalPrice: productInCatalog.price }];
     }
-    updateTicketCart(activeTicket.id, newCart);
-  }, [activeTicket, products, toast]);
+    updateTicketMutation.mutate({ ticketId: activeTicket.id, data: { cart_items: newCartItems } });
+  }, [activeTicket, products, toast, updateTicketMutation]);
 
   const updateQuantity = useCallback((productId: string, newQuantity: number) => {
     if (!activeTicket) return;
@@ -137,86 +218,72 @@ export default function POSPage() {
         return;
     }
 
-    let newCart: SaleItem[];
+    let newCartItems: SaleItem[];
     if (newQuantity <= 0) {
-      newCart = activeTicket.cart.filter(item => item.productId !== productId);
+      newCartItems = activeTicket.cart_items.filter(item => item.productId !== productId);
     } else if (newQuantity > productInCatalog.stock) {
       toast({ variant: "destructive", title: "Stock Limit Exceeded", description: `Only ${productInCatalog.stock} units of ${productInCatalog.name} available.`});
-      newCart = activeTicket.cart.map(item =>
+      newCartItems = activeTicket.cart_items.map(item =>
         item.productId === productId ? { ...item, quantity: productInCatalog.stock, totalPrice: productInCatalog.stock * item.unitPrice } : item
       );
     } else {
-      newCart = activeTicket.cart.map(item =>
+      newCartItems = activeTicket.cart_items.map(item =>
         item.productId === productId ? { ...item, quantity: newQuantity, totalPrice: newQuantity * item.unitPrice } : item
       );
     }
-    updateTicketCart(activeTicket.id, newCart);
-  }, [activeTicket, products, toast]);
+    updateTicketMutation.mutate({ ticketId: activeTicket.id, data: { cart_items: newCartItems } });
+  }, [activeTicket, products, toast, updateTicketMutation]);
 
   const removeFromCart = (productId: string) => {
     if (!activeTicket) return;
-    const newCart = activeTicket.cart.filter(item => item.productId !== productId);
-    updateTicketCart(activeTicket.id, newCart);
+    const newCartItems = activeTicket.cart_items.filter(item => item.productId !== productId);
+    updateTicketMutation.mutate({ ticketId: activeTicket.id, data: { cart_items: newCartItems } });
   };
 
   const cartTotal = useMemo(() => {
-    return activeTicket?.cart.reduce((sum, item) => sum + item.totalPrice, 0) || 0;
+    return activeTicket?.cart_items.reduce((sum, item) => sum + item.totalPrice, 0) || 0;
   }, [activeTicket]);
 
-  const createNewTicket = () => {
-    const newTicketId = generateId();
-    const newTicket: SalesTicket = {
-      id: newTicketId,
-      name: `Ticket ${tickets.length + 1}`,
-      cart: [],
+  const handleCreateNewTicket = (forceCreate: boolean = false) => {
+    if (createTicketMutation.isPending && !forceCreate) return;
+    const newTicketName = `Ticket ${salesTickets.length + 1}`;
+    createTicketMutation.mutate({
+      name: newTicketName,
+      cart_items: [],
       status: 'Active',
-      createdAt: new Date().toISOString(),
-      lastUpdatedAt: new Date().toISOString(),
-    };
-    setTickets(prev => [...prev, newTicket]);
-    setActiveTicketId(newTicketId);
+    });
     setSearchTerm('');
   };
-
+  
   const switchTicket = (ticketId: string) => {
     setActiveTicketId(ticketId);
     setSearchTerm('');
   };
 
-  const closeTicket = (ticketId: string) => {
-    setTickets(prev => {
-      const remainingTickets = prev.filter(t => t.id !== ticketId);
-      if (remainingTickets.length === 0) {
-        const newDefaultTicket: SalesTicket = {
-          id: generateId(), name: 'Ticket 1', cart: [], status: 'Active', createdAt: new Date().toISOString(), lastUpdatedAt: new Date().toISOString()
-        };
-        setActiveTicketId(newDefaultTicket.id);
-        return [newDefaultTicket];
-      } else {
-        if (activeTicketId === ticketId) {
-          setActiveTicketId(remainingTickets[0].id);
-        }
-        return remainingTickets;
-      }
-    });
+  const handleCloseTicket = (ticketId: string) => {
+    if(salesTickets.length <= 1){
+      toast({ variant: 'destructive', title: 'Cannot Close Last Ticket', description: "You must have at least one active ticket. Process the sale or create a new ticket first." });
+      return;
+    }
+    deleteTicketMutation.mutate(ticketId);
   };
   
-  const updateTicketStatus = (ticketId: string, status: SalesTicket['status']) => {
-     setTickets(prev => prev.map(t => t.id === ticketId ? {...t, status, lastUpdatedAt: new Date().toISOString()} : t));
+  const handleUpdateTicketStatus = (ticketId: string, status: SalesTicketDB['status']) => {
+     updateTicketMutation.mutate({ ticketId, data: { status } });
   };
 
-  const saleMutation = useMutation<Sale, Error, Omit<Sale, 'id' | 'date' | 'items'> & { items: SaleItem[] }>({
-    mutationFn: createSale,
+  const saleApiMutation = useMutation<Sale, Error, Omit<Sale, 'id' | 'date' | 'items'> & { items: SaleItem[] }>({
+    mutationFn: createSaleAPI,
     onSuccess: (data) => {
       toast({
         title: "Sale Processed Successfully",
         description: `Sale ID: ${data.id} completed. Total: $${data.totalAmount.toFixed(2)}.`,
       });
-      queryClient.invalidateQueries({ queryKey: ['products'] }); // To refresh stock levels
-      queryClient.invalidateQueries({ queryKey: ['sales'] });    // To refresh sales list if viewing elsewhere
+      queryClient.invalidateQueries({ queryKey: ['products'] }); 
+      queryClient.invalidateQueries({ queryKey: ['sales'] });    
       
       if (activeTicket) {
-        closeTicket(activeTicket.id); // Close the processed ticket and switch/create new
+        deleteTicketMutation.mutate(activeTicket.id); 
       }
       setSearchTerm('');
     },
@@ -230,13 +297,13 @@ export default function POSPage() {
   });
 
   const handleProcessSale = (paymentMethod: 'Cash' | 'Card' | 'Transfer' | 'Combined') => {
-    if (!activeTicket || activeTicket.cart.length === 0) {
+    if (!activeTicket || activeTicket.cart_items.length === 0) {
       toast({ variant: "destructive", title: "Empty Cart", description: "Please add items to the cart before processing." });
       return;
     }
 
     const saleData = {
-      items: activeTicket.cart.map(item => ({ // Ensure SaleItem structure matches backend
+      items: activeTicket.cart_items.map(item => ({ 
           productId: item.productId,
           productName: item.productName,
           quantity: item.quantity,
@@ -244,31 +311,42 @@ export default function POSPage() {
           totalPrice: item.totalPrice,
       })),
       totalAmount: cartTotal,
-      // customerId: activeTicket.customerId, // Add if you implement customer selection for tickets
-      // customerName: activeTicket.customerName, 
       paymentMethod: paymentMethod,
-      cashierId: userRole || 'system', // Use logged-in user's role/ID or a default
+      cashierId: userRole || 'system', 
     };
-
-    saleMutation.mutate(saleData);
+    saleApiMutation.mutate(saleData);
   };
   
-  const getTicketBadgeVariant = (status: SalesTicket['status']): "default" | "outline" | "secondary" | "destructive" | null | undefined => {
+  const getTicketBadgeVariant = (status: SalesTicketDB['status']): "default" | "outline" | "secondary" | "destructive" | null | undefined => {
     switch(status) {
       case 'Active': return 'default';
-      case 'On Hold': return 'outline';
-      case 'Pending Payment': return 'secondary';
+      case 'On Hold': return 'secondary'; // Changed 'On Hold' to secondary for better distinction
+      case 'Pending Payment': return 'outline';
       default: return 'default';
     }
   };
 
+  const isProcessing = createTicketMutation.isPending || updateTicketMutation.isPending || deleteTicketMutation.isPending || saleApiMutation.isPending || isLoadingSalesTickets;
+
+
+  if (isLoadingSalesTickets && !salesTickets.length) {
+    return (
+      <AppLayout>
+        <div className="flex justify-center items-center h-[calc(100vh-8rem)]">
+          <Loader2 className="h-12 w-12 animate-spin text-primary" />
+          <p className="ml-3 text-lg text-muted-foreground">Loading POS...</p>
+        </div>
+      </AppLayout>
+    );
+  }
+  
   return (
     <AppLayout>
       <Card className="mb-4 shadow-md">
         <CardHeader className="p-3">
           <div className="flex items-center justify-between">
-            <CardTitle className="text-lg">Active Sales Tickets</CardTitle>
-            <Button size="sm" onClick={createNewTicket} disabled={saleMutation.isPending}>
+            <CardTitle className="text-lg flex items-center"><Ticket className="mr-2 h-5 w-5 text-primary"/>Active Sales Tickets</CardTitle>
+            <Button size="sm" onClick={() => handleCreateNewTicket()} disabled={isProcessing}>
               <PlusSquare className="mr-2 h-4 w-4" /> New Ticket
             </Button>
           </div>
@@ -276,19 +354,19 @@ export default function POSPage() {
         <CardContent className="p-3">
           <ScrollArea className="w-full whitespace-nowrap">
             <div className="flex space-x-3 pb-2">
-              {tickets.sort((a,b) => new Date(b.lastUpdatedAt).getTime() - new Date(a.lastUpdatedAt).getTime()).map(ticket => (
+              {salesTickets.sort((a,b) => new Date(b.last_updated_at).getTime() - new Date(a.last_updated_at).getTime()).map(ticket => (
                 <div
                   key={ticket.id}
                   className={cn(
-                    "flex items-center justify-between rounded-md group text-sm min-h-[2.5rem]", 
+                    "flex items-center justify-between rounded-md group text-sm min-h-[2.5rem] border transition-all", 
                     ticket.id === activeTicketId
-                      ? "bg-primary text-primary-foreground px-3 py-2" 
-                      : "border bg-card hover:bg-muted text-card-foreground px-[calc(0.75rem-1px)] py-[calc(0.5rem-1px)]" 
+                      ? "bg-primary text-primary-foreground px-3 py-2 shadow-md ring-2 ring-primary ring-offset-2 ring-offset-background" 
+                      : "bg-card hover:bg-muted text-card-foreground px-[calc(0.75rem-1px)] py-[calc(0.5rem-1px)] hover:shadow-sm" 
                   )}
                 >
                   <div
                     className="flex-grow flex items-center cursor-pointer h-full"
-                    onClick={() => !saleMutation.isPending && switchTicket(ticket.id)}
+                    onClick={() => !isProcessing && switchTicket(ticket.id)}
                   >
                     <span className="font-medium mr-2">{ticket.name}</span>
                     <Badge
@@ -313,7 +391,7 @@ export default function POSPage() {
                             : "text-muted-foreground hover:text-accent-foreground hover:bg-accent/80"
                         )}
                         onClick={(e) => e.stopPropagation()}
-                        disabled={saleMutation.isPending}
+                        disabled={isProcessing}
                       >
                         <ListFilter className="h-4 w-4" />
                       </Button>
@@ -321,25 +399,27 @@ export default function POSPage() {
                     <DropdownMenuContent align="end">
                       <DropdownMenuLabel>{ticket.name} Actions</DropdownMenuLabel>
                       <DropdownMenuSeparator />
-                      <DropdownMenuItem onClick={() => updateTicketStatus(ticket.id, 'Active')} disabled={ticket.status === 'Active'}>Set Active</DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => updateTicketStatus(ticket.id, 'On Hold')} disabled={ticket.status === 'On Hold'}>Set On Hold</DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => updateTicketStatus(ticket.id, 'Pending Payment')} disabled={ticket.status === 'Pending Payment'}>Set Pending Payment</DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => handleUpdateTicketStatus(ticket.id, 'Active')} disabled={ticket.status === 'Active' || isProcessing}>Set Active</DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => handleUpdateTicketStatus(ticket.id, 'On Hold')} disabled={ticket.status === 'On Hold' || isProcessing}>Set On Hold</DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => handleUpdateTicketStatus(ticket.id, 'Pending Payment')} disabled={ticket.status === 'Pending Payment' || isProcessing}>Set Pending Payment</DropdownMenuItem>
                       <DropdownMenuSeparator />
-                      <DropdownMenuItem onClick={() => closeTicket(ticket.id)} className="text-destructive focus:text-destructive focus:bg-destructive/10">
+                      <DropdownMenuItem onClick={() => handleCloseTicket(ticket.id)} className="text-destructive focus:text-destructive focus:bg-destructive/10" disabled={isProcessing || salesTickets.length <= 1}>
                         <Trash2 className="mr-2 h-4 w-4" /> Close Ticket
                       </DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>
                 </div>
               ))}
-              {tickets.length === 0 && <p className="text-sm text-muted-foreground">No active tickets. Click "New Ticket" to start.</p>}
+              {salesTickets.length === 0 && !isLoadingSalesTickets && (
+                <p className="text-sm text-muted-foreground p-2">No active tickets. Click "New Ticket" to start.</p>
+              )}
             </div>
           </ScrollArea>
         </CardContent>
       </Card>
 
       {activeTicket ? (
-        <div className="flex flex-col md:flex-row gap-6 h-[calc(100vh-4rem-3rem-10rem)]">
+        <div className="flex flex-col md:flex-row gap-6 h-[calc(100vh-4rem-3rem-10rem)]"> {/* Adjusted height calculation */}
           <Card className="w-full md:w-2/5 flex flex-col shadow-lg">
             <CardHeader>
               <CardTitle>Product Search</CardTitle>
@@ -351,7 +431,7 @@ export default function POSPage() {
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className="pl-8 py-3 text-base"
-                  disabled={isLoadingProducts || saleMutation.isPending}
+                  disabled={isLoadingProducts || isProcessing}
                 />
               </div>
             </CardHeader>
@@ -380,7 +460,7 @@ export default function POSPage() {
                             <p className="text-xs text-muted-foreground">Ref: {product.reference} | Code: {product.code} | Stock: {product.stock}</p>
                           </div>
                         </div>
-                        <Button size="sm" onClick={() => addToCart(product)} disabled={product.stock === 0 || saleMutation.isPending}>
+                        <Button size="sm" onClick={() => addToCart(product)} disabled={product.stock === 0 || isProcessing}>
                           <Plus className="h-4 w-4 mr-1" /> Add
                         </Button>
                       </li>
@@ -405,8 +485,7 @@ export default function POSPage() {
                     variant={activeTicketId === activeTicket.id && activeTicket.status === 'Active' ? 'outline' : getTicketBadgeVariant(activeTicket.status)} 
                     className={cn(
                         "capitalize text-xs ml-2",
-                        activeTicketId === activeTicket.id && activeTicket.status === 'Active' && "border-primary-foreground/70 text-primary-foreground bg-transparent",
-                        activeTicketId === activeTicket.id && activeTicket.status !== 'Active' && "border-primary-foreground/70 text-primary-foreground bg-transparent" 
+                        activeTicketId === activeTicket.id && "border-primary-foreground/70 text-primary-foreground bg-primary-foreground/10"
                     )}
                   >
                     {activeTicket.status}
@@ -416,8 +495,8 @@ export default function POSPage() {
               </CardTitle>
             </CardHeader>
             <CardContent className="flex-grow overflow-hidden">
-              <ScrollArea className="h-[calc(100%-8rem)] pr-3">
-                {activeTicket.cart.length > 0 ? (
+              <ScrollArea className="h-full pr-3"> {/* Removed fixed height, let flex grow handle it */}
+                {activeTicket.cart_items.length > 0 ? (
                   <Table>
                     <TableHeader>
                       <TableRow>
@@ -429,26 +508,26 @@ export default function POSPage() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {activeTicket.cart.map(item => (
+                      {activeTicket.cart_items.map(item => (
                         <TableRow key={item.productId}>
                           <TableCell className="font-medium text-sm">{item.productName}</TableCell>
                           <TableCell className="text-center">
                             <div className="flex items-center justify-center gap-1">
-                              <Button variant="outline" size="icon" className="h-7 w-7" onClick={() => updateQuantity(item.productId, item.quantity - 1)} disabled={saleMutation.isPending}><Minus className="h-3 w-3"/></Button>
+                              <Button variant="outline" size="icon" className="h-7 w-7" onClick={() => updateQuantity(item.productId, item.quantity - 1)} disabled={isProcessing}><Minus className="h-3 w-3"/></Button>
                               <Input type="number" value={item.quantity} 
                                 onChange={(e) => {
                                   const val = parseInt(e.target.value);
                                   if (!isNaN(val)) updateQuantity(item.productId, val);
                                 }} 
                                 className="h-7 w-12 text-center px-1"
-                                disabled={saleMutation.isPending}/>
-                              <Button variant="outline" size="icon" className="h-7 w-7" onClick={() => updateQuantity(item.productId, item.quantity + 1)} disabled={saleMutation.isPending}><Plus className="h-3 w-3"/></Button>
+                                disabled={isProcessing}/>
+                              <Button variant="outline" size="icon" className="h-7 w-7" onClick={() => updateQuantity(item.productId, item.quantity + 1)} disabled={isProcessing}><Plus className="h-3 w-3"/></Button>
                             </div>
                           </TableCell>
                           <TableCell className="text-right text-sm">${Number(item.unitPrice).toFixed(2)}</TableCell>
                           <TableCell className="text-right font-semibold text-sm">${Number(item.totalPrice).toFixed(2)}</TableCell>
                           <TableCell>
-                            <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive" onClick={() => removeFromCart(item.productId)} disabled={saleMutation.isPending}><X className="h-4 w-4"/></Button>
+                            <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive" onClick={() => removeFromCart(item.productId)} disabled={isProcessing}><X className="h-4 w-4"/></Button>
                           </TableCell>
                         </TableRow>
                       ))}
@@ -470,28 +549,30 @@ export default function POSPage() {
                     size="lg" 
                     variant="outline" 
                     className="text-base py-6" 
-                    onClick={() => updateTicketStatus(activeTicket.id, 'On Hold')}
-                    disabled={activeTicket.status === 'On Hold' || activeTicket.cart.length === 0 || saleMutation.isPending}
+                    onClick={() => handleUpdateTicketStatus(activeTicket.id, 'On Hold')}
+                    disabled={activeTicket.status === 'On Hold' || activeTicket.cart_items.length === 0 || isProcessing}
                   >
                   <Save className="mr-2 h-5 w-5" /> Hold Ticket
                 </Button>
-                <Button size="lg" className="bg-green-600 hover:bg-green-700 text-base py-6 col-span-1 sm:col-span-1" onClick={() => handleProcessSale('Cash')}  disabled={activeTicket.cart.length === 0 || saleMutation.isPending}>
-                  {saleMutation.isPending ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <DollarSign className="mr-2 h-5 w-5" />}
-                  {saleMutation.isPending ? 'Processing...' : 'Cash'}
+                <Button size="lg" className="bg-green-600 hover:bg-green-700 text-base py-6 col-span-1 sm:col-span-1" onClick={() => handleProcessSale('Cash')}  disabled={activeTicket.cart_items.length === 0 || isProcessing}>
+                  {saleApiMutation.isPending ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <DollarSign className="mr-2 h-5 w-5" />}
+                  {saleApiMutation.isPending ? 'Processing...' : 'Cash'}
                 </Button>
-                <Button size="lg" className="text-base py-6 col-span-1 sm:col-span-1" onClick={() => handleProcessSale('Card')}  disabled={activeTicket.cart.length === 0 || saleMutation.isPending}>
-                  {saleMutation.isPending ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <CreditCard className="mr-2 h-5 w-5" />}
-                  {saleMutation.isPending ? 'Processing...' : 'Card'}
+                <Button size="lg" className="text-base py-6 col-span-1 sm:col-span-1" onClick={() => handleProcessSale('Card')}  disabled={activeTicket.cart_items.length === 0 || isProcessing}>
+                  {saleApiMutation.isPending ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <CreditCard className="mr-2 h-5 w-5" />}
+                  {saleApiMutation.isPending ? 'Processing...' : 'Card'}
                 </Button>
               </div>
             </CardFooter>
           </Card>
         </div>
       ) : (
-        <div className="flex items-center justify-center h-[calc(100vh-4rem-3rem-10rem)]">
+        <div className="flex items-center justify-center h-[calc(100vh-4rem-3rem-10rem)]"> {/* Adjusted height calculation */}
           <p className="text-xl text-muted-foreground">No active ticket selected. Please create or select a ticket.</p>
         </div>
       )}
     </AppLayout>
   );
 }
+
+    
