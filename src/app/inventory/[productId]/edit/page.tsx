@@ -13,7 +13,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useParams, useRouter } from 'next/navigation';
 import { useToast } from '@/hooks/use-toast';
-import { ArrowLeft, PackageCog, Save, Loader2, AlertTriangle } from 'lucide-react';
+import { ArrowLeft, Package, Save, Loader2, AlertTriangle } from 'lucide-react'; // Changed PackageCog to Package
 import Link from 'next/link';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { Product } from '@/lib/mockData';
@@ -193,7 +193,7 @@ export default function EditProductPage() {
           <Card className="shadow-lg">
             <CardHeader>
               <CardTitle className="flex items-center">
-                <PackageCog className="mr-2 h-6 w-6 text-primary" />
+                <Package className="mr-2 h-6 w-6 text-primary" /> {/* Changed PackageCog to Package */}
                 Product Information
               </CardTitle>
               <CardDescription>Fields marked with * are required.</CardDescription>
