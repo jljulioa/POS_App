@@ -3,7 +3,7 @@
 
 import AppLayout from '@/components/layout/AppLayout';
 import { PageHeader } from '@/components/PageHeader';
-import type { Product } from '@/lib/mockData'; // Keep Product type
+import type { Product } from '@/lib/mockData';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -13,7 +13,7 @@ import Image from 'next/image';
 import { Badge } from '@/components/ui/badge';
 import React, { useState, useMemo } from 'react';
 import Link from 'next/link';
-import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
+import { useQuery, useQueryClient, useMutation, type UseMutationResult } from '@tanstack/react-query';
 import { useToast } from '@/hooks/use-toast';
 import {
   AlertDialog,
@@ -49,11 +49,68 @@ const deleteProduct = async (productId: string): Promise<{ message: string }> =>
   return res.json();
 };
 
+interface ProductRowActionsProps {
+  product: Product;
+  deleteMutation: UseMutationResult<{ message: string }, Error, string, unknown>;
+}
+
+function ProductRowActions({ product, deleteMutation }: ProductRowActionsProps) {
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+
+  const handleDeleteConfirm = () => {
+    deleteMutation.mutate(product.id, {
+      onSuccess: () => {
+        setIsDeleteDialogOpen(false); // Close dialog on success
+      },
+      onError: () => {
+        setIsDeleteDialogOpen(false); // Close dialog on error as well
+      }
+    });
+  };
+
+  return (
+    <div className="flex items-center justify-center space-x-1">
+      <Button variant="ghost" size="icon" className="hover:text-primary" asChild>
+        <Link href={`/inventory/${product.id}/edit`}>
+          <Edit3 className="h-4 w-4" />
+        </Link>
+      </Button>
+      <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+        <AlertDialogTrigger asChild>
+          <Button variant="ghost" size="icon" className="hover:text-destructive">
+            <Trash2 className="h-4 w-4" />
+          </Button>
+        </AlertDialogTrigger>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This action cannot be undone. This will permanently delete the product
+              <span className="font-semibold"> {product.name}</span> and remove its data from our servers.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDeleteConfirm}
+              disabled={deleteMutation.isPending && deleteMutation.variables === product.id}
+              className="bg-destructive hover:bg-destructive/90 text-destructive-foreground"
+            >
+              {(deleteMutation.isPending && deleteMutation.variables === product.id) ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
+  );
+}
+
+
 export default function InventoryPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterBrand, setFilterBrand] = useState('all');
   const [filterCategory, setFilterCategory] = useState('all');
-  const [productToDelete, setProductToDelete] = useState<Product | null>(null);
 
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -63,15 +120,14 @@ export default function InventoryPage() {
     queryFn: fetchProducts,
   });
 
-  const deleteMutation = useMutation({
+  const deleteMutation = useMutation< { message: string }, Error, string>({
     mutationFn: deleteProduct,
-    onSuccess: (data, variables) => {
+    onSuccess: (data, productId) => { // productId is the second arg passed to mutate
       toast({
         title: "Product Deleted",
         description: `Product has been successfully deleted.`,
       });
       queryClient.invalidateQueries({ queryKey: ['products'] });
-      setProductToDelete(null); // Close dialog
     },
     onError: (error: Error) => {
       toast({
@@ -79,15 +135,8 @@ export default function InventoryPage() {
         title: "Failed to Delete Product",
         description: error.message || "An unexpected error occurred.",
       });
-      setProductToDelete(null); // Close dialog
     },
   });
-
-  const handleDeleteConfirm = () => {
-    if (productToDelete) {
-      deleteMutation.mutate(productToDelete.id);
-    }
-  };
 
   const uniqueBrands = useMemo(() => ['all', ...new Set(products.map(p => p.brand).filter(Boolean))], [products]);
   const uniqueCategories = useMemo(() => ['all', ...new Set(products.map(p => p.category).filter(Boolean))], [products]);
@@ -145,8 +194,8 @@ export default function InventoryPage() {
       </PageHeader>
 
       <div className="mb-6 flex flex-col sm:flex-row gap-4">
-        <Input 
-          placeholder="Search by name, code, reference, barcode..." 
+        <Input
+          placeholder="Search by name, code, reference, barcode..."
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
           className="max-w-sm"
@@ -208,16 +257,7 @@ export default function InventoryPage() {
                    <Badge variant="secondary" className="border-green-500 text-green-600 bg-green-100">In Stock</Badge>}
                 </TableCell>
                 <TableCell className="text-center">
-                  <Button variant="ghost" size="icon" className="hover:text-primary" asChild>
-                    <Link href={`/inventory/${product.id}/edit`}>
-                      <Edit3 className="h-4 w-4" />
-                    </Link>
-                  </Button>
-                  <AlertDialogTrigger asChild>
-                    <Button variant="ghost" size="icon" className="hover:text-destructive" onClick={() => setProductToDelete(product)}>
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </AlertDialogTrigger>
+                  <ProductRowActions product={product} deleteMutation={deleteMutation} />
                 </TableCell>
               </TableRow>
             ))}
@@ -231,33 +271,8 @@ export default function InventoryPage() {
           </TableBody>
         </Table>
       </div>
-      
-      <AlertDialog open={!!productToDelete} onOpenChange={(isOpen) => {
-        if (!isOpen) {
-          setProductToDelete(null);
-        }
-      }}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This action cannot be undone. This will permanently delete the product
-              <span className="font-semibold"> {productToDelete?.name}</span> and remove its data from our servers.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel onClick={() => setProductToDelete(null)}>Cancel</AlertDialogCancel>
-            <AlertDialogAction 
-              onClick={handleDeleteConfirm} 
-              disabled={deleteMutation.isPending}
-              className="bg-destructive hover:bg-destructive/90 text-destructive-foreground"
-            >
-              {deleteMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-              Delete
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </AppLayout>
   );
 }
+
+    
