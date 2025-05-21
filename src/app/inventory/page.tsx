@@ -11,10 +11,11 @@ import { Button } from '@/components/ui/button';
 import { PlusCircle, FileDown, Edit3, Trash2, Loader2, AlertTriangle } from 'lucide-react';
 import Image from 'next/image';
 import { Badge } from '@/components/ui/badge';
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import Link from 'next/link';
 import { useQuery, useQueryClient, useMutation, type UseMutationResult } from '@tanstack/react-query';
 import { useToast } from '@/hooks/use-toast';
+import { useSearchParams } from 'next/navigation';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -60,10 +61,10 @@ function ProductRowActions({ product, deleteMutation }: ProductRowActionsProps) 
   const handleDeleteConfirm = () => {
     deleteMutation.mutate(product.id, {
       onSuccess: () => {
-        setIsDeleteDialogOpen(false); // Close dialog on success
+        setIsDeleteDialogOpen(false); 
       },
       onError: () => {
-        setIsDeleteDialogOpen(false); // Close dialog on error as well
+        setIsDeleteDialogOpen(false); 
       }
     });
   };
@@ -109,8 +110,11 @@ function ProductRowActions({ product, deleteMutation }: ProductRowActionsProps) 
 
 export default function InventoryPage() {
   const [searchTerm, setSearchTerm] = useState('');
+  const searchParams = useSearchParams();
+  const urlCategoryFilter = searchParams.get('category');
+  
   const [filterBrand, setFilterBrand] = useState('all');
-  const [filterCategory, setFilterCategory] = useState('all');
+  const [filterCategory, setFilterCategory] = useState(urlCategoryFilter || 'all');
 
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -120,9 +124,14 @@ export default function InventoryPage() {
     queryFn: fetchProducts,
   });
 
+  useEffect(() => {
+    const newUrlCategory = searchParams.get('category');
+    setFilterCategory(newUrlCategory || 'all');
+  }, [searchParams]);
+
   const deleteMutation = useMutation< { message: string }, Error, string>({
     mutationFn: deleteProduct,
-    onSuccess: (data, productId) => { // productId is the second arg passed to mutate
+    onSuccess: (data, productId) => { 
       toast({
         title: "Product Deleted",
         description: `Product has been successfully deleted.`,
@@ -138,8 +147,8 @@ export default function InventoryPage() {
     },
   });
 
-  const uniqueBrands = useMemo(() => ['all', ...new Set(products.map(p => p.brand).filter(Boolean))], [products]);
-  const uniqueCategories = useMemo(() => ['all', ...new Set(products.map(p => p.category).filter(Boolean))], [products]);
+  const uniqueBrands = useMemo(() => ['all', ...new Set(products.map(p => p.brand).filter(Boolean).sort())], [products]);
+  const uniqueCategories = useMemo(() => ['all', ...new Set(products.map(p => p.category).filter(Boolean).sort())], [products]);
 
   const filteredProducts = useMemo(() => {
     return products.filter(product => {
@@ -210,7 +219,14 @@ export default function InventoryPage() {
             ))}
           </SelectContent>
         </Select>
-        <Select value={filterCategory} onValueChange={setFilterCategory}>
+        <Select value={filterCategory} onValueChange={(value) => {
+          setFilterCategory(value);
+          // Optional: If you want the URL to update when dropdown changes, you can use router.push here
+          // const newQuery = new URLSearchParams(searchParams);
+          // if (value === 'all') newQuery.delete('category');
+          // else newQuery.set('category', value);
+          // router.push(`/inventory?${newQuery.toString()}`, { scroll: false });
+        }}>
           <SelectTrigger className="w-full sm:w-[180px]">
             <SelectValue placeholder="Filter by category" />
           </SelectTrigger>
@@ -274,5 +290,3 @@ export default function InventoryPage() {
     </AppLayout>
   );
 }
-
-    
