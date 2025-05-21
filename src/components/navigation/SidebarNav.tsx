@@ -4,7 +4,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
-import { LayoutDashboard, Package, ShoppingCart, Users, Barcode, Bot, Settings } from 'lucide-react';
+import { LayoutDashboard, Package, ShoppingCart, Users, Barcode, Bot, Settings, FileText } from 'lucide-react'; // Added FileText
 import { SidebarMenu, SidebarMenuItem, SidebarMenuButton } from '@/components/ui/sidebar';
 
 const navItems = [
@@ -13,6 +13,7 @@ const navItems = [
   { href: '/inventory', label: 'Inventory', icon: Package },
   { href: '/sales', label: 'Sales', icon: ShoppingCart },
   { href: '/customers', label: 'Customers', icon: Users },
+  { href: '/purchase-invoices', label: 'Purchase Invoices', icon: FileText }, // New Item
   { href: '/reordering', label: 'Smart Reordering', icon: Bot },
 ];
 
@@ -41,3 +42,5 @@ export function SidebarNav() {
     </SidebarMenu>
   );
 }
+
+    

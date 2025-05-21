@@ -23,9 +23,11 @@ export default function InventoryPage() {
 
   const filteredProducts = useMemo(() => {
     return mockProducts.filter(product => {
-      const matchesSearch = product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                            product.code.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                            (product.barcode && product.barcode.toLowerCase().includes(searchTerm.toLowerCase()));
+      const searchTermLower = searchTerm.toLowerCase();
+      const matchesSearch = product.name.toLowerCase().includes(searchTermLower) ||
+                            product.code.toLowerCase().includes(searchTermLower) ||
+                            product.reference.toLowerCase().includes(searchTermLower) || // Search by reference
+                            (product.barcode && product.barcode.toLowerCase().includes(searchTermLower));
       const matchesBrand = filterBrand === 'all' || product.brand === filterBrand;
       const matchesCategory = filterCategory === 'all' || product.category === filterCategory;
       return matchesSearch && matchesBrand && matchesCategory;
@@ -45,7 +47,7 @@ export default function InventoryPage() {
 
       <div className="mb-6 flex flex-col sm:flex-row gap-4">
         <Input 
-          placeholder="Search by name, code, barcode..." 
+          placeholder="Search by name, code, reference, barcode..." 
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
           className="max-w-sm"
@@ -79,6 +81,7 @@ export default function InventoryPage() {
               <TableHead className="w-[80px]">Image</TableHead>
               <TableHead>Name</TableHead>
               <TableHead>Code</TableHead>
+              <TableHead>Reference</TableHead> {/* New Column */}
               <TableHead>Brand</TableHead>
               <TableHead>Category</TableHead>
               <TableHead className="text-right">Stock</TableHead>
@@ -95,6 +98,7 @@ export default function InventoryPage() {
                 </TableCell>
                 <TableCell className="font-medium">{product.name}</TableCell>
                 <TableCell>{product.code}</TableCell>
+                <TableCell>{product.reference}</TableCell> {/* New Cell */}
                 <TableCell>{product.brand}</TableCell>
                 <TableCell>{product.category}</TableCell>
                 <TableCell className="text-right">{product.stock}</TableCell>
@@ -116,7 +120,7 @@ export default function InventoryPage() {
             ))}
              {filteredProducts.length === 0 && (
               <TableRow>
-                <TableCell colSpan={9} className="h-24 text-center">
+                <TableCell colSpan={10} className="h-24 text-center"> {/* Adjusted colSpan */}
                   No products found.
                 </TableCell>
               </TableRow>
@@ -127,3 +131,5 @@ export default function InventoryPage() {
     </AppLayout>
   );
 }
+
+    
