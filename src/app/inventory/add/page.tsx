@@ -5,7 +5,7 @@ import AppLayout from '@/components/layout/AppLayout';
 import { PageHeader } from '@/components/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label'; // Not directly used but good for context
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from '@/components/ui/form';
 import { useForm } from 'react-hook-form';
@@ -15,16 +15,17 @@ import { useRouter } from 'next/navigation';
 import { useToast } from '@/hooks/use-toast';
 import { ArrowLeft, PackagePlus, Save, Loader2 } from 'lucide-react';
 import Link from 'next/link';
-import { useMutation, useQueryClient } from '@tanstack/react-query'; // Import useMutation
-import type { Product } from '@/lib/mockData'; // Use existing Product type
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import type { Product } from '@/lib/mockData';
+import type { ProductCategory } from '@/app/api/categories/route';
 
 const ProductFormSchema = z.object({
   name: z.string().min(3, { message: "Name must be at least 3 characters." }),
   code: z.string().min(3, { message: "Code must be at least 3 characters." }),
   reference: z.string().min(3, { message: "Reference must be at least 3 characters." }),
-  barcode: z.string().optional(),
+  barcode: z.string().optional().or(z.literal('')),
   stock: z.coerce.number().int().min(0, { message: "Stock must be a non-negative integer." }),
-  category: z.string().min(2, { message: "Category is required." }),
+  category: z.string().min(1, { message: "Category is required." }), // Will be category name
   brand: z.string().min(2, { message: "Brand is required." }),
   minStock: z.coerce.number().int().min(0, { message: "Min. stock must be a non-negative integer." }),
   maxStock: z.coerce.number().int().min(0, { message: "Max. stock must be a non-negative integer." }).optional(),
@@ -46,10 +47,19 @@ const addProduct = async (newProduct: ProductFormValues): Promise<Product> => {
     body: JSON.stringify(newProduct),
   });
   if (!response.ok) {
-    const errorData = await response.json();
+    const errorData = await response.json().catch(() => ({ message: 'Failed to add product and could not parse error' }));
     throw new Error(errorData.message || 'Failed to add product');
   }
   return response.json();
+};
+
+// API fetch function for categories
+const fetchCategories = async (): Promise<ProductCategory[]> => {
+  const res = await fetch('/api/categories');
+  if (!res.ok) {
+    throw new Error('Failed to fetch categories');
+  }
+  return res.json();
 };
 
 
@@ -57,6 +67,11 @@ export default function AddProductPage() {
   const router = useRouter();
   const { toast } = useToast();
   const queryClient = useQueryClient();
+
+  const { data: categories = [], isLoading: isLoadingCategories } = useQuery<ProductCategory[], Error>({
+    queryKey: ['categories'],
+    queryFn: fetchCategories,
+  });
 
   const form = useForm<ProductFormValues>({
     resolver: zodResolver(ProductFormSchema),
@@ -66,10 +81,10 @@ export default function AddProductPage() {
       reference: '',
       barcode: '',
       stock: 0,
-      category: '',
+      category: '', // Initial value for category
       brand: '',
       minStock: 0,
-      maxStock: undefined, // Set to undefined for optional numeric field
+      maxStock: undefined,
       cost: 0,
       price: 0,
       imageUrl: '',
@@ -84,7 +99,7 @@ export default function AddProductPage() {
         title: "Product Added Successfully",
         description: `${data.name} has been added to the product list.`,
       });
-      queryClient.invalidateQueries({ queryKey: ['products'] }); // Invalidate cache to refetch
+      queryClient.invalidateQueries({ queryKey: ['products'] });
       router.push('/inventory');
     },
     onError: (error) => {
@@ -179,9 +194,26 @@ export default function AddProductPage() {
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Category *</FormLabel>
-                    <FormControl>
-                      <Input placeholder="e.g., Engine Parts" {...field} />
-                    </FormControl>
+                    <Select onValueChange={field.onChange} defaultValue={field.value} disabled={isLoadingCategories}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder={isLoadingCategories ? "Loading categories..." : "Select a category"} />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {isLoadingCategories ? (
+                            <SelectItem value="loading" disabled>Loading...</SelectItem>
+                        ) : categories.length === 0 ? (
+                            <SelectItem value="no-categories" disabled>No categories found. Add one first.</SelectItem>
+                        ) : (
+                          categories.map((category) => (
+                            <SelectItem key={category.id} value={category.name}>
+                              {category.name}
+                            </SelectItem>
+                          ))
+                        )}
+                      </SelectContent>
+                    </Select>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -298,7 +330,7 @@ export default function AddProductPage() {
               />
             </CardContent>
             <CardFooter className="border-t px-6 py-4">
-              <Button type="submit" disabled={mutation.isPending}>
+              <Button type="submit" disabled={mutation.isPending || isLoadingCategories}>
                 {mutation.isPending ? (
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 ) : (
@@ -313,4 +345,3 @@ export default function AddProductPage() {
     </AppLayout>
   );
 }
-
