@@ -22,6 +22,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { cn } from '@/lib/utils';
 
 // Helper to generate unique IDs
 const generateId = () => Math.random().toString(36).substr(2, 9);
@@ -140,15 +141,21 @@ export default function POSPage() {
   };
 
   const closeTicket = (ticketId: string) => {
-    setTickets(prev => prev.filter(t => t.id !== ticketId));
-    if (activeTicketId === ticketId) {
-      setActiveTicketId(tickets.length > 1 ? tickets.find(t => t.id !== ticketId)!.id : '');
-      if (tickets.length === 1) { // if it was the last ticket
-         createNewTicket(); // create a new default one
+    setTickets(prev => {
+      const remainingTickets = prev.filter(t => t.id !== ticketId);
+      if (remainingTickets.length === 0) {
+        const newDefaultTicket: SalesTicket = {
+          id: generateId(), name: 'Ticket 1', cart: [], status: 'Active', createdAt: new Date().toISOString(), lastUpdatedAt: new Date().toISOString()
+        };
+        setActiveTicketId(newDefaultTicket.id);
+        return [newDefaultTicket];
       } else {
-        setActiveTicketId(tickets.filter(t=> t.id !== ticketId)[0].id);
+        if (activeTicketId === ticketId) {
+          setActiveTicketId(remainingTickets[0].id);
+        }
+        return remainingTickets;
       }
-    }
+    });
   };
   
   const updateTicketStatus = (ticketId: string, status: SalesTicket['status']) => {
@@ -165,24 +172,12 @@ export default function POSPage() {
     console.log('Processing sale:', { ticketId: activeTicket.id, cart: activeTicket.cart, total: cartTotal, paymentMethod });
     toast({ title: "Sale Processed", description: `Ticket ${activeTicket.name} total: $${cartTotal.toFixed(2)} via ${paymentMethod}.` });
     
-    // Instead of clearing cart, close the ticket and switch or create new
     const currentTicketId = activeTicket.id;
-    const remainingTickets = tickets.filter(t => t.id !== currentTicketId);
-
-    if (remainingTickets.length > 0) {
-      setTickets(remainingTickets);
-      setActiveTicketId(remainingTickets[0].id); // Switch to the next available ticket
-    } else {
-      const newDefaultTicket: SalesTicket = {
-        id: generateId(), name: 'Ticket 1', cart: [], status: 'Active', createdAt: new Date().toISOString(), lastUpdatedAt: new Date().toISOString()
-      };
-      setTickets([newDefaultTicket]);
-      setActiveTicketId(newDefaultTicket.id);
-    }
+    closeTicket(currentTicketId); // This will also handle switching or creating a new ticket
     setSearchTerm('');
   };
   
-  const getTicketBadgeVariant = (status: SalesTicket['status']) => {
+  const getTicketBadgeVariant = (status: SalesTicket['status']): "default" | "outline" | "secondary" | "destructive" | null | undefined => {
     switch(status) {
       case 'Active': return 'default';
       case 'On Hold': return 'outline';
@@ -208,20 +203,44 @@ export default function POSPage() {
           <ScrollArea className="w-full whitespace-nowrap">
             <div className="flex space-x-3 pb-2">
               {tickets.sort((a,b) => new Date(b.lastUpdatedAt).getTime() - new Date(a.lastUpdatedAt).getTime()).map(ticket => (
-                <Button
+                <div
                   key={ticket.id}
-                  variant={ticket.id === activeTicketId ? "default" : "outline"}
-                  onClick={() => switchTicket(ticket.id)}
-                  className="relative pr-10 group"
+                  className={cn(
+                    "flex items-center justify-between rounded-md group text-sm min-h-[2.5rem]", // min-h to match button height
+                    ticket.id === activeTicketId
+                      ? "bg-primary text-primary-foreground px-3 py-2" // Active ticket style (like default button)
+                      : "border bg-card hover:bg-muted text-card-foreground px-[calc(0.75rem-1px)] py-[calc(0.5rem-1px)]" // Inactive ticket style (like outline button)
+                  )}
                 >
-                  {ticket.name} 
-                  <Badge variant={getTicketBadgeVariant(ticket.status)} className="ml-2 capitalize text-xs">
-                    {ticket.status}
-                  </Badge>
-                   <DropdownMenu>
+                  <div
+                    className="flex-grow flex items-center cursor-pointer h-full"
+                    onClick={() => switchTicket(ticket.id)}
+                  >
+                    <span className="font-medium mr-2">{ticket.name}</span>
+                    <Badge
+                      variant={ticket.id === activeTicketId ? 'outline' : getTicketBadgeVariant(ticket.status)}
+                      className={cn(
+                        "capitalize text-xs",
+                        ticket.id === activeTicketId && "border-primary-foreground/70 text-primary-foreground bg-transparent hover:bg-primary-foreground/10"
+                      )}
+                    >
+                      {ticket.status}
+                    </Badge>
+                  </div>
+                  <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" size="icon" className="absolute right-0 top-1/2 -translate-y-1/2 h-6 w-6 opacity-70 group-hover:opacity-100">
-                        <ListFilter className="h-3 w-3" />
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className={cn(
+                          "h-7 w-7 opacity-70 group-hover:opacity-100 shrink-0 ml-2",
+                          ticket.id === activeTicketId
+                            ? "text-primary-foreground hover:bg-primary-foreground/10"
+                            : "text-muted-foreground hover:text-accent-foreground hover:bg-accent/80"
+                        )}
+                        onClick={(e) => e.stopPropagation()} // Prevent click from bubbling to parent div
+                      >
+                        <ListFilter className="h-4 w-4" />
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
@@ -236,7 +255,7 @@ export default function POSPage() {
                       </DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>
-                </Button>
+                </div>
               ))}
               {tickets.length === 0 && <p className="text-sm text-muted-foreground">No active tickets. Click "New Ticket" to start.</p>}
             </div>
@@ -293,7 +312,20 @@ export default function POSPage() {
           <Card className="w-full md:w-3/5 flex flex-col shadow-lg">
             <CardHeader>
               <CardTitle className="flex items-center justify-between">
-                <span>Current Sale: {activeTicket.name} <Badge variant={getTicketBadgeVariant(activeTicket.status)} className="capitalize text-xs">{activeTicket.status}</Badge></span> <ShoppingCart className="h-6 w-6 text-primary" />
+                <span>Current Sale: {activeTicket.name} 
+                  <Badge 
+                    variant={activeTicketId === activeTicket.id && activeTicket.status === 'Active' ? 'outline' : getTicketBadgeVariant(activeTicket.status)} 
+                    className={cn(
+                        "capitalize text-xs ml-2",
+                        activeTicketId === activeTicket.id && activeTicket.status === 'Active' && "border-primary-foreground/70 text-primary-foreground bg-transparent",
+                        activeTicketId === activeTicket.id && activeTicket.status !== 'Active' && "border-primary-foreground/70 text-primary-foreground bg-transparent" 
+                        // Add other specific styles for badge on active ticket header if needed
+                    )}
+                  >
+                    {activeTicket.status}
+                  </Badge>
+                </span> 
+                <ShoppingCart className="h-6 w-6 text-primary" />
               </CardTitle>
             </CardHeader>
             <CardContent className="flex-grow overflow-hidden">
@@ -373,5 +405,3 @@ export default function POSPage() {
     </AppLayout>
   );
 }
-
-    
