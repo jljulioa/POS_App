@@ -16,7 +16,18 @@ import { useToast } from '@/hooks/use-toast';
 import { ListPlus, Save, Loader2, AlertTriangle, Edit3, Trash2, Tag } from 'lucide-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { format } from 'date-fns';
-import type { ProductCategory } from '@/app/api/categories/route'; // Import the type
+import type { ProductCategory } from '@/app/api/categories/route';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import React, { useState } from 'react';
 
 const CategoryFormSchema = z.object({
   name: z.string().min(2, { message: "Category name must be at least 2 characters." }),
@@ -25,7 +36,12 @@ const CategoryFormSchema = z.object({
 
 type CategoryFormValues = z.infer<typeof CategoryFormSchema>;
 
-// API fetch function for categories
+const defaultValues: Partial<CategoryFormValues> = {
+  name: '',
+  description: '',
+};
+
+// API fetch functions for categories
 const fetchCategories = async (): Promise<ProductCategory[]> => {
   const res = await fetch('/api/categories');
   if (!res.ok) {
@@ -35,25 +51,52 @@ const fetchCategories = async (): Promise<ProductCategory[]> => {
   return res.json();
 };
 
-// API mutation function to add a category
+// API mutation functions
 const addCategory = async (newCategory: CategoryFormValues): Promise<ProductCategory> => {
   const response = await fetch('/api/categories', {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(newCategory),
   });
   if (!response.ok) {
-    const errorData = await response.json().catch(() => ({ message: 'Failed to add category and could not parse error' }));
+    const errorData = await response.json().catch(() => ({ message: 'Failed to add category' }));
     throw new Error(errorData.message || 'Failed to add category');
   }
   return response.json();
 };
 
+const updateCategory = async ({ id, data }: { id: number; data: CategoryFormValues }): Promise<ProductCategory> => {
+  const response = await fetch(`/api/categories/${id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({ message: 'Failed to update category' }));
+    throw new Error(errorData.message || 'Failed to update category');
+  }
+  return response.json();
+};
+
+const deleteCategory = async (id: number): Promise<{ message: string }> => {
+  const response = await fetch(`/api/categories/${id}`, {
+    method: 'DELETE',
+  });
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({ message: 'Failed to delete category' }));
+    throw new Error(errorData.message || 'Failed to delete category');
+  }
+  return response.json();
+};
+
+
 export default function CategoriesPage() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const [formMode, setFormMode] = useState<'add' | 'edit'>('add');
+  const [editingCategory, setEditingCategory] = useState<ProductCategory | null>(null);
+  const [categoryToDelete, setCategoryToDelete] = useState<ProductCategory | null>(null);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
 
   const { data: categories = [], isLoading: isLoadingCategories, error: categoriesError, isError: isCategoriesError } = useQuery<ProductCategory[], Error>({
     queryKey: ['categories'],
@@ -62,34 +105,86 @@ export default function CategoriesPage() {
 
   const form = useForm<CategoryFormValues>({
     resolver: zodResolver(CategoryFormSchema),
-    defaultValues: {
-      name: '',
-      description: '',
+    defaultValues,
+  });
+
+  const addMutation = useMutation<ProductCategory, Error, CategoryFormValues>({
+    mutationFn: addCategory,
+    onSuccess: (data) => {
+      toast({ title: "Category Added", description: `${data.name} has been added.` });
+      queryClient.invalidateQueries({ queryKey: ['categories'] });
+      form.reset(defaultValues);
+    },
+    onError: (error) => {
+      toast({ variant: "destructive", title: "Failed to Add Category", description: error.message });
     },
   });
 
-  const mutation = useMutation<ProductCategory, Error, CategoryFormValues>({
-    mutationFn: addCategory,
+  const updateMutation = useMutation<ProductCategory, Error, { id: number; data: CategoryFormValues }>({
+    mutationFn: updateCategory,
     onSuccess: (data) => {
-      toast({
-        title: "Category Added Successfully",
-        description: `${data.name} has been added.`,
-      });
+      toast({ title: "Category Updated", description: `${data.name} has been updated.` });
       queryClient.invalidateQueries({ queryKey: ['categories'] });
-      form.reset(); // Reset form after successful submission
+      queryClient.invalidateQueries({ queryKey: ['category', data.id] });
+      handleCancelEdit();
     },
     onError: (error) => {
-      toast({
-        variant: "destructive",
-        title: "Failed to Add Category",
-        description: error.message || "An unexpected error occurred.",
-      });
+      toast({ variant: "destructive", title: "Failed to Update Category", description: error.message });
+    },
+  });
+  
+  const deleteMutation = useMutation<{ message: string }, Error, number>({
+    mutationFn: deleteCategory,
+    onSuccess: (data, deletedCategoryId) => {
+      toast({ title: "Category Deleted", description: data.message });
+      queryClient.invalidateQueries({ queryKey: ['categories'] });
+      if (editingCategory?.id === deletedCategoryId) {
+        handleCancelEdit();
+      }
+      setIsDeleteDialogOpen(false);
+      setCategoryToDelete(null);
+    },
+    onError: (error) => {
+      toast({ variant: "destructive", title: "Failed to Delete Category", description: error.message });
+      setIsDeleteDialogOpen(false);
+      setCategoryToDelete(null);
     },
   });
 
   const onSubmit = (data: CategoryFormValues) => {
-    mutation.mutate(data);
+    if (formMode === 'edit' && editingCategory) {
+      updateMutation.mutate({ id: editingCategory.id, data });
+    } else {
+      addMutation.mutate(data);
+    }
   };
+
+  const handleEditClick = (category: ProductCategory) => {
+    setEditingCategory(category);
+    setFormMode('edit');
+    form.reset({
+      name: category.name,
+      description: category.description || '',
+    });
+  };
+
+  const handleCancelEdit = () => {
+    setFormMode('add');
+    setEditingCategory(null);
+    form.reset(defaultValues);
+  };
+
+  const handleDeleteClick = (category: ProductCategory) => {
+    setCategoryToDelete(category);
+    setIsDeleteDialogOpen(true);
+  };
+
+  const confirmDelete = () => {
+    if (categoryToDelete) {
+      deleteMutation.mutate(categoryToDelete.id);
+    }
+  };
+
 
   return (
     <AppLayout>
@@ -102,9 +197,10 @@ export default function CategoriesPage() {
               <Card className="shadow-lg">
                 <CardHeader>
                   <CardTitle className="flex items-center">
-                    <ListPlus className="mr-2 h-6 w-6 text-primary" />
-                    Add New Category
+                    {formMode === 'edit' ? <Edit3 className="mr-2 h-6 w-6 text-accent" /> : <ListPlus className="mr-2 h-6 w-6 text-primary" />}
+                    {formMode === 'edit' ? 'Edit Category' : 'Add New Category'}
                   </CardTitle>
+                  {formMode === 'edit' && editingCategory && <CardDescription>Editing: {editingCategory.name}</CardDescription>}
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <FormField
@@ -134,15 +230,20 @@ export default function CategoriesPage() {
                     )}
                   />
                 </CardContent>
-                <CardFooter>
-                  <Button type="submit" disabled={mutation.isPending} className="w-full">
-                    {mutation.isPending ? (
+                <CardFooter className="flex flex-col">
+                  <Button type="submit" disabled={addMutation.isPending || updateMutation.isPending} className="w-full">
+                    {addMutation.isPending || updateMutation.isPending ? (
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                     ) : (
                       <Save className="mr-2 h-4 w-4" />
                     )}
-                    {mutation.isPending ? 'Saving...' : 'Save Category'}
+                    {addMutation.isPending || updateMutation.isPending ? 'Saving...' : (formMode === 'edit' ? 'Update Category' : 'Save Category')}
                   </Button>
+                  {formMode === 'edit' && (
+                    <Button type="button" variant="outline" onClick={handleCancelEdit} className="w-full mt-2">
+                      Cancel Edit
+                    </Button>
+                  )}
                 </CardFooter>
               </Card>
             </form>
@@ -178,7 +279,7 @@ export default function CategoriesPage() {
                         <TableHead>Slug</TableHead>
                         <TableHead>Description</TableHead>
                         <TableHead>Created At</TableHead>
-                        {/* <TableHead className="text-center">Actions</TableHead> */}
+                        <TableHead className="text-center">Actions</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -188,14 +289,14 @@ export default function CategoriesPage() {
                           <TableCell>{category.slug}</TableCell>
                           <TableCell className="text-sm text-muted-foreground max-w-xs truncate">{category.description || 'N/A'}</TableCell>
                           <TableCell className="text-sm">{format(new Date(category.createdat), 'MMM d, yyyy')}</TableCell>
-                          {/* <TableCell className="text-center">
-                            <Button variant="ghost" size="icon" className="hover:text-accent disabled:opacity-50" disabled>
+                          <TableCell className="text-center">
+                            <Button variant="ghost" size="icon" className="hover:text-accent" onClick={() => handleEditClick(category)} disabled={deleteMutation.isPending && deleteMutation.variables === category.id}>
                               <Edit3 className="h-4 w-4" />
                             </Button>
-                            <Button variant="ghost" size="icon" className="hover:text-destructive disabled:opacity-50" disabled>
+                            <Button variant="ghost" size="icon" className="hover:text-destructive" onClick={() => handleDeleteClick(category)} disabled={deleteMutation.isPending && deleteMutation.variables === category.id}>
                               <Trash2 className="h-4 w-4" />
                             </Button>
-                          </TableCell> */}
+                          </TableCell>
                         </TableRow>
                       ))}
                     </TableBody>
@@ -206,6 +307,33 @@ export default function CategoriesPage() {
           </Card>
         </div>
       </div>
+      
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This action cannot be undone. This will permanently delete the category 
+              <span className="font-semibold"> {categoryToDelete?.name}</span>. 
+              If products are using this category name, you might need to update them separately.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setCategoryToDelete(null)}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmDelete}
+              disabled={deleteMutation.isPending}
+              className="bg-destructive hover:bg-destructive/90 text-destructive-foreground"
+            >
+              {deleteMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
     </AppLayout>
   );
 }
+    
