@@ -1,17 +1,24 @@
 // src/lib/db.ts
-import mysql from 'mysql2/promise';
+import { Pool } from 'pg';
 
-// Create a connection pool
-// The pool will use the MARIADB_URL from your .env.local file by default if no explicit config is passed
-// For more robust error handling and specific configurations, you can expand this.
-let pool: mysql.Pool | null = null;
+let pool: Pool | null = null;
 
 function getPool() {
   if (!pool) {
-    if (!process.env.MARIADB_URL) {
-      throw new Error("MARIADB_URL environment variable is not set.");
+    if (!process.env.POSTGRES_URL) {
+      throw new Error("POSTGRES_URL environment variable is not set.");
     }
-    pool = mysql.createPool(process.env.MARIADB_URL);
+    pool = new Pool({
+      connectionString: process.env.POSTGRES_URL,
+      // ssl: {
+      //   rejectUnauthorized: false // Necessary for some cloud providers like Neon if not using full certs
+      // } // Neon typically handles SSL via the connection string with sslmode=require
+    });
+
+    pool.on('error', (err, client) => {
+      console.error('Unexpected error on idle client', err);
+      process.exit(-1);
+    });
   }
   return pool;
 }
@@ -19,19 +26,14 @@ function getPool() {
 export async function query(sql: string, params?: any[]) {
   const currentPool = getPool();
   try {
-    const [results] = await currentPool.execute(sql, params);
-    return results;
+    const results = await currentPool.query(sql, params);
+    return results.rows; // pg returns results in a `rows` property
   } catch (error) {
     console.error("Database query error:", error);
-    // In a real app, you might want to throw a more specific error
-    // or handle different types of DB errors differently.
     throw new Error("An error occurred while querying the database.");
   }
 }
 
-// Optional: A function to gracefully close the pool when the app shuts down
-// This is more relevant for standalone Node.js apps than Next.js serverless functions usually,
-// but good to be aware of.
 export async function closePool() {
   if (pool) {
     await pool.end();

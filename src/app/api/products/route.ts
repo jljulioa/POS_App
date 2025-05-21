@@ -24,7 +24,7 @@ const ProductCreateSchema = z.object({
 // GET handler to fetch all products
 export async function GET(request: NextRequest) {
   try {
-    const products = await query('SELECT * FROM Products');
+    const products = await query('SELECT * FROM Products ORDER BY name ASC');
     return NextResponse.json(products);
   } catch (error) {
     console.error('Failed to fetch products:', error);
@@ -47,47 +47,34 @@ export async function POST(request: NextRequest) {
         minStock, maxStock, cost, price, imageUrl, dataAiHint 
     } = validation.data;
 
-    // Generate a simple unique ID (in a real app, UUID or database auto-increment is better)
-    const id = `P${Date.now()}`;
+    // Generate a simple unique ID (in a real app, UUID or database auto-increment is better for primary keys not managed by DB)
+    // For PostgreSQL, if 'id' is SERIAL or similar, you might not need to generate it here if the table is set up for auto-generation.
+    // Assuming 'id' is a TEXT field that we provide for now.
+    const id = `P${Date.now()}${Math.random().toString(36).substring(2, 7)}`;
     const finalImageUrl = imageUrl || `https://placehold.co/100x100.png?text=${name.substring(0,3)}`;
     const finalDataAiHint = dataAiHint || (name.split(' ').slice(0,2).join(' ') || "product");
 
 
     const sql = `
       INSERT INTO Products (id, name, code, reference, barcode, stock, category, brand, minStock, maxStock, cost, price, imageUrl, dataAiHint)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+      RETURNING *
     `;
     const params = [
         id, name, code, reference, barcode ?? null, stock, category, brand, 
         minStock, maxStock ?? null, cost, price, finalImageUrl, finalDataAiHint
     ];
     
-    await query(sql, params);
-
-    // Construct the newly created product object to return, matching the Product type
-    const newProduct: Product = {
-      id,
-      name,
-      code,
-      reference,
-      barcode: barcode ?? undefined,
-      stock,
-      category,
-      brand,
-      minStock,
-      maxStock: maxStock ?? 0, // Ensure maxStock is a number
-      cost,
-      price,
-      imageUrl: finalImageUrl,
-      dataAiHint: finalDataAiHint
-    };
+    const result = await query(sql, params);
+    const newProduct: Product = result[0]; // pg driver returns an array of rows
 
     return NextResponse.json(newProduct, { status: 201 });
 
   } catch (error) {
     console.error('Failed to create product:', error);
     // Check for unique constraint violation (e.g., duplicate product code)
-    if (error instanceof Error && (error as any).code === 'ER_DUP_ENTRY') {
+    // PostgreSQL error code for unique_violation is '23505'
+    if (error instanceof Error && (error as any).code === '23505') {
         return NextResponse.json({ message: 'Failed to create product: Product code might already exist.', error: (error as Error).message }, { status: 409 });
     }
     return NextResponse.json({ message: 'Failed to create product', error: (error as Error).message }, { status: 500 });
