@@ -1,6 +1,7 @@
 
 "use client";
 
+import React from 'react'; // Added this line
 import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
 import { cn } from '@/lib/utils';
@@ -106,3 +107,4 @@ export function SidebarNav() {
     </SidebarMenu>
   );
 }
+
