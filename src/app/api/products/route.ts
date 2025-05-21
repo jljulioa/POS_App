@@ -23,6 +23,7 @@ const ProductCreateSchema = z.object({
 });
 
 // Helper function to parse product fields from DB strings to numbers
+// PostgreSQL stores unquoted identifiers in lowercase.
 const parseProductFromDB = (dbProduct: any): Product => {
   return {
     id: dbProduct.id,
@@ -33,12 +34,12 @@ const parseProductFromDB = (dbProduct: any): Product => {
     stock: parseInt(dbProduct.stock, 10),
     category: dbProduct.category,
     brand: dbProduct.brand,
-    minStock: parseInt(dbProduct.minstock, 10), // PostgreSQL column names are often lowercase
-    maxStock: dbProduct.maxstock !== null ? parseInt(dbProduct.maxstock, 10) : 0,
+    minStock: parseInt(dbProduct.minstock, 10), // from minStock in DDL
+    maxStock: dbProduct.maxstock !== null ? parseInt(dbProduct.maxstock, 10) : 0, // from maxStock in DDL
     cost: parseFloat(dbProduct.cost),
     price: parseFloat(dbProduct.price),
-    imageUrl: dbProduct.imageurl,
-    dataAiHint: dbProduct.dataaihint,
+    imageUrl: dbProduct.imageurl, // from imageUrl in DDL
+    dataAiHint: dbProduct.dataaihint, // from dataAiHint in DDL
   };
 };
 
@@ -68,13 +69,13 @@ export async function POST(request: NextRequest) {
     const { 
         name, code, reference, barcode, stock, category, brand, 
         minStock, maxStock, cost, price, imageUrl, dataAiHint 
-    } = validation.data;
+    } = validation.data; // These are mixedCase from Zod/frontend
 
     const id = `P${Date.now()}${Math.random().toString(36).substring(2, 7)}`;
     const finalImageUrl = imageUrl || `https://placehold.co/100x100.png?text=${name.substring(0,3)}`;
     const finalDataAiHint = dataAiHint || (name.split(' ').slice(0,2).join(' ') || "product");
 
-    // Use lowercase column names for INSERT statement
+    // Use lowercase column names for INSERT statement, matching PostgreSQL's handling of unquoted DDL identifiers
     const sql = `
       INSERT INTO products (id, name, code, reference, barcode, stock, category, brand, minstock, maxstock, cost, price, imageurl, dataaihint)
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
@@ -82,7 +83,11 @@ export async function POST(request: NextRequest) {
     `;
     const params = [
         id, name, code, reference, barcode ?? null, stock, category, brand, 
-        minStock, maxStock ?? null, cost, price, finalImageUrl, finalDataAiHint
+        minStock, // JS variable minStock (mixedCase) goes to minstock column
+        maxStock ?? null, // JS variable maxStock (mixedCase) goes to maxstock column
+        cost, price, 
+        finalImageUrl, // JS variable finalImageUrl goes to imageurl column
+        finalDataAiHint // JS variable finalDataAiHint goes to dataaihint column
     ];
     
     const result = await query(sql, params);
@@ -93,9 +98,10 @@ export async function POST(request: NextRequest) {
 
   } catch (error) {
     console.error('Failed to create product:', error);
-    if (error instanceof Error && (error as any).code === '23505') { // PostgreSQL unique_violation
+    if (error instanceof Error && (error as any).code === '23505') { // PostgreSQL unique_violation for 'code' typically
         return NextResponse.json({ message: 'Failed to create product: Product code might already exist.', error: (error as Error).message }, { status: 409 });
     }
     return NextResponse.json({ message: 'Failed to create product', error: (error as Error).message }, { status: 500 });
   }
 }
+
