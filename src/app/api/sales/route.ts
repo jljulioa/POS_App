@@ -26,7 +26,7 @@ const parseSaleItemFromDB = (dbItem: any): SaleItem => {
     productName: dbItem.productname,
     quantity: parseInt(dbItem.quantity, 10),
     unitPrice: parseFloat(dbItem.unitprice),
-    costPrice: parseFloat(dbItem.costprice), // Ensure costPrice is parsed
+    costPrice: parseFloat(dbItem.costprice || '0'), // Ensure costPrice is parsed, default to 0 if null/undefined
     totalPrice: parseFloat(dbItem.totalprice),
   };
 };
@@ -81,7 +81,7 @@ export async function GET(request: NextRequest) {
             SELECT sale_id, product_id, productname, quantity, unitprice, costprice, totalprice
             FROM SaleItems
             WHERE sale_id IN (${itemPlaceholders})
-        `; // Added costprice to SELECT
+        `; 
         saleItemsResults = await executeQuery(itemsSql, saleIds);
     }
 
@@ -161,7 +161,7 @@ export async function POST(request: NextRequest) {
         INSERT INTO SaleItems (sale_id, product_id, productName, quantity, unitPrice, costPrice, totalPrice)
         VALUES ($1, $2, $3, $4, $5, $6, $7)
         RETURNING *
-      `; // Added costPrice to INSERT
+      `; 
       const saleItemInsertParams = [saleId, item.productId, item.productName, item.quantity, item.unitPrice, item.costPrice, item.totalPrice];
       const saleItemResult = await client.query(saleItemInsertSql, saleItemInsertParams);
       createdSaleItems.push(parseSaleItemFromDB(saleItemResult.rows[0]));
