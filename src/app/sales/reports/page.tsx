@@ -15,7 +15,7 @@ import { Card, CardContent, CardFooter, CardHeader, CardTitle, CardDescription }
 import Link from 'next/link';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
-import html2pdf from 'html2pdf.js';
+// Removed static import: import html2pdf from 'html2pdf.js';
 
 // API fetch function for today's sales
 const fetchTodaysSales = async (): Promise<Sale[]> => {
@@ -46,9 +46,11 @@ export default function TodaysSalesReportPage() {
     return sales.reduce((sum, sale) => sum + sale.totalAmount, 0);
   }, [sales]);
 
-  const handlePrint = () => {
+  const handlePrint = async () => {
     const element = document.getElementById('report-content');
     if (element) {
+      // Dynamically import html2pdf.js
+      const html2pdf = (await import('html2pdf.js')).default;
       const opt = {
         margin:       0.5,
         filename:     `Todays_Sales_Report_${format(new Date(), 'yyyy-MM-dd')}.pdf`,
