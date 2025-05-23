@@ -116,3 +116,35 @@ body {
     @apply bg-background text-foreground;
   }
 }
+
+@media print {
+  body {
+    background-color: white !important; /* Ensure white background for printing */
+    color: black !important; /* Ensure black text for printing */
+    -webkit-print-color-adjust: exact; /* For Chrome/Safari */
+    print-color-adjust: exact; /* Standard */
+  }
+  /* Hide sidebar and header when printing */
+  .group\/sidebar-wrapper > .group.peer, /* Hides the desktop sidebar placeholder */
+  .group\/sidebar-wrapper > div[data-sidebar="sidebar"], /* Hides the actual sidebar content */
+  header.sticky.top-0 {
+    display: none !important;
+  }
+  main.flex-1.overflow-y-auto {
+    padding: 0 !important; /* Remove padding from main content area if needed */
+    overflow: visible !important; /* Ensure all content is visible */
+  }
+  /* Ensure cards are not broken across pages if possible */
+  .break-inside-avoid-page {
+    break-inside: avoid-page;
+  }
+  /* Remove shadows from cards for cleaner print */
+  .shadow-lg, .shadow-xl, .shadow-md, .shadow-sm {
+    box-shadow: none !important;
+  }
+  /* Ensure borders are visible */
+  .border {
+    border-width: 1px !important; 
+    border-color: #ccc !important; /* Light grey border */
+  }
+}

@@ -15,6 +15,7 @@ import { Card, CardContent, CardFooter, CardHeader, CardTitle, CardDescription }
 import Link from 'next/link';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
+import html2pdf from 'html2pdf.js';
 
 // API fetch function for today's sales
 const fetchTodaysSales = async (): Promise<Sale[]> => {
@@ -46,8 +47,23 @@ export default function TodaysSalesReportPage() {
   }, [sales]);
 
   const handlePrint = () => {
-    // Basic browser print
-    window.print();
+    const element = document.getElementById('report-content');
+    if (element) {
+      const opt = {
+        margin:       0.5,
+        filename:     `Todays_Sales_Report_${format(new Date(), 'yyyy-MM-dd')}.pdf`,
+        image:        { type: 'jpeg', quality: 0.98 },
+        html2canvas:  { scale: 2, useCORS: true },
+        jsPDF:        { unit: 'in', format: 'letter', orientation: 'portrait' }
+      };
+      html2pdf().from(element).set(opt).save();
+    } else {
+      toast({
+        variant: "destructive",
+        title: "Error Generating PDF",
+        description: "Report content not found.",
+      });
+    }
   };
 
   if (isLoading) {
@@ -91,7 +107,7 @@ export default function TodaysSalesReportPage() {
     <AppLayout>
       <PageHeader title="Today's Sales Report" description={`Sales for ${format(new Date(), 'PPP')}`}>
         <Button onClick={handlePrint} variant="outline">
-          <Printer className="mr-2 h-4 w-4" /> Print Report
+          <Printer className="mr-2 h-4 w-4" /> Generate PDF
         </Button>
         <Button variant="outline" asChild>
           <Link href="/sales">
@@ -100,81 +116,83 @@ export default function TodaysSalesReportPage() {
         </Button>
       </PageHeader>
 
-      {sales.length === 0 && (
-        <Card>
-          <CardContent className="p-6 text-center text-muted-foreground">
-            No sales recorded for today yet.
-          </CardContent>
-        </Card>
-      )}
+      <div id="report-content">
+        {sales.length === 0 && (
+          <Card>
+            <CardContent className="p-6 text-center text-muted-foreground">
+              No sales recorded for today yet.
+            </CardContent>
+          </Card>
+        )}
 
-      {sales.map((sale) => (
-        <Card key={sale.id} className="mb-6 shadow-lg">
-          <CardHeader>
-            <div className="flex flex-col sm:flex-row justify-between sm:items-center">
-              <div>
-                <CardTitle className="flex items-center">
-                  <ShoppingCart className="mr-3 h-6 w-6 text-primary" />
-                  Sale ID: {sale.id}
-                </CardTitle>
-                <CardDescription>
-                  Date: {format(new Date(sale.date), 'Pp')} | Customer: {sale.customerName || 'N/A'} | Cashier: {sale.cashierId}
-                </CardDescription>
+        {sales.map((sale) => (
+          <Card key={sale.id} className="mb-6 shadow-lg break-inside-avoid-page">
+            <CardHeader>
+              <div className="flex flex-col sm:flex-row justify-between sm:items-center">
+                <div>
+                  <CardTitle className="flex items-center">
+                    <ShoppingCart className="mr-3 h-6 w-6 text-primary" />
+                    Sale ID: {sale.id}
+                  </CardTitle>
+                  <CardDescription>
+                    Date: {format(new Date(sale.date), 'Pp')} | Customer: {sale.customerName || 'N/A'} | Cashier: {sale.cashierId}
+                  </CardDescription>
+                </div>
+                <div className="mt-2 sm:mt-0 text-left sm:text-right">
+                   <Badge variant={
+                      sale.paymentMethod === 'Card' ? 'default' :
+                      sale.paymentMethod === 'Cash' ? 'secondary' : 'outline'
+                    } className="text-sm mb-1">
+                      {sale.paymentMethod}
+                    </Badge>
+                  <p className="text-2xl font-bold text-primary">${Number(sale.totalAmount).toFixed(2)}</p>
+                </div>
               </div>
-              <div className="mt-2 sm:mt-0 text-left sm:text-right">
-                 <Badge variant={
-                    sale.paymentMethod === 'Card' ? 'default' :
-                    sale.paymentMethod === 'Cash' ? 'secondary' : 'outline'
-                  } className="text-sm mb-1">
-                    {sale.paymentMethod}
-                  </Badge>
-                <p className="text-2xl font-bold text-primary">${Number(sale.totalAmount).toFixed(2)}</p>
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <h4 className="text-md font-semibold mb-2 text-foreground">Items Sold:</h4>
-            {sale.items && sale.items.length > 0 ? (
-              <ScrollArea className="rounded-md border max-h-60">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Product Name</TableHead>
-                      <TableHead className="text-center">Qty</TableHead>
-                      <TableHead className="text-right">Unit Price</TableHead>
-                      <TableHead className="text-right">Total Price</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {sale.items.map((item: SaleItem, index: number) => (
-                      <TableRow key={item.productId + index}>
-                        <TableCell>{item.productName}</TableCell>
-                        <TableCell className="text-center">{item.quantity}</TableCell>
-                        <TableCell className="text-right">${Number(item.unitPrice).toFixed(2)}</TableCell>
-                        <TableCell className="text-right font-medium">${Number(item.totalPrice).toFixed(2)}</TableCell>
+            </CardHeader>
+            <CardContent>
+              <h4 className="text-md font-semibold mb-2 text-foreground">Items Sold:</h4>
+              {sale.items && sale.items.length > 0 ? (
+                <ScrollArea className="rounded-md border max-h-60">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Product Name</TableHead>
+                        <TableHead className="text-center">Qty</TableHead>
+                        <TableHead className="text-right">Unit Price</TableHead>
+                        <TableHead className="text-right">Total Price</TableHead>
                       </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </ScrollArea>
-            ) : (
-              <p className="text-muted-foreground text-sm">No items found for this sale.</p>
-            )}
-          </CardContent>
-        </Card>
-      ))}
-      
-      {sales.length > 0 && (
-        <Card className="mt-8 shadow-xl">
-          <CardHeader>
-            <CardTitle className="text-xl">Grand Total for Today</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-4xl font-bold text-green-600">${grandTotal.toFixed(2)}</p>
-            <p className="text-muted-foreground">Across {sales.length} transaction(s).</p>
-          </CardContent>
-        </Card>
-      )}
+                    </TableHeader>
+                    <TableBody>
+                      {sale.items.map((item: SaleItem, index: number) => (
+                        <TableRow key={item.productId + index}>
+                          <TableCell>{item.productName}</TableCell>
+                          <TableCell className="text-center">{item.quantity}</TableCell>
+                          <TableCell className="text-right">${Number(item.unitPrice).toFixed(2)}</TableCell>
+                          <TableCell className="text-right font-medium">${Number(item.totalPrice).toFixed(2)}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </ScrollArea>
+              ) : (
+                <p className="text-muted-foreground text-sm">No items found for this sale.</p>
+              )}
+            </CardContent>
+          </Card>
+        ))}
+        
+        {sales.length > 0 && (
+          <Card className="mt-8 shadow-xl break-inside-avoid-page">
+            <CardHeader>
+              <CardTitle className="text-xl">Grand Total for Today</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-4xl font-bold text-green-600">${grandTotal.toFixed(2)}</p>
+              <p className="text-muted-foreground">Across {sales.length} transaction(s).</p>
+            </CardContent>
+          </Card>
+        )}
+      </div>
     </AppLayout>
   );
 }
