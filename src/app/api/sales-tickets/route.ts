@@ -6,11 +6,13 @@ import { z } from 'zod';
 import type { SaleItem } from '@/lib/mockData'; // Assuming SaleItem is defined here
 
 // Zod schema for SaleItem (consistent with POS page)
+// Ensure costPrice is included here
 const SaleItemSchema = z.object({
   productId: z.string(),
   productName: z.string(),
   quantity: z.number().int().min(1),
   unitPrice: z.number().min(0),
+  costPrice: z.number().min(0), // Added costPrice
   totalPrice: z.number().min(0),
 });
 
@@ -87,3 +89,4 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ message: 'Failed to create sales ticket', error: (error as Error).message }, { status: 500 });
   }
 }
+

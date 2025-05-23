@@ -7,11 +7,13 @@ import type { SaleItem } from '@/lib/mockData';
 import type { SalesTicketDB } from '@/app/api/sales-tickets/route'; // Import the type
 
 // Zod schema for SaleItem (consistent with POS page)
+// Ensure costPrice is included here
 const SaleItemSchema = z.object({
   productId: z.string(),
   productName: z.string(),
   quantity: z.number().int().min(1),
   unitPrice: z.number().min(0),
+  costPrice: z.number().min(0), // Added costPrice
   totalPrice: z.number().min(0),
 });
 
@@ -73,18 +75,19 @@ export async function PUT(request: NextRequest, { params }: { params: { ticketId
     const currentTicket = parseSalesTicketFromDB(currentTicketResult[0]);
 
     const updatedName = name ?? currentTicket.name;
-    const updatedCartItems = cart_items ?? currentTicket.cart_items;
+    // Ensure cart_items being saved are valid according to the schema (includes costPrice)
+    const updatedCartItems = cart_items ?? currentTicket.cart_items; 
     const updatedStatus = status ?? currentTicket.status;
-
-    // The 'last_updated_at' column should be updated automatically by the database trigger
-    // if you set one up (e.g., ON UPDATE CURRENT_TIMESTAMP for MariaDB or a trigger for PostgreSQL).
-    // If not, you'd set it manually: last_updated_at = CURRENT_TIMESTAMP
+    
+    // PostgreSQL automatically updates last_updated_at via trigger if set up
+    // Otherwise, set it manually: last_updated_at = CURRENT_TIMESTAMP
     const sql = `
       UPDATE SalesTickets
       SET name = $1, cart_items = $2, status = $3, last_updated_at = CURRENT_TIMESTAMP
       WHERE id = $4
       RETURNING *
     `;
+    // Make sure updatedCartItems are stringified for JSONB
     const queryParams = [updatedName, JSON.stringify(updatedCartItems), updatedStatus, ticketId];
 
     const result = await query(sql, queryParams);
@@ -117,3 +120,4 @@ export async function DELETE(request: NextRequest, { params }: { params: { ticke
     return NextResponse.json({ message: 'Failed to delete sales ticket', error: (error as Error).message }, { status: 500 });
   }
 }
+
