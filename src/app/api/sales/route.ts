@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getPool, query as executeQuery } from '@/lib/db'; // Renamed query to executeQuery to avoid conflict
 import { z } from 'zod';
 import type { Sale, SaleItem } from '@/lib/mockData'; // Using existing types
+import { format } from 'date-fns';
 
 // Helper to parse Sale and SaleItem from DB
 const parseSaleFromDB = (dbSale: any, items: SaleItem[]): Sale => {
@@ -29,19 +30,43 @@ const parseSaleItemFromDB = (dbItem: any): SaleItem => {
   };
 };
 
-// GET handler to fetch all sales with their items
+// GET handler to fetch sales with their items
 export async function GET(request: NextRequest) {
-  try {
-    const salesResults = await executeQuery(`
-      SELECT id, date, totalamount, customerid, customername, paymentmethod, cashierid
-      FROM Sales
-      ORDER BY date DESC
-    `);
+  const { searchParams } = new URL(request.url);
+  const period = searchParams.get('period');
+  let dateFilter = '';
+  const queryParams = [];
 
-    const saleItemsResults = await executeQuery(`
-      SELECT sale_id, product_id, productname, quantity, unitprice, totalprice
-      FROM SaleItems
-    `);
+  if (period === 'today') {
+    const today = format(new Date(), 'yyyy-MM-dd');
+    dateFilter = 'WHERE DATE(s.date) = $1';
+    queryParams.push(today);
+  }
+  // Add more periods like 'yesterday', 'last7days' etc. if needed
+
+  try {
+    const salesSql = `
+      SELECT s.id, s.date, s.totalamount, s.customerid, s.customername, s.paymentmethod, s.cashierid
+      FROM Sales s
+      ${dateFilter}
+      ORDER BY s.date DESC
+    `;
+    const salesResults = await executeQuery(salesSql, queryParams);
+
+    const saleIds = salesResults.map(s => s.id);
+    let saleItemsResults: any[] = [];
+
+    if (saleIds.length > 0) {
+        // Constructing IN clause safely. Ensure saleIds only contains valid IDs.
+        const placeholders = saleIds.map((_, index) => `$${index + 1}`).join(',');
+        const itemsSql = `
+            SELECT sale_id, product_id, productname, quantity, unitprice, totalprice
+            FROM SaleItems
+            WHERE sale_id IN (${placeholders})
+        `;
+        saleItemsResults = await executeQuery(itemsSql, saleIds);
+    }
+
 
     const itemsBySaleId = new Map<string, SaleItem[]>();
     saleItemsResults.forEach(dbItem => {
@@ -98,7 +123,7 @@ export async function POST(request: NextRequest) {
 
     const { items, totalAmount, customerId, customerName, paymentMethod, cashierId } = validation.data;
     const saleId = `S${Date.now()}${Math.random().toString(36).substring(2, 7)}`;
-    const saleDate = new Date();
+    const saleDate = new Date(); // Current timestamp for the sale
 
     await client.query('BEGIN'); // Start transaction
 
@@ -121,6 +146,7 @@ export async function POST(request: NextRequest) {
         VALUES ($1, $2, $3, $4, $5, $6)
         RETURNING *
       `;
+      // Note: productName is taken from the cart item, which should be the name at the time of sale.
       const saleItemInsertParams = [saleId, item.productId, item.productName, item.quantity, item.unitPrice, item.totalPrice];
       const saleItemResult = await client.query(saleItemInsertSql, saleItemInsertParams);
       createdSaleItems.push(parseSaleItemFromDB(saleItemResult.rows[0]));
