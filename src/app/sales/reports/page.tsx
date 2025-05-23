@@ -6,15 +6,26 @@ import { PageHeader } from '@/components/PageHeader';
 import type { Sale, SaleItem } from '@/lib/mockData';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, Printer, Loader2, AlertTriangle, ShoppingCart, TrendingUp, TrendingDown, DollarSign, PieChart } from 'lucide-react';
-import React, { useMemo, useRef } from 'react';
+import { Input } from '@/components/ui/input';
+import { ArrowLeft, Printer, Loader2, AlertTriangle, ShoppingCart, TrendingUp, TrendingDown, DollarSign, PieChart, CornerDownLeft } from 'lucide-react';
+import React, { useMemo, useRef, useState } from 'react';
 import { format } from 'date-fns';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useToast } from '@/hooks/use-toast';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import Link from 'next/link';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+  DialogClose,
+} from "@/components/ui/dialog";
+import { z } from 'zod';
 
 // API fetch function for today's sales
 const fetchTodaysSales = async (): Promise<Sale[]> => {
@@ -26,9 +37,51 @@ const fetchTodaysSales = async (): Promise<Sale[]> => {
   return res.json();
 };
 
+// Define ReturnItemFormValues type (can be moved to a shared types file if used elsewhere)
+type ReturnItemFormValues = {
+  [productId: string]: {
+    quantity: number;
+    unitPrice: number;
+    maxQuantity: number;
+  };
+};
+
+// Zod schemas for return processing (consistent with /api/returns and /sales page)
+const ReturnItemSchema = z.object({
+  productId: z.string(),
+  quantity: z.number().int().min(1, "Return quantity must be at least 1."), // Ensure quantity is positive
+  unitPrice: z.number(),
+});
+
+const ProcessReturnSchema = z.object({
+  saleId: z.string(),
+  itemsToReturn: z.array(ReturnItemSchema).min(1, "At least one item must be selected for return."),
+});
+
+// API mutation function for processing returns
+const processReturnAPI = async (returnData: z.infer<typeof ProcessReturnSchema>): Promise<{ message: string; totalRefundAmount: number }> => {
+  const response = await fetch('/api/returns', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(returnData),
+  });
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({ message: 'Failed to process return' }));
+    throw new Error(errorData.message || 'Failed to process return');
+  }
+  return response.json();
+};
+
+
 export default function TodaysSalesReportPage() {
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const reportContentRef = useRef<HTMLDivElement>(null);
+
+  const [selectedSaleForReturn, setSelectedSaleForReturn] = useState<Sale | null>(null);
+  const [isReturnModalOpen, setIsReturnModalOpen] = useState(false);
+  const [returnItems, setReturnItems] = useState<ReturnItemFormValues>({});
+
 
   const { data: sales = [], isLoading, error, isError } = useQuery<Sale[], Error>({
     queryKey: ['todaysSales'],
@@ -87,6 +140,96 @@ export default function TodaysSalesReportPage() {
         description: "Report content not found.",
       });
     }
+  };
+
+  const handleOpenReturnModal = (sale: Sale) => {
+    setSelectedSaleForReturn(sale);
+    const initialReturnItems: ReturnItemFormValues = {};
+    sale.items.forEach(item => {
+      initialReturnItems[item.productId] = { quantity: 0, unitPrice: item.unitPrice, maxQuantity: item.quantity };
+    });
+    setReturnItems(initialReturnItems);
+    setIsReturnModalOpen(true);
+  };
+
+  const handleReturnQuantityChange = (productId: string, quantity: string) => {
+    const numQuantity = parseInt(quantity, 10);
+    const itemConf = returnItems[productId];
+    if (!itemConf) return;
+
+    if (!isNaN(numQuantity) && numQuantity >= 0 && numQuantity <= itemConf.maxQuantity) {
+      setReturnItems(prev => ({
+        ...prev,
+        [productId]: { ...prev[productId], quantity: numQuantity },
+      }));
+    } else if (quantity === "" || numQuantity < 0 ) {
+       setReturnItems(prev => ({
+        ...prev,
+        [productId]: { ...prev[productId], quantity: 0 },
+      }));
+    } else if (numQuantity > itemConf.maxQuantity) {
+       setReturnItems(prev => ({
+        ...prev,
+        [productId]: { ...prev[productId], quantity: itemConf.maxQuantity },
+      }));
+    }
+  };
+  
+  const totalReturnAmount = useMemo(() => {
+    return Object.values(returnItems).reduce((sum, item) => sum + (item.quantity * item.unitPrice), 0);
+  }, [returnItems]);
+
+  const processReturnMutation = useMutation<
+    { message: string; totalRefundAmount: number }, 
+    Error, 
+    z.infer<typeof ProcessReturnSchema>
+  >({
+    mutationFn: processReturnAPI,
+    onSuccess: (data) => {
+      toast({
+        title: "Return Processed Successfully",
+        description: `${data.message}. Total Refund: $${data.totalRefundAmount.toFixed(2)}`,
+      });
+      queryClient.invalidateQueries({ queryKey: ['products'] });
+      queryClient.invalidateQueries({ queryKey: ['todaysSales'] }); 
+      setIsReturnModalOpen(false);
+      setSelectedSaleForReturn(null);
+    },
+    onError: (error) => {
+      toast({
+        variant: "destructive",
+        title: "Failed to Process Return",
+        description: error.message,
+      });
+    },
+  });
+
+  const handleSubmitReturn = () => {
+    if (!selectedSaleForReturn) return;
+
+    const itemsToSubmit = Object.entries(returnItems)
+      .filter(([, itemDetails]) => itemDetails.quantity > 0)
+      .map(([productId, itemDetails]) => ({
+        productId,
+        quantity: itemDetails.quantity,
+        unitPrice: itemDetails.unitPrice,
+      }));
+
+    if (itemsToSubmit.length === 0) {
+      toast({ variant: "destructive", title: "No Items to Return", description: "Please specify a quantity greater than 0 for at least one item." });
+      return;
+    }
+
+    const validation = ProcessReturnSchema.safeParse({
+      saleId: selectedSaleForReturn.id,
+      itemsToReturn: itemsToSubmit,
+    });
+
+    if (!validation.success) {
+      toast({ variant: "destructive", title: "Invalid Return Data", description: validation.error.flatten().fieldErrors.itemsToReturn?.join(', ') || "Please check return quantities." });
+      return;
+    }
+    processReturnMutation.mutate(validation.data);
   };
 
   if (isLoading) {
@@ -151,7 +294,7 @@ export default function TodaysSalesReportPage() {
         {sales.map((sale) => (
           <Card key={sale.id} className="mb-6 shadow-lg break-inside-avoid-page">
             <CardHeader>
-              <div className="flex flex-col sm:flex-row justify-between sm:items-center">
+              <div className="flex flex-col sm:flex-row justify-between sm:items-start">
                 <div>
                   <CardTitle className="flex items-center">
                     <ShoppingCart className="mr-3 h-6 w-6 text-primary" />
@@ -161,7 +304,7 @@ export default function TodaysSalesReportPage() {
                     Date: {format(new Date(sale.date), 'Pp')} | Customer: {sale.customerName || 'N/A'} | Cashier: {sale.cashierId}
                   </CardDescription>
                 </div>
-                <div className="mt-2 sm:mt-0 text-left sm:text-right">
+                <div className="mt-2 sm:mt-0 flex flex-col items-start sm:items-end">
                    <Badge variant={
                       sale.paymentMethod === 'Card' ? 'default' :
                       sale.paymentMethod === 'Cash' ? 'secondary' : 'outline'
@@ -169,6 +312,14 @@ export default function TodaysSalesReportPage() {
                       {sale.paymentMethod}
                     </Badge>
                   <p className="text-2xl font-bold text-primary">${Number(sale.totalAmount).toFixed(2)}</p>
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    className="mt-2"
+                    onClick={() => handleOpenReturnModal(sale)}
+                  >
+                    <CornerDownLeft className="mr-2 h-4 w-4" /> Return Items
+                  </Button>
                 </div>
               </div>
             </CardHeader>
@@ -274,6 +425,61 @@ export default function TodaysSalesReportPage() {
           </>
         )}
       </div>
+
+       {/* Return Items Modal */}
+      {selectedSaleForReturn && isReturnModalOpen && (
+        <Dialog open={isReturnModalOpen} onOpenChange={(open) => {
+            if (!open) {
+                setIsReturnModalOpen(false);
+                setSelectedSaleForReturn(null);
+            }
+        }}>
+          <DialogContent className="sm:max-w-lg">
+            <DialogHeader>
+              <DialogTitle className="flex items-center">
+                <CornerDownLeft className="mr-2 h-6 w-6 text-primary" />
+                Return Items from Sale: {selectedSaleForReturn.id}
+              </DialogTitle>
+              <DialogDescription>
+                Specify quantities to return. Max quantity is what was originally purchased.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="py-4 space-y-3">
+              {selectedSaleForReturn.items.map(item => (
+                <div key={item.productId} className="grid grid-cols-3 items-center gap-3 p-2 border rounded-md">
+                  <div className="col-span-2">
+                    <p className="font-medium text-sm">{item.productName}</p>
+                    <p className="text-xs text-muted-foreground">Purchased: {item.quantity} @ ${item.unitPrice.toFixed(2)}</p>
+                  </div>
+                  <Input
+                    type="number"
+                    min="0"
+                    max={item.quantity}
+                    value={returnItems[item.productId]?.quantity ?? 0}
+                    onChange={(e) => handleReturnQuantityChange(item.productId, e.target.value)}
+                    className="h-9 text-center"
+                    placeholder="Qty"
+                  />
+                </div>
+              ))}
+              <div className="text-right font-semibold text-lg pt-3">
+                Total Refund Amount: ${totalReturnAmount.toFixed(2)}
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => {setIsReturnModalOpen(false); setSelectedSaleForReturn(null);}}>Cancel</Button>
+              <Button 
+                onClick={handleSubmitReturn} 
+                disabled={processReturnMutation.isPending || totalReturnAmount === 0}
+              >
+                {processReturnMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                Confirm Return
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
     </AppLayout>
   );
 }
+
