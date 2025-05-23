@@ -4,7 +4,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getPool, query as executeQuery } from '@/lib/db'; // Renamed query to executeQuery to avoid conflict
 import { z } from 'zod';
 import type { Sale, SaleItem } from '@/lib/mockData'; // Using existing types
-import { format } from 'date-fns';
+import { format, isValid, parseISO } from 'date-fns';
 
 // Helper to parse Sale and SaleItem from DB
 const parseSaleFromDB = (dbSale: any, items: SaleItem[]): Sale => {
@@ -34,21 +34,42 @@ const parseSaleItemFromDB = (dbItem: any): SaleItem => {
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const period = searchParams.get('period');
-  let dateFilter = '';
-  const queryParams = [];
+  const startDateParam = searchParams.get('startDate');
+  const endDateParam = searchParams.get('endDate');
+
+  let dateFilterClauses: string[] = [];
+  const queryParams: any[] = [];
+  let paramIndex = 1;
 
   if (period === 'today') {
     const today = format(new Date(), 'yyyy-MM-dd');
-    dateFilter = 'WHERE DATE(s.date) = $1';
+    dateFilterClauses.push(`DATE(s.date) = $${paramIndex++}`);
     queryParams.push(today);
+  } else if (startDateParam && endDateParam) {
+    const startDate = parseISO(startDateParam);
+    const endDate = parseISO(endDateParam);
+
+    if (isValid(startDate) && isValid(endDate)) {
+      // Ensure endDate covers the entire day
+      const formattedEndDate = format(endDate, 'yyyy-MM-dd') + 'T23:59:59.999Z';
+      dateFilterClauses.push(`s.date >= $${paramIndex++}`);
+      queryParams.push(format(startDate, 'yyyy-MM-dd') + 'T00:00:00.000Z');
+      dateFilterClauses.push(`s.date <= $${paramIndex++}`);
+      queryParams.push(formattedEndDate);
+    } else {
+        // Handle invalid date parameters, perhaps return an error or ignore
+        console.warn("Invalid date parameters received:", { startDateParam, endDateParam });
+    }
   }
   // Add more periods like 'yesterday', 'last7days' etc. if needed
+
+  const whereClause = dateFilterClauses.length > 0 ? `WHERE ${dateFilterClauses.join(' AND ')}` : '';
 
   try {
     const salesSql = `
       SELECT s.id, s.date, s.totalamount, s.customerid, s.customername, s.paymentmethod, s.cashierid
       FROM Sales s
-      ${dateFilter}
+      ${whereClause}
       ORDER BY s.date DESC
     `;
     const salesResults = await executeQuery(salesSql, queryParams);
@@ -58,11 +79,11 @@ export async function GET(request: NextRequest) {
 
     if (saleIds.length > 0) {
         // Constructing IN clause safely. Ensure saleIds only contains valid IDs.
-        const placeholders = saleIds.map((_, index) => `$${index + 1}`).join(',');
+        const itemPlaceholders = saleIds.map((_, index) => `$${index + 1}`).join(',');
         const itemsSql = `
             SELECT sale_id, product_id, productname, quantity, unitprice, totalprice
             FROM SaleItems
-            WHERE sale_id IN (${placeholders})
+            WHERE sale_id IN (${itemPlaceholders})
         `;
         saleItemsResults = await executeQuery(itemsSql, saleIds);
     }
