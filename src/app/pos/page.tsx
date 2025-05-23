@@ -105,15 +105,11 @@ const deleteSalesTicketAPI = async (ticketId: string): Promise<{ message: string
 };
 
 interface PrintableTicketProps {
-  sale: Sale | null; // Allow null for initial render
+  sale: Sale | null; 
 }
 
 const PrintableTicket: React.FC<PrintableTicketProps> = ({ sale }) => {
-  // useEffect(() => {
-  //   console.log("PrintableTicket rendered or sale prop changed:", sale);
-  // }, [sale]);
-
-  if (!sale) return null; // Don't render anything if sale is null
+  if (!sale) return null;
 
   return (
     <div className="p-2 font-mono text-xs" style={{ width: '300px', color: 'black', backgroundColor: 'white', border: '1px solid #ccc' }}>
@@ -180,7 +176,6 @@ export default function POSPage() {
   const { data: salesTickets = [], isLoading: isLoadingSalesTickets, refetch: refetchSalesTickets } = useQuery<SalesTicketDB[], Error>({
     queryKey: ['salesTickets'],
     queryFn: fetchSalesTickets,
-    // refetchOnWindowFocus: false, // Keep this if you prefer manual refetch or on specific actions
   });
 
   const createTicketMutation = useMutation<SalesTicketDB, Error, Pick<SalesTicketDB, 'name' | 'cart_items' | 'status'>>({
@@ -203,8 +198,6 @@ export default function POSPage() {
       queryClient.setQueryData(['salesTickets'], (oldData: SalesTicketDB[] | undefined) =>
         oldData ? oldData.map(t => t.id === updatedTicket.id ? updatedTicket : t) : []
       );
-       // Optionally refetch to ensure consistency if other clients might be updating
-      // queryClient.invalidateQueries({ queryKey: ['salesTickets'] });
     },
     onError: (error) => {
       toast({ variant: 'destructive', title: 'Error al Actualizar Ticket', description: error.message });
@@ -218,10 +211,6 @@ export default function POSPage() {
       queryClient.setQueryData(['salesTickets'], (oldData: SalesTicketDB[] | undefined) =>
         oldData ? oldData.filter(t => t.id !== deletedTicketId) : []
       );
-      
-      // This logic needs to be run after the state update from setQueryData is effective.
-      // Using a timeout or useEffect watching salesTickets might be more reliable.
-      // For now, let's optimistically update activeTicketId based on current queryClient data.
       const currentTickets = queryClient.getQueryData<SalesTicketDB[]>(['salesTickets']) || [];
       
       if (activeTicketId === deletedTicketId) {
@@ -229,24 +218,23 @@ export default function POSPage() {
           const sortedTickets = [...currentTickets].sort((a,b) => new Date(b.last_updated_at).getTime() - new Date(a.last_updated_at).getTime());
           setActiveTicketId(sortedTickets[0].id);
         } else {
-          handleCreateNewTicket(true); 
+            handleCreateNewTicket(true); // Force create if it was the last one
         }
       } else if (currentTickets.length === 0) {
-         handleCreateNewTicket(true);
+         handleCreateNewTicket(true); // Force create if all tickets were deleted (e.g. by another user)
       }
-      // Toast for 'Ticket Cerrado' moved to handleClosePrintDialog or after sale processing
     },
     onError: (error) => {
       toast({ variant: 'destructive', title: 'Error al Cerrar Ticket', description: error.message });
     },
   });
-
+  
   const activeTicket = useMemo(() => salesTickets?.find(t => t.id === activeTicketId), [salesTickets, activeTicketId]);
 
   useEffect(() => {
     if (!isLoadingSalesTickets && salesTickets) {
       if (salesTickets.length === 0) {
-        if (!createTicketMutation.isPending && !activeTicketId) { // Ensure we don't loop if creation is slow
+        if (!createTicketMutation.isPending && !activeTicketId) {
             handleCreateNewTicket(true);
         }
       } else if (!activeTicketId || !salesTickets.find(t => t.id === activeTicketId)) {
@@ -294,7 +282,14 @@ export default function POSPage() {
         newCartItems = activeTicket.cart_items;
       }
     } else {
-      newCartItems = [...activeTicket.cart_items, { productId: productInCatalog.id, productName: productInCatalog.name, quantity: 1, unitPrice: productInCatalog.price, totalPrice: productInCatalog.price }];
+      newCartItems = [...activeTicket.cart_items, { 
+        productId: productInCatalog.id, 
+        productName: productInCatalog.name, 
+        quantity: 1, 
+        unitPrice: productInCatalog.price, 
+        costPrice: productInCatalog.cost, // Add costPrice here
+        totalPrice: productInCatalog.price 
+      }];
     }
     updateTicketMutation.mutate({ ticketId: activeTicket.id, data: { cart_items: newCartItems } });
   }, [activeTicket, products, toast, updateTicketMutation]);
@@ -335,8 +330,8 @@ export default function POSPage() {
 
   const handleCreateNewTicket = (forceCreate: boolean = false) => {
     if (createTicketMutation.isPending && !forceCreate) return;
-    const currentTicketsCount = salesTickets?.length || 0;
-    const nextTicketNumber = currentTicketsCount + 1;
+    const currentTickets = queryClient.getQueryData<SalesTicketDB[]>(['salesTickets']) || [];
+    const nextTicketNumber = currentTickets.length + 1;
     const newTicketName = `Ticket ${nextTicketNumber}`;
     
     createTicketMutation.mutate({
@@ -372,9 +367,8 @@ export default function POSPage() {
   const saleApiMutation = useMutation<Sale, Error, Omit<Sale, 'id' | 'date' | 'items'> & { items: SaleItem[] }>({
     mutationFn: createSaleAPI,
     onSuccess: (data) => {
-      setSaleToPrint(data); // Set the sale data for printing
-      setIsPrintConfirmOpen(true); // Open confirmation dialog
-      // Toast and ticket closing moved to handleClosePrintDialog
+      setSaleToPrint(data);
+      setIsPrintConfirmOpen(true);
     },
     onError: (error) => {
       toast({
@@ -397,12 +391,12 @@ export default function POSPage() {
           productName: item.productName,
           quantity: item.quantity,
           unitPrice: item.unitPrice,
+          costPrice: item.costPrice, // Ensure costPrice is included
           totalPrice: item.totalPrice,
       })),
       totalAmount: cartTotal,
       paymentMethod: paymentMethod,
-      cashierId: userRole || 'system', // Ensure userRole is appropriate or default
-      // customerId and customerName can be added here if a customer is associated with the ticket
+      cashierId: userRole || 'system',
     };
     saleApiMutation.mutate(saleData);
   };
@@ -410,11 +404,10 @@ export default function POSPage() {
   const handlePrintTicket = async () => {
     if (!printableTicketRef.current || !saleToPrint) {
         toast({ variant: "destructive", title: "Error de Impresión", description: "No hay datos de venta para imprimir o el elemento de impresión no está listo."});
-        handleClosePrintDialog(); // Close dialog even if printing fails
+        handleClosePrintDialog();
         return;
     }
 
-    // Give React a moment to render the PrintableTicket with saleToPrint data
     setTimeout(async () => {
         try {
             const html2pdf = (await import('html2pdf.js')).default;
@@ -426,8 +419,8 @@ export default function POSPage() {
                 margin: 0.1,
                 filename: `recibo_${saleToPrint.id}.pdf`,
                 image: { type: 'jpeg', quality: 0.98 },
-                html2canvas: { scale: 3, logging: false, useCORS: true, width: 300 }, // Approximate width for 80mm receipt paper
-                jsPDF: { unit: 'in', format: [3.15, 8], orientation: 'portrait' } // 80mm width, arbitrary long height
+                html2canvas: { scale: 3, logging: false, useCORS: true, width: 300 },
+                jsPDF: { unit: 'in', format: [3.15, 8], orientation: 'portrait' } 
             };
             html2pdf().from(element).set(options).save();
         } catch (error) {
@@ -436,7 +429,7 @@ export default function POSPage() {
         } finally {
             handleClosePrintDialog();
         }
-    }, 100); // 100ms delay, adjust if needed
+    }, 100); 
   };
 
   const handleClosePrintDialog = () => {
@@ -448,6 +441,7 @@ export default function POSPage() {
     }
     queryClient.invalidateQueries({ queryKey: ['products'] });
     queryClient.invalidateQueries({ queryKey: ['sales'] });    
+    queryClient.invalidateQueries({ queryKey: ['todaysSales'] }); // For today's sales report
     
     if (activeTicket && saleToPrint) { 
       deleteTicketMutation.mutate(activeTicket.id); 
@@ -561,7 +555,7 @@ export default function POSPage() {
       </Card>
 
       {activeTicket ? (
-        <div className="flex flex-col md:flex-row gap-6 h-[calc(100vh-4rem-3rem-10rem)]"> {/* Adjusted height calculation */}
+        <div className="flex flex-col md:flex-row gap-6 h-[calc(100vh-4rem-3rem-10rem)]">
           <Card className="w-full md:w-2/5 flex flex-col shadow-lg">
             <CardHeader>
               <CardTitle>Búsqueda de Producto</CardTitle>
@@ -718,7 +712,6 @@ export default function POSPage() {
         </div>
       )}
 
-      {/* Print Confirmation Dialog */}
       <AlertDialog open={isPrintConfirmOpen} onOpenChange={(open) => {if (!open) handleClosePrintDialog()}}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -736,15 +729,10 @@ export default function POSPage() {
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Hidden div for printable ticket content */}
-      <div ref={printableTicketRef} style={{ position: 'absolute', left: '-9999px', top: '-9999px', zIndex: -1 }}>
-         {/* Ensure PrintableTicket is rendered only when saleToPrint is not null to have content for PDF */}
+      <div ref={printableTicketRef} style={{ position: 'absolute', left: '-9999px', top: '-9999px', zIndex: -1, border: '1px solid black' }}>
          {saleToPrint && <PrintableTicket sale={saleToPrint} />}
       </div>
 
     </AppLayout>
   );
 }
-    
-
-      

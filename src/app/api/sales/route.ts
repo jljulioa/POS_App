@@ -1,9 +1,9 @@
 
 // src/app/api/sales/route.ts
 import { NextRequest, NextResponse } from 'next/server';
-import { getPool, query as executeQuery } from '@/lib/db'; // Renamed query to executeQuery to avoid conflict
+import { getPool, query as executeQuery } from '@/lib/db'; 
 import { z } from 'zod';
-import type { Sale, SaleItem } from '@/lib/mockData'; // Using existing types
+import type { Sale, SaleItem } from '@/lib/mockData'; 
 import { format, isValid, parseISO } from 'date-fns';
 
 // Helper to parse Sale and SaleItem from DB
@@ -26,6 +26,7 @@ const parseSaleItemFromDB = (dbItem: any): SaleItem => {
     productName: dbItem.productname,
     quantity: parseInt(dbItem.quantity, 10),
     unitPrice: parseFloat(dbItem.unitprice),
+    costPrice: parseFloat(dbItem.costprice), // Ensure costPrice is parsed
     totalPrice: parseFloat(dbItem.totalprice),
   };
 };
@@ -50,18 +51,15 @@ export async function GET(request: NextRequest) {
     const endDate = parseISO(endDateParam);
 
     if (isValid(startDate) && isValid(endDate)) {
-      // Ensure endDate covers the entire day
       const formattedEndDate = format(endDate, 'yyyy-MM-dd') + 'T23:59:59.999Z';
       dateFilterClauses.push(`s.date >= $${paramIndex++}`);
       queryParams.push(format(startDate, 'yyyy-MM-dd') + 'T00:00:00.000Z');
       dateFilterClauses.push(`s.date <= $${paramIndex++}`);
       queryParams.push(formattedEndDate);
     } else {
-        // Handle invalid date parameters, perhaps return an error or ignore
         console.warn("Invalid date parameters received:", { startDateParam, endDateParam });
     }
   }
-  // Add more periods like 'yesterday', 'last7days' etc. if needed
 
   const whereClause = dateFilterClauses.length > 0 ? `WHERE ${dateFilterClauses.join(' AND ')}` : '';
 
@@ -78,13 +76,12 @@ export async function GET(request: NextRequest) {
     let saleItemsResults: any[] = [];
 
     if (saleIds.length > 0) {
-        // Constructing IN clause safely. Ensure saleIds only contains valid IDs.
         const itemPlaceholders = saleIds.map((_, index) => `$${index + 1}`).join(',');
         const itemsSql = `
-            SELECT sale_id, product_id, productname, quantity, unitprice, totalprice
+            SELECT sale_id, product_id, productname, quantity, unitprice, costprice, totalprice
             FROM SaleItems
             WHERE sale_id IN (${itemPlaceholders})
-        `;
+        `; // Added costprice to SELECT
         saleItemsResults = await executeQuery(itemsSql, saleIds);
     }
 
@@ -112,9 +109,10 @@ export async function GET(request: NextRequest) {
 // Zod schema for SaleItem input from POS
 const SaleItemSchema = z.object({
   productId: z.string(),
-  productName: z.string(), // Name at the time of sale
+  productName: z.string(), 
   quantity: z.number().int().min(1),
   unitPrice: z.number().min(0),
+  costPrice: z.number().min(0), // Added costPrice
   totalPrice: z.number().min(0),
 });
 
@@ -123,9 +121,9 @@ const CreateSaleSchema = z.object({
   items: z.array(SaleItemSchema).min(1, { message: "Sale must have at least one item." }),
   totalAmount: z.number().min(0),
   customerId: z.string().optional(),
-  customerName: z.string().optional(), // If customerId is provided, this might be fetched or validated
+  customerName: z.string().optional(),
   paymentMethod: z.enum(['Cash', 'Card', 'Transfer', 'Combined']),
-  cashierId: z.string().min(1), // Assuming cashierId comes from authenticated user or system
+  cashierId: z.string().min(1),
 });
 
 
@@ -144,11 +142,10 @@ export async function POST(request: NextRequest) {
 
     const { items, totalAmount, customerId, customerName, paymentMethod, cashierId } = validation.data;
     const saleId = `S${Date.now()}${Math.random().toString(36).substring(2, 7)}`;
-    const saleDate = new Date(); // Current timestamp for the sale
+    const saleDate = new Date();
 
-    await client.query('BEGIN'); // Start transaction
+    await client.query('BEGIN'); 
 
-    // 1. Insert into Sales table
     const saleInsertSql = `
       INSERT INTO Sales (id, date, totalAmount, customerId, customerName, paymentMethod, cashierId)
       VALUES ($1, $2, $3, $4, $5, $6, $7)
@@ -158,46 +155,40 @@ export async function POST(request: NextRequest) {
     const saleResult = await client.query(saleInsertSql, saleInsertParams);
     const newSaleDb = saleResult.rows[0];
 
-    // 2. Insert each item into SaleItems table AND Update Product Stock
     const createdSaleItems: SaleItem[] = [];
     for (const item of items) {
-      // Insert into SaleItems
       const saleItemInsertSql = `
-        INSERT INTO SaleItems (sale_id, product_id, productName, quantity, unitPrice, totalPrice)
-        VALUES ($1, $2, $3, $4, $5, $6)
+        INSERT INTO SaleItems (sale_id, product_id, productName, quantity, unitPrice, costPrice, totalPrice)
+        VALUES ($1, $2, $3, $4, $5, $6, $7)
         RETURNING *
-      `;
-      // Note: productName is taken from the cart item, which should be the name at the time of sale.
-      const saleItemInsertParams = [saleId, item.productId, item.productName, item.quantity, item.unitPrice, item.totalPrice];
+      `; // Added costPrice to INSERT
+      const saleItemInsertParams = [saleId, item.productId, item.productName, item.quantity, item.unitPrice, item.costPrice, item.totalPrice];
       const saleItemResult = await client.query(saleItemInsertSql, saleItemInsertParams);
       createdSaleItems.push(parseSaleItemFromDB(saleItemResult.rows[0]));
 
-      // Update product stock
       const updateStockSql = `
         UPDATE Products
         SET stock = stock - $1
         WHERE id = $2 AND stock >= $1 
         RETURNING stock; 
-      `; // Ensure stock doesn't go negative due to concurrent sales
+      `;
       const stockUpdateResult = await client.query(updateStockSql, [item.quantity, item.productId]);
 
       if (stockUpdateResult.rowCount === 0) {
-        // This means stock was insufficient or product not found
         await client.query('ROLLBACK');
         console.error(`Failed to update stock for product ${item.productId}: Insufficient stock or product not found.`);
-        return NextResponse.json({ message: `Failed to process sale: Insufficient stock for product ${item.productName} (ID: ${item.productId}) or product not found.` }, { status: 409 }); // 409 Conflict
+        return NextResponse.json({ message: `Failed to process sale: Insufficient stock for product ${item.productName} (ID: ${item.productId}) or product not found.` }, { status: 409 });
       }
     }
 
-    await client.query('COMMIT'); // Commit transaction
+    await client.query('COMMIT');
 
     const createdSale: Sale = parseSaleFromDB(newSaleDb, createdSaleItems);
     return NextResponse.json(createdSale, { status: 201 });
 
   } catch (error) {
-    await client.query('ROLLBACK'); // Rollback on any error
+    await client.query('ROLLBACK');
     console.error('Failed to create sale:', error);
-    // Check for specific PostgreSQL error codes if needed
     if (error instanceof Error && (error as any).code === '23503' && (error as any).constraint?.includes('saleitems_product_id_fkey')) {
          return NextResponse.json({ message: 'Failed to create sale: One or more products do not exist.', error: (error as Error).message }, { status: 400 });
     }

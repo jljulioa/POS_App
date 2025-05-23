@@ -6,7 +6,7 @@ import { PageHeader } from '@/components/PageHeader';
 import type { Sale, SaleItem } from '@/lib/mockData';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, Printer, Loader2, AlertTriangle, ShoppingCart } from 'lucide-react';
+import { ArrowLeft, Printer, Loader2, AlertTriangle, ShoppingCart, TrendingUp, TrendingDown, DollarSign } from 'lucide-react';
 import React, { useMemo } from 'react';
 import { format } from 'date-fns';
 import { useQuery } from '@tanstack/react-query';
@@ -15,11 +15,10 @@ import { Card, CardContent, CardFooter, CardHeader, CardTitle, CardDescription }
 import Link from 'next/link';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
-// Removed static import: import html2pdf from 'html2pdf.js';
 
 // API fetch function for today's sales
 const fetchTodaysSales = async (): Promise<Sale[]> => {
-  const res = await fetch('/api/sales?period=today'); // Use query parameter
+  const res = await fetch('/api/sales?period=today'); 
   if (!res.ok) {
     const errorData = await res.json().catch(() => ({ message: 'Network response was not ok' }));
     throw new Error(errorData.message || 'Network response was not ok');
@@ -42,14 +41,23 @@ export default function TodaysSalesReportPage() {
     }
   });
 
-  const grandTotal = useMemo(() => {
-    return sales.reduce((sum, sale) => sum + sale.totalAmount, 0);
+  const reportData = useMemo(() => {
+    let totalRevenue = 0;
+    let totalCogs = 0;
+    sales.forEach(sale => {
+      totalRevenue += sale.totalAmount;
+      sale.items.forEach(item => {
+        totalCogs += (item.costPrice || 0) * item.quantity;
+      });
+    });
+    const grossProfit = totalRevenue - totalCogs;
+    return { totalRevenue, totalCogs, grossProfit, numberOfSales: sales.length };
   }, [sales]);
+
 
   const handlePrint = async () => {
     const element = document.getElementById('report-content');
     if (element) {
-      // Dynamically import html2pdf.js
       const html2pdf = (await import('html2pdf.js')).default;
       const opt = {
         margin:       0.5,
@@ -161,6 +169,7 @@ export default function TodaysSalesReportPage() {
                         <TableHead>Product Name</TableHead>
                         <TableHead className="text-center">Qty</TableHead>
                         <TableHead className="text-right">Unit Price</TableHead>
+                        <TableHead className="text-right">Item Cost</TableHead>
                         <TableHead className="text-right">Total Price</TableHead>
                       </TableRow>
                     </TableHeader>
@@ -170,6 +179,7 @@ export default function TodaysSalesReportPage() {
                           <TableCell>{item.productName}</TableCell>
                           <TableCell className="text-center">{item.quantity}</TableCell>
                           <TableCell className="text-right">${Number(item.unitPrice).toFixed(2)}</TableCell>
+                          <TableCell className="text-right text-muted-foreground">${Number(item.costPrice || 0).toFixed(2)}</TableCell>
                           <TableCell className="text-right font-medium">${Number(item.totalPrice).toFixed(2)}</TableCell>
                         </TableRow>
                       ))}
@@ -186,11 +196,31 @@ export default function TodaysSalesReportPage() {
         {sales.length > 0 && (
           <Card className="mt-8 shadow-xl break-inside-avoid-page">
             <CardHeader>
-              <CardTitle className="text-xl">Grand Total for Today</CardTitle>
+              <CardTitle className="text-xl">Today's Financial Summary</CardTitle>
+              <CardDescription>Across {reportData.numberOfSales} transaction(s).</CardDescription>
             </CardHeader>
-            <CardContent>
-              <p className="text-4xl font-bold text-green-600">${grandTotal.toFixed(2)}</p>
-              <p className="text-muted-foreground">Across {sales.length} transaction(s).</p>
+            <CardContent className="space-y-4">
+              <div className="flex items-center justify-between p-3 rounded-md border bg-muted/30">
+                <div className="flex items-center">
+                  <DollarSign className="mr-3 h-6 w-6 text-green-500" />
+                  <span className="font-medium">Total Revenue</span>
+                </div>
+                <span className="text-2xl font-bold text-green-600">${reportData.totalRevenue.toFixed(2)}</span>
+              </div>
+              <div className="flex items-center justify-between p-3 rounded-md border bg-muted/30">
+                <div className="flex items-center">
+                   <TrendingDown className="mr-3 h-6 w-6 text-red-500" />
+                  <span className="font-medium">Total Cost of Goods Sold (COGS)</span>
+                </div>
+                <span className="text-xl font-semibold text-red-600">${reportData.totalCogs.toFixed(2)}</span>
+              </div>
+               <div className="flex items-center justify-between p-3 rounded-md border bg-muted/30">
+                 <div className="flex items-center">
+                   <TrendingUp className="mr-3 h-6 w-6 text-blue-500" />
+                  <span className="font-medium">Gross Profit</span>
+                </div>
+                <span className="text-2xl font-bold text-blue-600">${reportData.grossProfit.toFixed(2)}</span>
+              </div>
             </CardContent>
           </Card>
         )}
