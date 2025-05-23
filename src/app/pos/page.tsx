@@ -11,10 +11,20 @@ import { Separator } from '@/components/ui/separator';
 import type { Product as ProductType, SaleItem, Sale } from '@/lib/mockData';
 import type { SalesTicketDB } from '@/app/api/sales-tickets/route';
 import Image from 'next/image';
-import { Search, X, Plus, Minus, Save, ShoppingCart, CreditCard, DollarSign, PlusSquare, Trash2, ListFilter, Loader2, AlertTriangle, Ticket } from 'lucide-react';
-import React, { useState, useMemo, useCallback, useEffect } from 'react';
+import { Search, X, Plus, Minus, Save, ShoppingCart, CreditCard, DollarSign, PlusSquare, Trash2, ListFilter, Loader2, AlertTriangle, Ticket, Printer } from 'lucide-react';
+import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { Badge } from '@/components/ui/badge';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -26,6 +36,7 @@ import {
 import { cn } from '@/lib/utils';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/hooks/useAuth';
+import { format } from 'date-fns';
 
 // API fetch function for products
 const fetchProducts = async (): Promise<ProductType[]> => {
@@ -93,6 +104,57 @@ const deleteSalesTicketAPI = async (ticketId: string): Promise<{ message: string
   return res.json();
 };
 
+interface PrintableTicketProps {
+  sale: Sale;
+}
+
+const PrintableTicket: React.FC<PrintableTicketProps> = ({ sale }) => {
+  if (!sale) return null;
+
+  return (
+    <div className="p-4 font-mono text-xs" style={{ width: '300px', color: 'black', backgroundColor: 'white' }}>
+      <div className="text-center mb-2">
+        <h2 className="font-bold text-base">MotoFox POS</h2>
+        <p>Gracias por su compra!</p>
+      </div>
+      <Separator className="my-1 bg-black" />
+      <p>Recibo: {sale.id}</p>
+      <p>Fecha: {format(new Date(sale.date), 'dd/MM/yyyy HH:mm:ss')}</p>
+      {sale.customerName && <p>Cliente: {sale.customerName}</p>}
+      <p>Cajero: {sale.cashierId}</p>
+      <Separator className="my-1 bg-black" />
+      <h3 className="font-bold my-1">Artículos:</h3>
+      <table className="w-full text-left">
+        <thead>
+          <tr>
+            <th className="py-0.5">Producto</th>
+            <th className="py-0.5 text-center">Cant.</th>
+            <th className="py-0.5 text-right">Precio</th>
+            <th className="py-0.5 text-right">Total</th>
+          </tr>
+        </thead>
+        <tbody>
+          {sale.items.map((item) => (
+            <tr key={item.productId}>
+              <td className="py-0.5">{item.productName}</td>
+              <td className="py-0.5 text-center">{item.quantity}</td>
+              <td className="py-0.5 text-right">${Number(item.unitPrice).toFixed(2)}</td>
+              <td className="py-0.5 text-right">${Number(item.totalPrice).toFixed(2)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <Separator className="my-1 bg-black" />
+      <div className="text-right mt-2">
+        <p className="font-bold text-sm">TOTAL: ${Number(sale.totalAmount).toFixed(2)}</p>
+      </div>
+      <p className="text-center mt-2 text-xs">
+        Payment Method: {sale.paymentMethod}
+      </p>
+    </div>
+  );
+};
+
 
 export default function POSPage() {
   const [searchTerm, setSearchTerm] = useState('');
@@ -100,6 +162,11 @@ export default function POSPage() {
   const queryClient = useQueryClient();
   const { userRole } = useAuth();
   const [activeTicketId, setActiveTicketId] = useState<string | null>(null);
+
+  const [saleToPrint, setSaleToPrint] = useState<Sale | null>(null);
+  const [isPrintConfirmOpen, setIsPrintConfirmOpen] = useState(false);
+  const printableTicketRef = useRef<HTMLDivElement>(null);
+
 
   const { data: products = [], isLoading: isLoadingProducts, error: productsError, isError: isProductsError } = useQuery<ProductType[], Error>({
     queryKey: ['products'],
@@ -110,14 +177,6 @@ export default function POSPage() {
     queryKey: ['salesTickets'],
     queryFn: fetchSalesTickets,
     refetchOnWindowFocus: false,
-    onSuccess: (data) => {
-      if (data.length === 0 && !createTicketMutation.isPending) {
-        handleCreateNewTicket(true);
-      } else if (data.length > 0 && (!activeTicketId || !data.find(t => t.id === activeTicketId))) {
-        const sortedTickets = [...data].sort((a, b) => new Date(b.last_updated_at).getTime() - new Date(a.last_updated_at).getTime());
-        setActiveTicketId(sortedTickets[0].id);
-      }
-    }
   });
 
   const createTicketMutation = useMutation<SalesTicketDB, Error, Pick<SalesTicketDB, 'name' | 'cart_items' | 'status'>>({
@@ -127,10 +186,10 @@ export default function POSPage() {
         oldData ? [...oldData, newTicket] : [newTicket]
       );
       setActiveTicketId(newTicket.id); 
-      toast({ title: 'Ticket Created', description: `${newTicket.name} has been created.` });
+      toast({ title: 'Ticket Creado', description: `${newTicket.name} ha sido creado.` });
     },
     onError: (error) => {
-      toast({ variant: 'destructive', title: 'Failed to Create Ticket', description: error.message });
+      toast({ variant: 'destructive', title: 'Error al Crear Ticket', description: error.message });
     },
   });
 
@@ -142,7 +201,7 @@ export default function POSPage() {
       );
     },
     onError: (error) => {
-      toast({ variant: 'destructive', title: 'Failed to Update Ticket', description: error.message });
+      toast({ variant: 'destructive', title: 'Error al Actualizar Ticket', description: error.message });
       refetchSalesTickets(); 
     },
   });
@@ -154,31 +213,27 @@ export default function POSPage() {
         oldData ? oldData.filter(t => t.id !== deletedTicketId) : []
       );
       
-      // This logic needs to run *after* salesTickets query data is updated by setQueryData
-      // We access the potentially updated data from the query client
       const currentTickets = queryClient.getQueryData<SalesTicketDB[]>(['salesTickets']) || [];
       if (activeTicketId === deletedTicketId) {
         if (currentTickets.length > 0) {
           const sortedTickets = [...currentTickets].sort((a,b) => new Date(b.last_updated_at).getTime() - new Date(a.last_updated_at).getTime());
           setActiveTicketId(sortedTickets[0].id);
         } else {
-          handleCreateNewTicket(true); // Force create if no tickets left
+          handleCreateNewTicket(true); 
         }
       } else if (currentTickets.length === 0) {
-        handleCreateNewTicket(true); // Also create if list becomes empty for other reasons
+        handleCreateNewTicket(true); 
       }
-      toast({ title: 'Ticket Closed', description: data.message });
+      // toast({ title: 'Ticket Cerrado', description: data.message }); // Toast moved to after print dialog
     },
     onError: (error) => {
-      toast({ variant: 'destructive', title: 'Failed to Close Ticket', description: error.message });
+      toast({ variant: 'destructive', title: 'Error al Cerrar Ticket', description: error.message });
     },
   });
 
-  const activeTicket = useMemo(() => salesTickets.find(t => t.id === activeTicketId), [salesTickets, activeTicketId]);
+  const activeTicket = useMemo(() => salesTickets?.find(t => t.id === activeTicketId), [salesTickets, activeTicketId]);
 
   useEffect(() => {
-    // This effect ensures that if tickets are fetched and the list is empty, a new one is created.
-    // It also handles setting an active ticket if one isn't set or if the current active one no longer exists.
     if (!isLoadingSalesTickets && salesTickets) {
       if (salesTickets.length === 0) {
         if (!createTicketMutation.isPending) {
@@ -208,11 +263,11 @@ export default function POSPage() {
     if (!activeTicket) return;
     const productInCatalog = products.find(p => p.id === product.id);
     if (!productInCatalog) {
-        toast({ variant: "destructive", title: "Product Not Found", description: "This product is no longer available." });
+        toast({ variant: "destructive", title: "Producto No Encontrado", description: "Este producto ya no está disponible." });
         return;
     }
     if (productInCatalog.stock === 0) {
-      toast({ variant: "destructive", title: "Out of Stock", description: `${productInCatalog.name} is currently out of stock.` });
+      toast({ variant: "destructive", title: "Agotado", description: `${productInCatalog.name} está actualmente agotado.` });
       return;
     }
     
@@ -225,7 +280,7 @@ export default function POSPage() {
           item.productId === productInCatalog.id ? { ...item, quantity: item.quantity + 1, totalPrice: (item.quantity + 1) * item.unitPrice } : item
         );
       } else {
-        toast({ variant: "destructive", title: "Stock Limit Reached", description: `Cannot add more ${productInCatalog.name}. Available stock: ${productInCatalog.stock}.` });
+        toast({ variant: "destructive", title: "Límite de Stock Alcanzado", description: `No se puede agregar más ${productInCatalog.name}. Stock disponible: ${productInCatalog.stock}.` });
         newCartItems = activeTicket.cart_items;
       }
     } else {
@@ -238,7 +293,7 @@ export default function POSPage() {
     if (!activeTicket) return;
     const productInCatalog = products.find(p => p.id === productId);
     if (!productInCatalog) {
-        toast({ variant: "destructive", title: "Product Not Found", description: "This product is no longer available." });
+        toast({ variant: "destructive", title: "Producto No Encontrado", description: "Este producto ya no está disponible." });
         return;
     }
 
@@ -246,7 +301,7 @@ export default function POSPage() {
     if (newQuantity <= 0) {
       newCartItems = activeTicket.cart_items.filter(item => item.productId !== productId);
     } else if (newQuantity > productInCatalog.stock) {
-      toast({ variant: "destructive", title: "Stock Limit Exceeded", description: `Only ${productInCatalog.stock} units of ${productInCatalog.name} available.`});
+      toast({ variant: "destructive", title: "Límite de Stock Excedido", description: `Solo hay ${productInCatalog.stock} unidades de ${productInCatalog.name} disponibles.`});
       newCartItems = activeTicket.cart_items.map(item =>
         item.productId === productId ? { ...item, quantity: productInCatalog.stock, totalPrice: productInCatalog.stock * item.unitPrice } : item
       );
@@ -270,7 +325,8 @@ export default function POSPage() {
 
   const handleCreateNewTicket = (forceCreate: boolean = false) => {
     if (createTicketMutation.isPending && !forceCreate) return;
-    const nextTicketNumber = (queryClient.getQueryData<SalesTicketDB[]>(['salesTickets'])?.length || 0) + 1;
+    const currentTickets = queryClient.getQueryData<SalesTicketDB[]>(['salesTickets']) || [];
+    const nextTicketNumber = currentTickets.length + 1;
     const newTicketName = `Ticket ${nextTicketNumber}`;
     createTicketMutation.mutate({
       name: newTicketName,
@@ -286,8 +342,9 @@ export default function POSPage() {
   };
 
   const handleCloseTicket = (ticketId: string) => {
-    if(salesTickets.length <= 1){
-      toast({ variant: 'destructive', title: 'Cannot Close Last Ticket', description: "You must have at least one active ticket. Process the sale or create a new ticket first." });
+    const currentTickets = queryClient.getQueryData<SalesTicketDB[]>(['salesTickets']) || [];
+    if(currentTickets.length <= 1){
+      toast({ variant: 'destructive', title: 'No se puede cerrar el último ticket', description: "Debe tener al menos un ticket activo. Procese la venta o cree un nuevo ticket primero." });
       return;
     }
     deleteTicketMutation.mutate(ticketId);
@@ -300,30 +357,22 @@ export default function POSPage() {
   const saleApiMutation = useMutation<Sale, Error, Omit<Sale, 'id' | 'date' | 'items'> & { items: SaleItem[] }>({
     mutationFn: createSaleAPI,
     onSuccess: (data) => {
-      toast({
-        title: "Sale Processed Successfully",
-        description: `Sale ID: ${data.id} completed. Total: $${data.totalAmount.toFixed(2)}.`,
-      });
-      queryClient.invalidateQueries({ queryKey: ['products'] }); 
-      queryClient.invalidateQueries({ queryKey: ['sales'] });    
-      
-      if (activeTicket) {
-        deleteTicketMutation.mutate(activeTicket.id); 
-      }
-      setSearchTerm('');
+      setSaleToPrint(data);
+      setIsPrintConfirmOpen(true);
+      // Toast and ticket closing moved to handleClosePrintDialog
     },
     onError: (error) => {
       toast({
         variant: "destructive",
-        title: "Sale Processing Failed",
-        description: error.message || "An unexpected error occurred.",
+        title: "Fallo al Procesar Venta",
+        description: error.message || "Ocurrió un error inesperado.",
       });
     },
   });
 
   const handleProcessSale = (paymentMethod: 'Cash' | 'Card' | 'Transfer' | 'Combined') => {
     if (!activeTicket || activeTicket.cart_items.length === 0) {
-      toast({ variant: "destructive", title: "Empty Cart", description: "Please add items to the cart before processing." });
+      toast({ variant: "destructive", title: "Carrito Vacío", description: "Por favor, agregue artículos al carrito antes de procesar." });
       return;
     }
 
@@ -340,6 +389,48 @@ export default function POSPage() {
       cashierId: userRole || 'system', 
     };
     saleApiMutation.mutate(saleData);
+  };
+
+  const handlePrintTicket = async () => {
+    if (!saleToPrint || !printableTicketRef.current) {
+      toast({ variant: "destructive", title: "Error de Impresión", description: "No hay datos de venta para imprimir."});
+      handleClosePrintDialog();
+      return;
+    }
+    try {
+      const html2pdf = (await import('html2pdf.js')).default;
+      const options = {
+        margin: 0.1,
+        filename: `recibo_${saleToPrint.id}.pdf`,
+        image: { type: 'jpeg', quality: 0.98 },
+        html2canvas: { scale: 3, logging: false, useCORS: true, width: 300 }, // Approximate width for 80mm receipt paper
+        jsPDF: { unit: 'in', format: [3.15, 8], orientation: 'portrait' } // 80mm width, arbitrary long height
+      };
+      html2pdf().from(printableTicketRef.current).set(options).save();
+    } catch (error) {
+      console.error("Error al generar PDF:", error);
+      toast({ variant: "destructive", title: "Error de Impresión", description: (error as Error).message });
+    } finally {
+      handleClosePrintDialog();
+    }
+  };
+
+  const handleClosePrintDialog = () => {
+    if (saleToPrint) { // Ensure saleToPrint is not null before toasting
+        toast({
+            title: "Venta Procesada Exitosamente",
+            description: `Venta ID: ${saleToPrint.id} completada. Total: $${saleToPrint.totalAmount.toFixed(2)}.`,
+        });
+    }
+    queryClient.invalidateQueries({ queryKey: ['products'] });
+    queryClient.invalidateQueries({ queryKey: ['sales'] });    
+    
+    if (activeTicket && saleToPrint) { // Only close ticket if sale was processed (saleToPrint is set)
+      deleteTicketMutation.mutate(activeTicket.id); 
+    }
+    setIsPrintConfirmOpen(false);
+    setSaleToPrint(null);
+    setSearchTerm('');
   };
   
   const getTicketBadgeVariant = (status: SalesTicketDB['status']): "default" | "outline" | "secondary" | "destructive" | null | undefined => {
@@ -361,7 +452,7 @@ export default function POSPage() {
       <AppLayout>
         <div className="flex justify-center items-center h-[calc(100vh-8rem)]">
           <Loader2 className="h-12 w-12 animate-spin text-primary" />
-          <p className="ml-3 text-lg text-muted-foreground">Loading POS...</p>
+          <p className="ml-3 text-lg text-muted-foreground">Cargando POS...</p>
         </div>
       </AppLayout>
     );
@@ -372,16 +463,16 @@ export default function POSPage() {
       <Card className="mb-4 shadow-md">
         <CardHeader className="p-3">
           <div className="flex items-center justify-between">
-            <CardTitle className="text-lg flex items-center"><Ticket className="mr-2 h-5 w-5 text-primary"/>Active Sales Tickets</CardTitle>
+            <CardTitle className="text-lg flex items-center"><Ticket className="mr-2 h-5 w-5 text-primary"/>Tickets de Venta Activos</CardTitle>
             <Button size="sm" onClick={() => handleCreateNewTicket()} disabled={isProcessingAnyTicketAction || isProcessingSale}>
-              <PlusSquare className="mr-2 h-4 w-4" /> New Ticket
+              <PlusSquare className="mr-2 h-4 w-4" /> Nuevo Ticket
             </Button>
           </div>
         </CardHeader>
         <CardContent className="p-3">
           <ScrollArea className="w-full whitespace-nowrap">
             <div className="flex space-x-3 pb-2">
-              {salesTickets.sort((a,b) => new Date(b.last_updated_at).getTime() - new Date(a.last_updated_at).getTime()).map(ticket => (
+              {salesTickets && salesTickets.sort((a,b) => new Date(b.last_updated_at).getTime() - new Date(a.last_updated_at).getTime()).map(ticket => (
                 <div
                   key={ticket.id}
                   className={cn(
@@ -424,21 +515,21 @@ export default function POSPage() {
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
-                      <DropdownMenuLabel>{ticket.name} Actions</DropdownMenuLabel>
+                      <DropdownMenuLabel>{ticket.name} Acciones</DropdownMenuLabel>
                       <DropdownMenuSeparator />
-                      <DropdownMenuItem onClick={() => handleUpdateTicketStatus(ticket.id, 'Active')} disabled={ticket.status === 'Active' || isProcessingAnyTicketAction || isProcessingSale}>Set Active</DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => handleUpdateTicketStatus(ticket.id, 'On Hold')} disabled={ticket.status === 'On Hold' || isProcessingAnyTicketAction || isProcessingSale}>Set On Hold</DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => handleUpdateTicketStatus(ticket.id, 'Pending Payment')} disabled={ticket.status === 'Pending Payment' || isProcessingAnyTicketAction || isProcessingSale}>Set Pending Payment</DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => handleUpdateTicketStatus(ticket.id, 'Active')} disabled={ticket.status === 'Active' || isProcessingAnyTicketAction || isProcessingSale}>Marcar Activo</DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => handleUpdateTicketStatus(ticket.id, 'On Hold')} disabled={ticket.status === 'On Hold' || isProcessingAnyTicketAction || isProcessingSale}>Marcar En Espera</DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => handleUpdateTicketStatus(ticket.id, 'Pending Payment')} disabled={ticket.status === 'Pending Payment' || isProcessingAnyTicketAction || isProcessingSale}>Marcar Pendiente de Pago</DropdownMenuItem>
                       <DropdownMenuSeparator />
-                      <DropdownMenuItem onClick={() => handleCloseTicket(ticket.id)} className="text-destructive focus:text-destructive focus:bg-destructive/10" disabled={isProcessingAnyTicketAction || isProcessingSale || salesTickets.length <= 1}>
-                        <Trash2 className="mr-2 h-4 w-4" /> Close Ticket
+                      <DropdownMenuItem onClick={() => handleCloseTicket(ticket.id)} className="text-destructive focus:text-destructive focus:bg-destructive/10" disabled={isProcessingAnyTicketAction || isProcessingSale || (salesTickets && salesTickets.length <= 1) }>
+                        <Trash2 className="mr-2 h-4 w-4" /> Cerrar Ticket
                       </DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>
                 </div>
               ))}
-              {salesTickets.length === 0 && !isLoadingSalesTickets && !createTicketMutation.isPending && (
-                <p className="text-sm text-muted-foreground p-2">No active tickets. Click "New Ticket" to start.</p>
+              {salesTickets && salesTickets.length === 0 && !isLoadingSalesTickets && !createTicketMutation.isPending && (
+                <p className="text-sm text-muted-foreground p-2">No hay tickets activos. Click "Nuevo Ticket" para empezar.</p>
               )}
             </div>
           </ScrollArea>
@@ -449,12 +540,12 @@ export default function POSPage() {
         <div className="flex flex-col md:flex-row gap-6 h-[calc(100vh-4rem-3rem-10rem)]"> {/* Adjusted height calculation */}
           <Card className="w-full md:w-2/5 flex flex-col shadow-lg">
             <CardHeader>
-              <CardTitle>Product Search</CardTitle>
+              <CardTitle>Búsqueda de Producto</CardTitle>
               <div className="relative">
                 <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
                   type="text"
-                  placeholder="Search by name, code, reference, barcode..."
+                  placeholder="Buscar por nombre, código, referencia, código de barras..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className="pl-8 py-3 text-base"
@@ -467,13 +558,13 @@ export default function POSPage() {
                 {isLoadingProducts && (
                   <div className="flex justify-center items-center h-full">
                     <Loader2 className="h-8 w-8 animate-spin text-primary" />
-                    <p className="ml-2 text-muted-foreground">Loading products...</p>
+                    <p className="ml-2 text-muted-foreground">Cargando productos...</p>
                   </div>
                 )}
                 {isProductsError && (
                   <div className="text-destructive p-4 border border-destructive rounded-md">
                     <AlertTriangle className="mr-2 h-5 w-5 inline-block" />
-                    Failed to load products: {productsError?.message}
+                    Error al cargar productos: {productsError?.message}
                   </div>
                 )}
                 {!isLoadingProducts && !isProductsError && searchResults.length > 0 && (
@@ -484,21 +575,21 @@ export default function POSPage() {
                           <Image src={product.imageUrl || `https://placehold.co/40x40.png?text=${product.name.substring(0,2)}`} alt={product.name} width={40} height={40} className="rounded-sm object-cover" data-ai-hint={product.dataAiHint || "motorcycle part"}/>
                           <div>
                             <p className="font-medium text-sm">{product.name}</p>
-                            <p className="text-xs text-muted-foreground">Ref: {product.reference} | Code: {product.code} | Stock: {product.stock}</p>
+                            <p className="text-xs text-muted-foreground">Ref: {product.reference} | Código: {product.code} | Stock: {product.stock}</p>
                           </div>
                         </div>
                         <Button size="sm" onClick={() => addToCart(product)} disabled={product.stock === 0 || isProcessingAnyTicketAction || isProcessingSale}>
-                          <Plus className="h-4 w-4 mr-1" /> Add
+                          <Plus className="h-4 w-4 mr-1" /> Añadir
                         </Button>
                       </li>
                     ))}
                   </ul>
                 )}
                 {!isLoadingProducts && !isProductsError && searchTerm && searchResults.length === 0 && (
-                  <p className="text-center text-muted-foreground py-4">No products found for "{searchTerm}".</p>
+                  <p className="text-center text-muted-foreground py-4">No se encontraron productos para "{searchTerm}".</p>
                 )}
                 {!isLoadingProducts && !isProductsError && !searchTerm && (
-                  <p className="text-center text-muted-foreground py-4">Start typing to search for products.</p>
+                  <p className="text-center text-muted-foreground py-4">Empieza a escribir para buscar productos.</p>
                 )}
               </ScrollArea>
             </CardContent>
@@ -507,7 +598,7 @@ export default function POSPage() {
           <Card className="w-full md:w-3/5 flex flex-col shadow-lg">
             <CardHeader>
               <CardTitle className="flex items-center justify-between">
-                <span>Current Sale: {activeTicket.name} 
+                <span>Venta Actual: {activeTicket.name} 
                   <Badge 
                     variant={activeTicketId === activeTicket.id && activeTicket.status === 'Active' ? 'outline' : getTicketBadgeVariant(activeTicket.status)} 
                     className={cn(
@@ -527,9 +618,9 @@ export default function POSPage() {
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead>Product</TableHead>
-                        <TableHead className="w-[120px] text-center">Quantity</TableHead>
-                        <TableHead className="text-right">Price</TableHead>
+                        <TableHead>Producto</TableHead>
+                        <TableHead className="w-[120px] text-center">Cantidad</TableHead>
+                        <TableHead className="text-right">Precio</TableHead>
                         <TableHead className="text-right">Total</TableHead>
                         <TableHead className="w-[50px]"></TableHead>
                       </TableRow>
@@ -561,7 +652,7 @@ export default function POSPage() {
                     </TableBody>
                   </Table>
                 ) : (
-                  <p className="text-center text-muted-foreground py-10">Cart is empty. Add products from the left.</p>
+                  <p className="text-center text-muted-foreground py-10">Carrito vacío. Añade productos desde la izquierda.</p>
                 )}
               </ScrollArea>
             </CardContent>
@@ -579,15 +670,15 @@ export default function POSPage() {
                     onClick={() => handleUpdateTicketStatus(activeTicket.id, 'On Hold')}
                     disabled={activeTicket.status === 'On Hold' || activeTicket.cart_items.length === 0 || isProcessingAnyTicketAction || isProcessingSale}
                   >
-                  <Save className="mr-2 h-5 w-5" /> Hold Ticket
+                  <Save className="mr-2 h-5 w-5" /> Guardar Ticket
                 </Button>
                 <Button size="lg" className="bg-green-600 hover:bg-green-700 text-base py-6 col-span-1 sm:col-span-1" onClick={() => handleProcessSale('Cash')}  disabled={activeTicket.cart_items.length === 0 || isProcessingAnyTicketAction || isProcessingSale}>
                   {isProcessingSale ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <DollarSign className="mr-2 h-5 w-5" />}
-                  {isProcessingSale ? 'Processing...' : 'Cash'}
+                  {isProcessingSale ? 'Procesando...' : 'Efectivo'}
                 </Button>
                 <Button size="lg" className="text-base py-6 col-span-1 sm:col-span-1" onClick={() => handleProcessSale('Card')}  disabled={activeTicket.cart_items.length === 0 || isProcessingAnyTicketAction || isProcessingSale}>
                   {isProcessingSale ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <CreditCard className="mr-2 h-5 w-5" />}
-                  {isProcessingSale ? 'Processing...' : 'Card'}
+                  {isProcessingSale ? 'Procesando...' : 'Tarjeta'}
                 </Button>
               </div>
             </CardFooter>
@@ -595,10 +686,42 @@ export default function POSPage() {
         </div>
       ) : (
         <div className="flex items-center justify-center h-[calc(100vh-4rem-3rem-10rem)]">
-          <p className="text-xl text-muted-foreground">No active ticket selected. Please create or select a ticket.</p>
+          {isLoadingSalesTickets || createTicketMutation.isPending ? (
+            <Loader2 className="h-10 w-10 animate-spin text-primary" />
+          ) : (
+            <p className="text-xl text-muted-foreground">No hay ticket activo seleccionado. Por favor, cree o seleccione un ticket.</p>
+          )}
         </div>
       )}
+
+      {/* Print Confirmation Dialog */}
+      <AlertDialog open={isPrintConfirmOpen} onOpenChange={setIsPrintConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Imprimir Ticket?</AlertDialogTitle>
+            <AlertDialogDescription>
+              La venta ha sido procesada. ¿Desea imprimir un recibo para esta venta?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={handleClosePrintDialog}>No, Gracias</AlertDialogCancel>
+            <AlertDialogAction onClick={handlePrintTicket}>
+              <Printer className="mr-2 h-4 w-4"/> Sí, Imprimir
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Hidden div for printable ticket content */}
+      {saleToPrint && (
+        <div ref={printableTicketRef} style={{ position: 'absolute', left: '-9999px', top: '-9999px' }}>
+          <PrintableTicket sale={saleToPrint} />
+        </div>
+      )}
+
     </AppLayout>
   );
 }
     
+
+      
