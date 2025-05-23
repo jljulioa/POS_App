@@ -5,13 +5,14 @@ import React from 'react';
 import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
 import { cn } from '@/lib/utils';
-import { LayoutDashboard, Package, ShoppingCart, Users, Barcode, Bot, Settings, FileText, Archive, Tag } from 'lucide-react';
+import { LayoutDashboard, Package, ShoppingCart, Users, Barcode, Bot, Settings, FileText, Archive, Tag, ArrowRightLeft } from 'lucide-react';
 import { SidebarMenu, SidebarMenuItem, SidebarMenuButton, SidebarMenuSub, SidebarMenuSubItem, SidebarMenuSubButton } from '@/components/ui/sidebar';
 
 const mainNavItems = [
   { href: '/', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/pos', label: 'Point of Sale', icon: Barcode },
   { href: '/inventory', label: 'Inventory', icon: Package },
+  { href: '/transactions', label: 'Transactions', icon: ArrowRightLeft },
   { href: '/categories', label: 'Manage Categories', icon: Tag },
   { href: '/sales', label: 'Sales', icon: ShoppingCart },
   { href: '/customers', label: 'Customers', icon: Users },

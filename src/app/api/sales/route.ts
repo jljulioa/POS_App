@@ -1,9 +1,9 @@
 
 // src/app/api/sales/route.ts
 import { NextRequest, NextResponse } from 'next/server';
-import { getPool, query as executeQuery } from '@/lib/db'; 
+import { getPool, query as executeQuery } from '@/lib/db';
 import { z } from 'zod';
-import type { Sale, SaleItem } from '@/lib/mockData'; 
+import type { Sale, SaleItem, Product } from '@/lib/mockData';
 import { format, isValid, parseISO } from 'date-fns';
 
 // Helper to parse Sale and SaleItem from DB
@@ -26,9 +26,9 @@ const parseSaleItemFromDB = (dbItem: any): SaleItem => {
     productName: dbItem.productname,
     quantity: parseInt(dbItem.quantity, 10),
     unitPrice: parseFloat(dbItem.unitprice),
-    costPrice: dbItem.costprice !== null ? parseFloat(dbItem.costprice) : 0, // Ensure costPrice is parsed, default to 0
+    costPrice: dbItem.costprice !== null ? parseFloat(dbItem.costprice) : 0,
     totalPrice: parseFloat(dbItem.totalprice),
-    category: dbItem.category, // Added category
+    category: dbItem.category,
   };
 };
 
@@ -78,21 +78,20 @@ export async function GET(request: NextRequest) {
 
     if (saleIds.length > 0) {
         const itemPlaceholders = saleIds.map((_, index) => `$${index + 1}`).join(',');
-        // Join with Products table to get the category
         const itemsSql = `
-            SELECT 
-                si.sale_id, 
-                si.product_id, 
-                si.productName, 
-                si.quantity, 
-                si.unitPrice, 
-                si.costprice, 
+            SELECT
+                si.sale_id,
+                si.product_id,
+                si.productName,
+                si.quantity,
+                si.unitPrice,
+                si.costprice,
                 si.totalPrice,
-                p.category  -- Fetch category from Products table
+                p.category
             FROM SaleItems si
-            JOIN Products p ON si.product_id = p.id
+            LEFT JOIN Products p ON si.product_id = p.id -- Use LEFT JOIN in case product is deleted but sale item exists
             WHERE si.sale_id IN (${itemPlaceholders})
-        `; 
+        `;
         saleItemsResults = await executeQuery(itemsSql, saleIds);
     }
 
@@ -120,12 +119,11 @@ export async function GET(request: NextRequest) {
 // Zod schema for SaleItem input from POS
 const SaleItemSchema = z.object({
   productId: z.string(),
-  productName: z.string(), 
+  productName: z.string(),
   quantity: z.number().int().min(1),
   unitPrice: z.number().min(0),
-  costPrice: z.number().min(0), 
+  costPrice: z.number().min(0),
   totalPrice: z.number().min(0),
-  // Category is not part of input from POS for sale item, it's derived from product
 });
 
 // Zod schema for the entire sale creation request
@@ -156,7 +154,7 @@ export async function POST(request: NextRequest) {
     const saleId = `S${Date.now()}${Math.random().toString(36).substring(2, 7)}`;
     const saleDate = new Date();
 
-    await client.query('BEGIN'); 
+    await client.query('BEGIN');
 
     const saleInsertSql = `
       INSERT INTO Sales (id, date, totalAmount, customerId, customerName, paymentMethod, cashierId)
@@ -169,43 +167,53 @@ export async function POST(request: NextRequest) {
 
     const createdSaleItems: SaleItem[] = [];
     for (const item of items) {
-      // Fetch the product category for historical record in SaleItems, if desired.
-      // Though for revenue by category report, it's better to JOIN at report generation time.
-      // For now, we rely on joining with Products table when fetching sales for reports.
-      // The costPrice must be included in the insert.
       const saleItemInsertSql = `
         INSERT INTO SaleItems (sale_id, product_id, productName, quantity, unitPrice, costPrice, totalPrice)
         VALUES ($1, $2, $3, $4, $5, $6, $7)
         RETURNING *
-      `; 
+      `;
       const saleItemInsertParams = [saleId, item.productId, item.productName, item.quantity, item.unitPrice, item.costPrice, item.totalPrice];
       const saleItemResult = await client.query(saleItemInsertSql, saleItemInsertParams);
-      
-      // Fetch product to get category for the returned SaleItem object.
-      // This is only if we want the category immediately in the response from *this* POST.
-      // It's not strictly necessary if reports always join.
-      // const productResult = await client.query('SELECT category FROM Products WHERE id = $1', [item.productId]);
-      // const productCategory = productResult.rows[0]?.category;
-      
-      const createdSaleItem = parseSaleItemFromDB(saleItemResult.rows[0]);
-      // if (productCategory) createdSaleItem.category = productCategory; // Optional enrichment
 
-      createdSaleItems.push(createdSaleItem);
+      const productResult = await client.query('SELECT stock, name FROM Products WHERE id = $1 FOR UPDATE', [item.productId]);
+      if (productResult.rowCount === 0) {
+        await client.query('ROLLBACK');
+        return NextResponse.json({ message: `Product ${item.productName} (ID: ${item.productId}) not found.` }, { status: 404 });
+      }
+      const currentProduct = productResult.rows[0];
+      const stockBefore = currentProduct.stock;
 
+      if (stockBefore < item.quantity) {
+        await client.query('ROLLBACK');
+        return NextResponse.json({ message: `Insufficient stock for product ${item.productName} (ID: ${item.productId}). Available: ${stockBefore}, Requested: ${item.quantity}.` }, { status: 409 });
+      }
 
+      const stockAfter = stockBefore - item.quantity;
       const updateStockSql = `
         UPDATE Products
-        SET stock = stock - $1
-        WHERE id = $2 AND stock >= $1 
-        RETURNING stock; 
+        SET stock = $1
+        WHERE id = $2;
       `;
-      const stockUpdateResult = await client.query(updateStockSql, [item.quantity, item.productId]);
+      await client.query(updateStockSql, [stockAfter, item.productId]);
 
-      if (stockUpdateResult.rowCount === 0) {
-        await client.query('ROLLBACK');
-        console.error(`Failed to update stock for product ${item.productId}: Insufficient stock or product not found.`);
-        return NextResponse.json({ message: `Failed to process sale: Insufficient stock for product ${item.productName} (ID: ${item.productId}) or product not found.` }, { status: 409 });
-      }
+      // Log inventory transaction
+      const transactionSql = `
+        INSERT INTO InventoryTransactions (product_id, product_name, transaction_type, quantity_change, stock_before, stock_after, related_document_id, notes)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+      `;
+      await client.query(transactionSql, [
+        item.productId,
+        item.productName, // Using productName from the sale item
+        'Sale',
+        -item.quantity,
+        stockBefore,
+        stockAfter,
+        saleId,
+        `Sale of ${item.quantity} units.`
+      ]);
+
+      const createdSaleItem = parseSaleItemFromDB(saleItemResult.rows[0]);
+      createdSaleItems.push(createdSaleItem);
     }
 
     await client.query('COMMIT');
