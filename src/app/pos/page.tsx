@@ -105,51 +105,55 @@ const deleteSalesTicketAPI = async (ticketId: string): Promise<{ message: string
 };
 
 interface PrintableTicketProps {
-  sale: Sale;
+  sale: Sale | null; // Allow null for initial render
 }
 
 const PrintableTicket: React.FC<PrintableTicketProps> = ({ sale }) => {
-  if (!sale) return null;
+  // useEffect(() => {
+  //   console.log("PrintableTicket rendered or sale prop changed:", sale);
+  // }, [sale]);
+
+  if (!sale) return null; // Don't render anything if sale is null
 
   return (
-    <div className="p-4 font-mono text-xs" style={{ width: '300px', color: 'black', backgroundColor: 'white' }}>
-      <div className="text-center mb-2">
-        <h2 className="font-bold text-base">MotoFox POS</h2>
+    <div className="p-2 font-mono text-xs" style={{ width: '300px', color: 'black', backgroundColor: 'white', border: '1px solid #ccc' }}>
+      <div className="text-center mb-1">
+        <h2 className="font-bold text-sm">MotoFox POS</h2>
         <p>Gracias por su compra!</p>
       </div>
-      <Separator className="my-1 bg-black" />
+      <Separator className="my-0.5 bg-black" />
       <p>Recibo: {sale.id}</p>
       <p>Fecha: {format(new Date(sale.date), 'dd/MM/yyyy HH:mm:ss')}</p>
       {sale.customerName && <p>Cliente: {sale.customerName}</p>}
       <p>Cajero: {sale.cashierId}</p>
-      <Separator className="my-1 bg-black" />
-      <h3 className="font-bold my-1">Artículos:</h3>
-      <table className="w-full text-left">
+      <Separator className="my-0.5 bg-black" />
+      <h3 className="font-bold my-0.5 text-xs">Artículos:</h3>
+      <table className="w-full text-left text-xs">
         <thead>
           <tr>
-            <th className="py-0.5">Producto</th>
-            <th className="py-0.5 text-center">Cant.</th>
-            <th className="py-0.5 text-right">Precio</th>
-            <th className="py-0.5 text-right">Total</th>
+            <th className="py-0.5 pr-1">Producto</th>
+            <th className="py-0.5 px-0.5 text-center">Cant.</th>
+            <th className="py-0.5 px-0.5 text-right">Precio</th>
+            <th className="py-0.5 pl-1 text-right">Total</th>
           </tr>
         </thead>
         <tbody>
           {sale.items.map((item) => (
             <tr key={item.productId}>
-              <td className="py-0.5">{item.productName}</td>
-              <td className="py-0.5 text-center">{item.quantity}</td>
-              <td className="py-0.5 text-right">${Number(item.unitPrice).toFixed(2)}</td>
-              <td className="py-0.5 text-right">${Number(item.totalPrice).toFixed(2)}</td>
+              <td className="py-0.5 pr-1">{item.productName}</td>
+              <td className="py-0.5 px-0.5 text-center">{item.quantity}</td>
+              <td className="py-0.5 px-0.5 text-right">${Number(item.unitPrice).toFixed(2)}</td>
+              <td className="py-0.5 pl-1 text-right">${Number(item.totalPrice).toFixed(2)}</td>
             </tr>
           ))}
         </tbody>
       </table>
-      <Separator className="my-1 bg-black" />
-      <div className="text-right mt-2">
+      <Separator className="my-0.5 bg-black" />
+      <div className="text-right mt-1">
         <p className="font-bold text-sm">TOTAL: ${Number(sale.totalAmount).toFixed(2)}</p>
       </div>
-      <p className="text-center mt-2 text-xs">
-        Payment Method: {sale.paymentMethod}
+      <p className="text-center mt-1 text-xs">
+        Medio de Pago: {sale.paymentMethod}
       </p>
     </div>
   );
@@ -176,7 +180,7 @@ export default function POSPage() {
   const { data: salesTickets = [], isLoading: isLoadingSalesTickets, refetch: refetchSalesTickets } = useQuery<SalesTicketDB[], Error>({
     queryKey: ['salesTickets'],
     queryFn: fetchSalesTickets,
-    refetchOnWindowFocus: false,
+    // refetchOnWindowFocus: false, // Keep this if you prefer manual refetch or on specific actions
   });
 
   const createTicketMutation = useMutation<SalesTicketDB, Error, Pick<SalesTicketDB, 'name' | 'cart_items' | 'status'>>({
@@ -199,6 +203,8 @@ export default function POSPage() {
       queryClient.setQueryData(['salesTickets'], (oldData: SalesTicketDB[] | undefined) =>
         oldData ? oldData.map(t => t.id === updatedTicket.id ? updatedTicket : t) : []
       );
+       // Optionally refetch to ensure consistency if other clients might be updating
+      // queryClient.invalidateQueries({ queryKey: ['salesTickets'] });
     },
     onError: (error) => {
       toast({ variant: 'destructive', title: 'Error al Actualizar Ticket', description: error.message });
@@ -213,7 +219,11 @@ export default function POSPage() {
         oldData ? oldData.filter(t => t.id !== deletedTicketId) : []
       );
       
+      // This logic needs to be run after the state update from setQueryData is effective.
+      // Using a timeout or useEffect watching salesTickets might be more reliable.
+      // For now, let's optimistically update activeTicketId based on current queryClient data.
       const currentTickets = queryClient.getQueryData<SalesTicketDB[]>(['salesTickets']) || [];
+      
       if (activeTicketId === deletedTicketId) {
         if (currentTickets.length > 0) {
           const sortedTickets = [...currentTickets].sort((a,b) => new Date(b.last_updated_at).getTime() - new Date(a.last_updated_at).getTime());
@@ -222,9 +232,9 @@ export default function POSPage() {
           handleCreateNewTicket(true); 
         }
       } else if (currentTickets.length === 0) {
-        handleCreateNewTicket(true); 
+         handleCreateNewTicket(true);
       }
-      // toast({ title: 'Ticket Cerrado', description: data.message }); // Toast moved to after print dialog
+      // Toast for 'Ticket Cerrado' moved to handleClosePrintDialog or after sale processing
     },
     onError: (error) => {
       toast({ variant: 'destructive', title: 'Error al Cerrar Ticket', description: error.message });
@@ -236,7 +246,7 @@ export default function POSPage() {
   useEffect(() => {
     if (!isLoadingSalesTickets && salesTickets) {
       if (salesTickets.length === 0) {
-        if (!createTicketMutation.isPending) {
+        if (!createTicketMutation.isPending && !activeTicketId) { // Ensure we don't loop if creation is slow
             handleCreateNewTicket(true);
         }
       } else if (!activeTicketId || !salesTickets.find(t => t.id === activeTicketId)) {
@@ -325,9 +335,10 @@ export default function POSPage() {
 
   const handleCreateNewTicket = (forceCreate: boolean = false) => {
     if (createTicketMutation.isPending && !forceCreate) return;
-    const currentTickets = queryClient.getQueryData<SalesTicketDB[]>(['salesTickets']) || [];
-    const nextTicketNumber = currentTickets.length + 1;
+    const currentTicketsCount = salesTickets?.length || 0;
+    const nextTicketNumber = currentTicketsCount + 1;
     const newTicketName = `Ticket ${nextTicketNumber}`;
+    
     createTicketMutation.mutate({
       name: newTicketName,
       cart_items: [],
@@ -341,13 +352,17 @@ export default function POSPage() {
     setSearchTerm('');
   };
 
-  const handleCloseTicket = (ticketId: string) => {
+  const handleManualCloseTicket = (ticketId: string) => {
     const currentTickets = queryClient.getQueryData<SalesTicketDB[]>(['salesTickets']) || [];
     if(currentTickets.length <= 1){
       toast({ variant: 'destructive', title: 'No se puede cerrar el último ticket', description: "Debe tener al menos un ticket activo. Procese la venta o cree un nuevo ticket primero." });
       return;
     }
-    deleteTicketMutation.mutate(ticketId);
+    deleteTicketMutation.mutate(ticketId, {
+      onSuccess: () => {
+         toast({ title: 'Ticket Cerrado Manualmente', description: `El ticket ha sido cerrado.` });
+      }
+    });
   };
   
   const handleUpdateTicketStatus = (ticketId: string, status: SalesTicketDB['status']) => {
@@ -357,8 +372,8 @@ export default function POSPage() {
   const saleApiMutation = useMutation<Sale, Error, Omit<Sale, 'id' | 'date' | 'items'> & { items: SaleItem[] }>({
     mutationFn: createSaleAPI,
     onSuccess: (data) => {
-      setSaleToPrint(data);
-      setIsPrintConfirmOpen(true);
+      setSaleToPrint(data); // Set the sale data for printing
+      setIsPrintConfirmOpen(true); // Open confirmation dialog
       // Toast and ticket closing moved to handleClosePrintDialog
     },
     onError: (error) => {
@@ -386,37 +401,46 @@ export default function POSPage() {
       })),
       totalAmount: cartTotal,
       paymentMethod: paymentMethod,
-      cashierId: userRole || 'system', 
+      cashierId: userRole || 'system', // Ensure userRole is appropriate or default
+      // customerId and customerName can be added here if a customer is associated with the ticket
     };
     saleApiMutation.mutate(saleData);
   };
 
   const handlePrintTicket = async () => {
-    if (!saleToPrint || !printableTicketRef.current) {
-      toast({ variant: "destructive", title: "Error de Impresión", description: "No hay datos de venta para imprimir."});
-      handleClosePrintDialog();
-      return;
+    if (!printableTicketRef.current || !saleToPrint) {
+        toast({ variant: "destructive", title: "Error de Impresión", description: "No hay datos de venta para imprimir o el elemento de impresión no está listo."});
+        handleClosePrintDialog(); // Close dialog even if printing fails
+        return;
     }
-    try {
-      const html2pdf = (await import('html2pdf.js')).default;
-      const options = {
-        margin: 0.1,
-        filename: `recibo_${saleToPrint.id}.pdf`,
-        image: { type: 'jpeg', quality: 0.98 },
-        html2canvas: { scale: 3, logging: false, useCORS: true, width: 300 }, // Approximate width for 80mm receipt paper
-        jsPDF: { unit: 'in', format: [3.15, 8], orientation: 'portrait' } // 80mm width, arbitrary long height
-      };
-      html2pdf().from(printableTicketRef.current).set(options).save();
-    } catch (error) {
-      console.error("Error al generar PDF:", error);
-      toast({ variant: "destructive", title: "Error de Impresión", description: (error as Error).message });
-    } finally {
-      handleClosePrintDialog();
-    }
+
+    // Give React a moment to render the PrintableTicket with saleToPrint data
+    setTimeout(async () => {
+        try {
+            const html2pdf = (await import('html2pdf.js')).default;
+            const element = printableTicketRef.current;
+            if (!element) {
+                throw new Error("Elemento para imprimir no encontrado en el DOM.");
+            }
+            const options = {
+                margin: 0.1,
+                filename: `recibo_${saleToPrint.id}.pdf`,
+                image: { type: 'jpeg', quality: 0.98 },
+                html2canvas: { scale: 3, logging: false, useCORS: true, width: 300 }, // Approximate width for 80mm receipt paper
+                jsPDF: { unit: 'in', format: [3.15, 8], orientation: 'portrait' } // 80mm width, arbitrary long height
+            };
+            html2pdf().from(element).set(options).save();
+        } catch (error) {
+            console.error("Error al generar PDF:", error);
+            toast({ variant: "destructive", title: "Error de Impresión", description: (error as Error).message });
+        } finally {
+            handleClosePrintDialog();
+        }
+    }, 100); // 100ms delay, adjust if needed
   };
 
   const handleClosePrintDialog = () => {
-    if (saleToPrint) { // Ensure saleToPrint is not null before toasting
+    if (saleToPrint) { 
         toast({
             title: "Venta Procesada Exitosamente",
             description: `Venta ID: ${saleToPrint.id} completada. Total: $${saleToPrint.totalAmount.toFixed(2)}.`,
@@ -425,7 +449,7 @@ export default function POSPage() {
     queryClient.invalidateQueries({ queryKey: ['products'] });
     queryClient.invalidateQueries({ queryKey: ['sales'] });    
     
-    if (activeTicket && saleToPrint) { // Only close ticket if sale was processed (saleToPrint is set)
+    if (activeTicket && saleToPrint) { 
       deleteTicketMutation.mutate(activeTicket.id); 
     }
     setIsPrintConfirmOpen(false);
@@ -447,7 +471,7 @@ export default function POSPage() {
   const isCurrentlyLoadingData = isLoadingSalesTickets || isLoadingProducts;
 
 
-  if (isCurrentlyLoadingData && (!salesTickets || salesTickets.length === 0) && !createTicketMutation.isPending) {
+  if (isCurrentlyLoadingData && (!salesTickets || salesTickets.length === 0) && !createTicketMutation.isPending && !activeTicketId ) {
     return (
       <AppLayout>
         <div className="flex justify-center items-center h-[calc(100vh-8rem)]">
@@ -521,7 +545,7 @@ export default function POSPage() {
                       <DropdownMenuItem onClick={() => handleUpdateTicketStatus(ticket.id, 'On Hold')} disabled={ticket.status === 'On Hold' || isProcessingAnyTicketAction || isProcessingSale}>Marcar En Espera</DropdownMenuItem>
                       <DropdownMenuItem onClick={() => handleUpdateTicketStatus(ticket.id, 'Pending Payment')} disabled={ticket.status === 'Pending Payment' || isProcessingAnyTicketAction || isProcessingSale}>Marcar Pendiente de Pago</DropdownMenuItem>
                       <DropdownMenuSeparator />
-                      <DropdownMenuItem onClick={() => handleCloseTicket(ticket.id)} className="text-destructive focus:text-destructive focus:bg-destructive/10" disabled={isProcessingAnyTicketAction || isProcessingSale || (salesTickets && salesTickets.length <= 1) }>
+                      <DropdownMenuItem onClick={() => handleManualCloseTicket(ticket.id)} className="text-destructive focus:text-destructive focus:bg-destructive/10" disabled={isProcessingAnyTicketAction || isProcessingSale || (salesTickets && salesTickets.length <= 1) }>
                         <Trash2 className="mr-2 h-4 w-4" /> Cerrar Ticket
                       </DropdownMenuItem>
                     </DropdownMenuContent>
@@ -673,12 +697,12 @@ export default function POSPage() {
                   <Save className="mr-2 h-5 w-5" /> Guardar Ticket
                 </Button>
                 <Button size="lg" className="bg-green-600 hover:bg-green-700 text-base py-6 col-span-1 sm:col-span-1" onClick={() => handleProcessSale('Cash')}  disabled={activeTicket.cart_items.length === 0 || isProcessingAnyTicketAction || isProcessingSale}>
-                  {isProcessingSale ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <DollarSign className="mr-2 h-5 w-5" />}
-                  {isProcessingSale ? 'Procesando...' : 'Efectivo'}
+                  {isProcessingSale && saleApiMutation.variables?.paymentMethod === 'Cash' ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <DollarSign className="mr-2 h-5 w-5" />}
+                  {isProcessingSale && saleApiMutation.variables?.paymentMethod === 'Cash' ? 'Procesando...' : 'Efectivo'}
                 </Button>
                 <Button size="lg" className="text-base py-6 col-span-1 sm:col-span-1" onClick={() => handleProcessSale('Card')}  disabled={activeTicket.cart_items.length === 0 || isProcessingAnyTicketAction || isProcessingSale}>
-                  {isProcessingSale ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <CreditCard className="mr-2 h-5 w-5" />}
-                  {isProcessingSale ? 'Procesando...' : 'Tarjeta'}
+                  {isProcessingSale && saleApiMutation.variables?.paymentMethod === 'Card' ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <CreditCard className="mr-2 h-5 w-5" />}
+                  {isProcessingSale && saleApiMutation.variables?.paymentMethod === 'Card' ? 'Procesando...' : 'Tarjeta'}
                 </Button>
               </div>
             </CardFooter>
@@ -695,7 +719,7 @@ export default function POSPage() {
       )}
 
       {/* Print Confirmation Dialog */}
-      <AlertDialog open={isPrintConfirmOpen} onOpenChange={setIsPrintConfirmOpen}>
+      <AlertDialog open={isPrintConfirmOpen} onOpenChange={(open) => {if (!open) handleClosePrintDialog()}}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>¿Imprimir Ticket?</AlertDialogTitle>
@@ -713,11 +737,10 @@ export default function POSPage() {
       </AlertDialog>
 
       {/* Hidden div for printable ticket content */}
-      {saleToPrint && (
-        <div ref={printableTicketRef} style={{ position: 'absolute', left: '-9999px', top: '-9999px' }}>
-          <PrintableTicket sale={saleToPrint} />
-        </div>
-      )}
+      <div ref={printableTicketRef} style={{ position: 'absolute', left: '-9999px', top: '-9999px', zIndex: -1 }}>
+         {/* Ensure PrintableTicket is rendered only when saleToPrint is not null to have content for PDF */}
+         {saleToPrint && <PrintableTicket sale={saleToPrint} />}
+      </div>
 
     </AppLayout>
   );
