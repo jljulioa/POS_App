@@ -7,11 +7,11 @@ import type { Sale, SaleItem } from '@/lib/mockData'; // Keep type
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { FileDown, Eye, Loader2, AlertTriangle, ShoppingCart, Calendar as CalendarIcon, FilterX } from 'lucide-react';
+import { FileDown, Eye, Loader2, AlertTriangle, ShoppingCart, Calendar as CalendarIcon, FilterX, CornerDownLeft } from 'lucide-react';
 import React, { useState, useMemo, useEffect } from 'react';
 import { format } from 'date-fns';
 import { Badge } from '@/components/ui/badge';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useToast } from '@/hooks/use-toast';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
@@ -26,6 +26,7 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { cn } from "@/lib/utils";
+import { z } from 'zod';
 
 // API fetch function for sales
 const fetchSales = async (startDate?: Date, endDate?: Date): Promise<Sale[]> => {
@@ -44,12 +45,50 @@ const fetchSales = async (startDate?: Date, endDate?: Date): Promise<Sale[]> => 
   return res.json();
 };
 
+const ReturnItemSchema = z.object({
+  productId: z.string(),
+  quantity: z.number().int().min(0, "Return quantity cannot be negative."),
+  unitPrice: z.number(), // Used to calculate refund, not for validation here
+});
+
+const ProcessReturnSchema = z.object({
+  saleId: z.string(),
+  itemsToReturn: z.array(ReturnItemSchema).min(1, "At least one item must be selected for return."),
+});
+
+type ReturnItemFormValues = {
+  [productId: string]: {
+    quantity: number;
+    unitPrice: number; // Keep unitPrice for refund calculation
+    maxQuantity: number; // To validate against in the form
+  };
+};
+
+// API mutation function for processing returns
+const processReturnAPI = async (returnData: z.infer<typeof ProcessReturnSchema>): Promise<{ message: string; totalRefundAmount: number }> => {
+  const response = await fetch('/api/returns', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(returnData),
+  });
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({ message: 'Failed to process return' }));
+    throw new Error(errorData.message || 'Failed to process return');
+  }
+  return response.json();
+};
+
 
 export default function SalesPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const { toast } = useToast();
+  const queryClient = useQueryClient();
+
   const [selectedSale, setSelectedSale] = useState<Sale | null>(null);
   const [isViewModalOpen, setIsViewModalOpen] = useState(false);
+  const [isReturnModalOpen, setIsReturnModalOpen] = useState(false);
+  const [returnItems, setReturnItems] = useState<ReturnItemFormValues>({});
+
   const [startDate, setStartDate] = useState<Date | undefined>(undefined);
   const [endDate, setEndDate] = useState<Date | undefined>(undefined);
 
@@ -78,6 +117,100 @@ export default function SalesPage() {
     setSelectedSale(sale);
     setIsViewModalOpen(true);
   };
+
+  const handleOpenReturnModal = (sale: Sale) => {
+    setSelectedSale(sale);
+    const initialReturnItems: ReturnItemFormValues = {};
+    sale.items.forEach(item => {
+      initialReturnItems[item.productId] = { quantity: 0, unitPrice: item.unitPrice, maxQuantity: item.quantity };
+    });
+    setReturnItems(initialReturnItems);
+    setIsViewModalOpen(false); // Close details modal
+    setIsReturnModalOpen(true);
+  };
+
+  const handleReturnQuantityChange = (productId: string, quantity: string) => {
+    const numQuantity = parseInt(quantity, 10);
+    const itemConf = returnItems[productId];
+    if (!itemConf) return;
+
+    if (!isNaN(numQuantity) && numQuantity >= 0 && numQuantity <= itemConf.maxQuantity) {
+      setReturnItems(prev => ({
+        ...prev,
+        [productId]: { ...prev[productId], quantity: numQuantity },
+      }));
+    } else if (quantity === "" || numQuantity < 0 ) {
+       setReturnItems(prev => ({
+        ...prev,
+        [productId]: { ...prev[productId], quantity: 0 },
+      }));
+    } else if (numQuantity > itemConf.maxQuantity) {
+       setReturnItems(prev => ({
+        ...prev,
+        [productId]: { ...prev[productId], quantity: itemConf.maxQuantity },
+      }));
+    }
+  };
+  
+  const totalReturnAmount = useMemo(() => {
+    return Object.values(returnItems).reduce((sum, item) => sum + (item.quantity * item.unitPrice), 0);
+  }, [returnItems]);
+
+
+  const processReturnMutation = useMutation<
+    { message: string; totalRefundAmount: number }, 
+    Error, 
+    z.infer<typeof ProcessReturnSchema>
+  >({
+    mutationFn: processReturnAPI,
+    onSuccess: (data) => {
+      toast({
+        title: "Return Processed Successfully",
+        description: `${data.message}. Total Refund: $${data.totalRefundAmount.toFixed(2)}`,
+      });
+      queryClient.invalidateQueries({ queryKey: ['products'] });
+      queryClient.invalidateQueries({ queryKey: ['sales'] }); // Could also invalidate specific sale if needed
+      setIsReturnModalOpen(false);
+      setSelectedSale(null);
+    },
+    onError: (error) => {
+      toast({
+        variant: "destructive",
+        title: "Failed to Process Return",
+        description: error.message,
+      });
+    },
+  });
+
+  const handleSubmitReturn = () => {
+    if (!selectedSale) return;
+
+    const itemsToSubmit = Object.entries(returnItems)
+      .filter(([, itemDetails]) => itemDetails.quantity > 0)
+      .map(([productId, itemDetails]) => ({
+        productId,
+        quantity: itemDetails.quantity,
+        unitPrice: itemDetails.unitPrice, // Pass unitPrice for backend validation/calculation
+      }));
+
+    if (itemsToSubmit.length === 0) {
+      toast({ variant: "destructive", title: "No Items to Return", description: "Please specify a quantity greater than 0 for at least one item." });
+      return;
+    }
+
+    const validation = ProcessReturnSchema.safeParse({
+      saleId: selectedSale.id,
+      itemsToReturn: itemsToSubmit,
+    });
+
+    if (!validation.success) {
+      console.error("Return validation error:", validation.error.format());
+      toast({ variant: "destructive", title: "Invalid Return Data", description: validation.error.flatten().fieldErrors.itemsToReturn?.join(', ') || "Please check return quantities." });
+      return;
+    }
+    processReturnMutation.mutate(validation.data);
+  };
+
 
   const handleClearFilters = () => {
     setStartDate(undefined);
@@ -239,6 +372,7 @@ export default function SalesPage() {
         </div>
       )}
 
+      {/* Sale Details Modal */}
       {selectedSale && (
         <Dialog open={isViewModalOpen} onOpenChange={setIsViewModalOpen}>
           <DialogContent className="sm:max-w-2xl">
@@ -259,8 +393,14 @@ export default function SalesPage() {
                 <div><span className="font-semibold">Cashier:</span> {selectedSale.cashierId}</div>
                 <div className="text-lg font-bold"><span className="font-semibold">Total:</span> ${Number(selectedSale.totalAmount).toFixed(2)}</div>
               </div>
+              
+              <div className="flex justify-between items-center mt-2">
+                <h3 className="font-semibold text-md">Items Sold:</h3>
+                <Button variant="outline" size="sm" onClick={() => handleOpenReturnModal(selectedSale)}>
+                  <CornerDownLeft className="mr-2 h-4 w-4" /> Return Items
+                </Button>
+              </div>
 
-              <h3 className="font-semibold text-md mt-2">Items Sold:</h3>
               {selectedSale.items && selectedSale.items.length > 0 ? (
                 <div className="rounded-md border max-h-60 overflow-y-auto">
                   <Table>
@@ -294,6 +434,60 @@ export default function SalesPage() {
                   Close
                 </Button>
               </DialogClose>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
+
+       {/* Return Items Modal */}
+      {selectedSale && isReturnModalOpen && (
+        <Dialog open={isReturnModalOpen} onOpenChange={(open) => {
+            if (!open) {
+                setIsReturnModalOpen(false);
+                setSelectedSale(null); // Clear selectedSale if return modal is closed
+            }
+        }}>
+          <DialogContent className="sm:max-w-lg">
+            <DialogHeader>
+              <DialogTitle className="flex items-center">
+                <CornerDownLeft className="mr-2 h-6 w-6 text-primary" />
+                Return Items from Sale: {selectedSale.id}
+              </DialogTitle>
+              <DialogDescription>
+                Specify quantities to return. Max quantity is what was originally purchased.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="py-4 space-y-3">
+              {selectedSale.items.map(item => (
+                <div key={item.productId} className="grid grid-cols-3 items-center gap-3 p-2 border rounded-md">
+                  <div className="col-span-2">
+                    <p className="font-medium text-sm">{item.productName}</p>
+                    <p className="text-xs text-muted-foreground">Purchased: {item.quantity} @ ${item.unitPrice.toFixed(2)}</p>
+                  </div>
+                  <Input
+                    type="number"
+                    min="0"
+                    max={item.quantity}
+                    value={returnItems[item.productId]?.quantity || 0}
+                    onChange={(e) => handleReturnQuantityChange(item.productId, e.target.value)}
+                    className="h-9 text-center"
+                    placeholder="Qty"
+                  />
+                </div>
+              ))}
+              <div className="text-right font-semibold text-lg pt-3">
+                Total Refund Amount: ${totalReturnAmount.toFixed(2)}
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => {setIsReturnModalOpen(false); setSelectedSale(null)}}>Cancel</Button>
+              <Button 
+                onClick={handleSubmitReturn} 
+                disabled={processReturnMutation.isPending || totalReturnAmount === 0}
+              >
+                {processReturnMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                Confirm Return
+              </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
