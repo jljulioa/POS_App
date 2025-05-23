@@ -6,8 +6,8 @@ import { PageHeader } from '@/components/PageHeader';
 import type { Sale, SaleItem } from '@/lib/mockData';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, Printer, Loader2, AlertTriangle, ShoppingCart, TrendingUp, TrendingDown, DollarSign } from 'lucide-react';
-import React, { useMemo } from 'react';
+import { ArrowLeft, Printer, Loader2, AlertTriangle, ShoppingCart, TrendingUp, TrendingDown, DollarSign, PieChart } from 'lucide-react';
+import React, { useMemo, useRef } from 'react';
 import { format } from 'date-fns';
 import { useQuery } from '@tanstack/react-query';
 import { useToast } from '@/hooks/use-toast';
@@ -28,6 +28,7 @@ const fetchTodaysSales = async (): Promise<Sale[]> => {
 
 export default function TodaysSalesReportPage() {
   const { toast } = useToast();
+  const reportContentRef = useRef<HTMLDivElement>(null);
 
   const { data: sales = [], isLoading, error, isError } = useQuery<Sale[], Error>({
     queryKey: ['todaysSales'],
@@ -44,29 +45,41 @@ export default function TodaysSalesReportPage() {
   const reportData = useMemo(() => {
     let totalRevenue = 0;
     let totalCogs = 0;
+    const revenueByCategory: { [key: string]: number } = {};
+
     sales.forEach(sale => {
       totalRevenue += sale.totalAmount;
       sale.items.forEach(item => {
         totalCogs += (item.costPrice || 0) * item.quantity;
+        if (item.category) {
+          revenueByCategory[item.category] = (revenueByCategory[item.category] || 0) + item.totalPrice;
+        } else {
+          revenueByCategory['Uncategorized'] = (revenueByCategory['Uncategorized'] || 0) + item.totalPrice;
+        }
       });
     });
     const grossProfit = totalRevenue - totalCogs;
-    return { totalRevenue, totalCogs, grossProfit, numberOfSales: sales.length };
+    return { totalRevenue, totalCogs, grossProfit, numberOfSales: sales.length, revenueByCategory };
   }, [sales]);
 
 
   const handlePrint = async () => {
-    const element = document.getElementById('report-content');
+    const element = reportContentRef.current;
     if (element) {
-      const html2pdf = (await import('html2pdf.js')).default;
-      const opt = {
-        margin:       0.5,
-        filename:     `Todays_Sales_Report_${format(new Date(), 'yyyy-MM-dd')}.pdf`,
-        image:        { type: 'jpeg', quality: 0.98 },
-        html2canvas:  { scale: 2, useCORS: true },
-        jsPDF:        { unit: 'in', format: 'letter', orientation: 'portrait' }
-      };
-      html2pdf().from(element).set(opt).save();
+      try {
+        const html2pdf = (await import('html2pdf.js')).default;
+        const opt = {
+          margin:       0.5,
+          filename:     `Todays_Sales_Report_${format(new Date(), 'yyyy-MM-dd')}.pdf`,
+          image:        { type: 'jpeg', quality: 0.98 },
+          html2canvas:  { scale: 2, useCORS: true, logging: false },
+          jsPDF:        { unit: 'in', format: 'letter', orientation: 'portrait' }
+        };
+        html2pdf().from(element).set(opt).save();
+      } catch (error) {
+        console.error("Error generating PDF:", error);
+        toast({ variant: "destructive", title: "Error de Impresión", description: (error as Error).message });
+      }
     } else {
       toast({
         variant: "destructive",
@@ -126,7 +139,7 @@ export default function TodaysSalesReportPage() {
         </Button>
       </PageHeader>
 
-      <div id="report-content">
+      <div id="report-content" ref={reportContentRef}>
         {sales.length === 0 && (
           <Card>
             <CardContent className="p-6 text-center text-muted-foreground">
@@ -167,6 +180,7 @@ export default function TodaysSalesReportPage() {
                     <TableHeader>
                       <TableRow>
                         <TableHead>Product Name</TableHead>
+                        <TableHead>Category</TableHead>
                         <TableHead className="text-center">Qty</TableHead>
                         <TableHead className="text-right">Unit Price</TableHead>
                         <TableHead className="text-right">Item Cost</TableHead>
@@ -177,6 +191,7 @@ export default function TodaysSalesReportPage() {
                       {sale.items.map((item: SaleItem, index: number) => (
                         <TableRow key={item.productId + index}>
                           <TableCell>{item.productName}</TableCell>
+                          <TableCell>{item.category || 'N/A'}</TableCell>
                           <TableCell className="text-center">{item.quantity}</TableCell>
                           <TableCell className="text-right">${Number(item.unitPrice).toFixed(2)}</TableCell>
                           <TableCell className="text-right text-muted-foreground">${Number(item.costPrice || 0).toFixed(2)}</TableCell>
@@ -194,35 +209,69 @@ export default function TodaysSalesReportPage() {
         ))}
         
         {sales.length > 0 && (
-          <Card className="mt-8 shadow-xl break-inside-avoid-page">
-            <CardHeader>
-              <CardTitle className="text-xl">Today's Financial Summary</CardTitle>
-              <CardDescription>Across {reportData.numberOfSales} transaction(s).</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex items-center justify-between p-3 rounded-md border bg-muted/30">
-                <div className="flex items-center">
-                  <DollarSign className="mr-3 h-6 w-6 text-green-500" />
-                  <span className="font-medium">Total Revenue</span>
+          <>
+            <Card className="mt-8 shadow-xl break-inside-avoid-page">
+              <CardHeader>
+                <CardTitle className="text-xl flex items-center"><PieChart className="mr-3 h-6 w-6 text-indigo-500"/>Revenue by Category (Today)</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {Object.keys(reportData.revenueByCategory).length > 0 ? (
+                  <div className="rounded-md border">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Category</TableHead>
+                        <TableHead className="text-right">Total Revenue</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {Object.entries(reportData.revenueByCategory)
+                        .sort(([, a], [, b]) => b - a) // Sort by revenue descending
+                        .map(([category, revenue]) => (
+                        <TableRow key={category}>
+                          <TableCell className="font-medium">{category}</TableCell>
+                          <TableCell className="text-right font-semibold">${Number(revenue).toFixed(2)}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                  </div>
+                ) : (
+                  <p className="text-muted-foreground">No category data available for today's sales.</p>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card className="mt-8 shadow-xl break-inside-avoid-page">
+              <CardHeader>
+                <CardTitle className="text-xl">Today's Financial Summary</CardTitle>
+                <CardDescription>Across {reportData.numberOfSales} transaction(s).</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex items-center justify-between p-3 rounded-md border bg-muted/30">
+                  <div className="flex items-center">
+                    <DollarSign className="mr-3 h-6 w-6 text-green-500" />
+                    <span className="font-medium">Total Revenue</span>
+                  </div>
+                  <span className="text-2xl font-bold text-green-600">${reportData.totalRevenue.toFixed(2)}</span>
                 </div>
-                <span className="text-2xl font-bold text-green-600">${reportData.totalRevenue.toFixed(2)}</span>
-              </div>
-              <div className="flex items-center justify-between p-3 rounded-md border bg-muted/30">
-                <div className="flex items-center">
-                   <TrendingDown className="mr-3 h-6 w-6 text-red-500" />
-                  <span className="font-medium">Total Cost of Goods Sold (COGS)</span>
+                <div className="flex items-center justify-between p-3 rounded-md border bg-muted/30">
+                  <div className="flex items-center">
+                    <TrendingDown className="mr-3 h-6 w-6 text-red-500" />
+                    <span className="font-medium">Total Cost of Goods Sold (COGS)</span>
+                  </div>
+                  <span className="text-xl font-semibold text-red-600">${reportData.totalCogs.toFixed(2)}</span>
                 </div>
-                <span className="text-xl font-semibold text-red-600">${reportData.totalCogs.toFixed(2)}</span>
-              </div>
-               <div className="flex items-center justify-between p-3 rounded-md border bg-muted/30">
-                 <div className="flex items-center">
-                   <TrendingUp className="mr-3 h-6 w-6 text-blue-500" />
-                  <span className="font-medium">Gross Profit</span>
+                <div className="flex items-center justify-between p-3 rounded-md border bg-muted/30">
+                  <div className="flex items-center">
+                    <TrendingUp className="mr-3 h-6 w-6 text-blue-500" />
+                    <span className="font-medium">Gross Profit</span>
+                  </div>
+                  <span className="text-2xl font-bold text-blue-600">${reportData.grossProfit.toFixed(2)}</span>
                 </div>
-                <span className="text-2xl font-bold text-blue-600">${reportData.grossProfit.toFixed(2)}</span>
-              </div>
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
+          </>
         )}
       </div>
     </AppLayout>

@@ -23,6 +23,7 @@ export interface SaleItem {
   unitPrice: number;
   costPrice: number; // Added for COGS calculation
   totalPrice: number;
+  category?: string; // Added for category-wise revenue reporting
 }
 
 export interface Sale {
@@ -91,9 +92,9 @@ export const mockProducts: Product[] = [
 ];
 
 export const mockSales: Sale[] = [
-  { id: 'S001', date: '2024-07-20T10:30:00Z', items: [{ productId: 'P001', productName: 'Spark Plug NGK CR9E', quantity: 2, unitPrice: 5.00, costPrice: 2.50, totalPrice: 10.00 }, { productId: 'P002', productName: 'Motor Oil Motul 7100 10W40', quantity: 1, unitPrice: 15.00, costPrice: 9.00, totalPrice: 15.00 }], totalAmount: 25.00, customerId: 'C001', customerName: 'John Doe', paymentMethod: 'Card', cashierId: 'E001' },
-  { id: 'S002', date: '2024-07-20T14:15:00Z', items: [{ productId: 'P003', productName: 'Brake Pads Brembo Front', quantity: 1, unitPrice: 45.00, costPrice: 25.00, totalPrice: 45.00 }], totalAmount: 45.00, paymentMethod: 'Cash', cashierId: 'E002' },
-  { id: 'S003', date: '2024-07-19T16:00:00Z', items: [{ productId: 'P005', productName: 'Helmet AGV K3 SV', quantity: 1, unitPrice: 250.00, costPrice: 150.00, totalPrice: 250.00 }, { productId: 'P004', productName: 'Motorcycle Chain DID X-Ring', quantity: 1, unitPrice: 100.00, costPrice: 60.00, totalPrice: 100.00 }], totalAmount: 350.00, customerId: 'C002', customerName: 'Jane Smith', paymentMethod: 'Combined', cashierId: 'E001' },
+  { id: 'S001', date: '2024-07-20T10:30:00Z', items: [{ productId: 'P001', productName: 'Spark Plug NGK CR9E', quantity: 2, unitPrice: 5.00, costPrice: 2.50, totalPrice: 10.00, category: 'Engine Parts' }, { productId: 'P002', productName: 'Motor Oil Motul 7100 10W40', quantity: 1, unitPrice: 15.00, costPrice: 9.00, totalPrice: 15.00, category: 'Lubricants' }], totalAmount: 25.00, customerId: 'C001', customerName: 'John Doe', paymentMethod: 'Card', cashierId: 'E001' },
+  { id: 'S002', date: '2024-07-20T14:15:00Z', items: [{ productId: 'P003', productName: 'Brake Pads Brembo Front', quantity: 1, unitPrice: 45.00, costPrice: 25.00, totalPrice: 45.00, category: 'Brakes' }], totalAmount: 45.00, paymentMethod: 'Cash', cashierId: 'E002' },
+  { id: 'S003', date: '2024-07-19T16:00:00Z', items: [{ productId: 'P005', productName: 'Helmet AGV K3 SV', quantity: 1, unitPrice: 250.00, costPrice: 150.00, totalPrice: 250.00, category: 'Riding Gear' }, { productId: 'P004', productName: 'Motorcycle Chain DID X-Ring', quantity: 1, unitPrice: 100.00, costPrice: 60.00, totalPrice: 100.00, category: 'Transmission' }], totalAmount: 350.00, customerId: 'C002', customerName: 'Jane Smith', paymentMethod: 'Combined', cashierId: 'E001' },
 ];
 
 export const mockCustomers: Customer[] = [
