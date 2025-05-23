@@ -49,7 +49,7 @@ const fetchProducts = async (): Promise<ProductType[]> => {
 };
 
 // API mutation function to create a sale
-const createSaleAPI = async (saleData: Omit<Sale, 'id' | 'date' | 'items'> & { items: SaleItem[] }): Promise<Sale> => {
+const createSaleAPI = async (saleData: Omit<Sale, 'id' | 'date'> ): Promise<Sale> => {
   const response = await fetch('/api/sales', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -105,11 +105,20 @@ const deleteSalesTicketAPI = async (ticketId: string): Promise<{ message: string
 };
 
 interface PrintableTicketProps {
-  sale: Sale | null; 
+  sale: Sale | null;
 }
 
 const PrintableTicket: React.FC<PrintableTicketProps> = ({ sale }) => {
   if (!sale) return null;
+
+  // Debug: Log if sale or items are missing for printing
+  // useEffect(() => {
+  //   console.log("PrintableTicket received sale:", sale);
+  //   if (sale && sale.items) {
+  //     console.log("PrintableTicket items:", sale.items);
+  //   }
+  // }, [sale]);
+
 
   return (
     <div className="p-2 font-mono text-xs" style={{ width: '300px', color: 'black', backgroundColor: 'white', border: '1px solid #ccc' }}>
@@ -181,10 +190,10 @@ export default function POSPage() {
   const createTicketMutation = useMutation<SalesTicketDB, Error, Pick<SalesTicketDB, 'name' | 'cart_items' | 'status'>>({
     mutationFn: createSalesTicketAPI,
     onSuccess: (newTicket) => {
-      queryClient.setQueryData(['salesTickets'], (oldData: SalesTicketDB[] | undefined) => 
+      queryClient.setQueryData(['salesTickets'], (oldData: SalesTicketDB[] | undefined) =>
         oldData ? [...oldData, newTicket] : [newTicket]
       );
-      setActiveTicketId(newTicket.id); 
+      setActiveTicketId(newTicket.id);
       toast({ title: 'Ticket Creado', description: `${newTicket.name} ha sido creado.` });
     },
     onError: (error) => {
@@ -198,10 +207,11 @@ export default function POSPage() {
       queryClient.setQueryData(['salesTickets'], (oldData: SalesTicketDB[] | undefined) =>
         oldData ? oldData.map(t => t.id === updatedTicket.id ? updatedTicket : t) : []
       );
+      // No toast here to avoid spamming on every cart update
     },
     onError: (error) => {
       toast({ variant: 'destructive', title: 'Error al Actualizar Ticket', description: error.message });
-      refetchSalesTickets(); 
+      refetchSalesTickets();
     },
   });
 
@@ -211,33 +221,36 @@ export default function POSPage() {
       queryClient.setQueryData(['salesTickets'], (oldData: SalesTicketDB[] | undefined) =>
         oldData ? oldData.filter(t => t.id !== deletedTicketId) : []
       );
-      const currentTickets = queryClient.getQueryData<SalesTicketDB[]>(['salesTickets']) || [];
-      
-      if (activeTicketId === deletedTicketId) {
-        if (currentTickets.length > 0) {
-          const sortedTickets = [...currentTickets].sort((a,b) => new Date(b.last_updated_at).getTime() - new Date(a.last_updated_at).getTime());
-          setActiveTicketId(sortedTickets[0].id);
-        } else {
-            handleCreateNewTicket(true); // Force create if it was the last one
+      // Re-evaluate active ticket AFTER data is updated
+      queryClient.getQueryData<SalesTicketDB[]>(['salesTickets'])?.then((currentTickets: SalesTicketDB[] | undefined) => {
+        const liveTickets = currentTickets || [];
+        if (activeTicketId === deletedTicketId) {
+            if (liveTickets.length > 0) {
+                const sortedTickets = [...liveTickets].sort((a, b) => new Date(b.last_updated_at).getTime() - new Date(a.last_updated_at).getTime());
+                setActiveTicketId(sortedTickets[0].id);
+            } else {
+                handleCreateNewTicket(true);
+            }
+        } else if (liveTickets.length === 0) {
+            handleCreateNewTicket(true);
         }
-      } else if (currentTickets.length === 0) {
-         handleCreateNewTicket(true); // Force create if all tickets were deleted (e.g. by another user)
-      }
+      });
     },
     onError: (error) => {
       toast({ variant: 'destructive', title: 'Error al Cerrar Ticket', description: error.message });
     },
   });
-  
+
   const activeTicket = useMemo(() => salesTickets?.find(t => t.id === activeTicketId), [salesTickets, activeTicketId]);
 
-  useEffect(() => {
+ useEffect(() => {
     if (!isLoadingSalesTickets && salesTickets) {
       if (salesTickets.length === 0) {
         if (!createTicketMutation.isPending && !activeTicketId) {
-            handleCreateNewTicket(true);
+            handleCreateNewTicket(true); // Force create if DB is empty
         }
       } else if (!activeTicketId || !salesTickets.find(t => t.id === activeTicketId)) {
+        // If no active ticket or current active is gone, set to most recent
         const sortedTickets = [...salesTickets].sort((a, b) => new Date(b.last_updated_at).getTime() - new Date(a.last_updated_at).getTime());
         setActiveTicketId(sortedTickets[0].id);
       }
@@ -264,34 +277,59 @@ export default function POSPage() {
         toast({ variant: "destructive", title: "Producto No Encontrado", description: "Este producto ya no está disponible." });
         return;
     }
+
+    const itemCostPrice = productInCatalog.cost;
+    if (typeof itemCostPrice !== 'number' || isNaN(itemCostPrice)) {
+        toast({
+        variant: "destructive",
+        title: "Error de Datos del Producto",
+        description: `El costo para "${productInCatalog.name}" no es válido. Por favor, verifique los datos del producto en el inventario.`
+        });
+        console.error("Invalid cost for product:", productInCatalog);
+        return; 
+    }
+
     if (productInCatalog.stock === 0) {
       toast({ variant: "destructive", title: "Agotado", description: `${productInCatalog.name} está actualmente agotado.` });
       return;
     }
-    
+
     const existingItem = activeTicket.cart_items.find(item => item.productId === productInCatalog.id);
-    let newCartItems: SaleItem[];
+    let newCartItemsClient: SaleItem[]; // This is the type for client-side manipulation
 
     if (existingItem) {
       if (existingItem.quantity < productInCatalog.stock) {
-        newCartItems = activeTicket.cart_items.map(item =>
+        newCartItemsClient = activeTicket.cart_items.map(item =>
           item.productId === productInCatalog.id ? { ...item, quantity: item.quantity + 1, totalPrice: (item.quantity + 1) * item.unitPrice } : item
         );
       } else {
         toast({ variant: "destructive", title: "Límite de Stock Alcanzado", description: `No se puede agregar más ${productInCatalog.name}. Stock disponible: ${productInCatalog.stock}.` });
-        newCartItems = activeTicket.cart_items;
+        newCartItemsClient = activeTicket.cart_items;
       }
     } else {
-      newCartItems = [...activeTicket.cart_items, { 
-        productId: productInCatalog.id, 
-        productName: productInCatalog.name, 
-        quantity: 1, 
-        unitPrice: productInCatalog.price, 
-        costPrice: productInCatalog.cost, // Add costPrice here
-        totalPrice: productInCatalog.price 
+      newCartItemsClient = [...activeTicket.cart_items, {
+        productId: productInCatalog.id,
+        productName: productInCatalog.name,
+        quantity: 1,
+        unitPrice: productInCatalog.price,
+        costPrice: itemCostPrice, // Use validated itemCostPrice
+        totalPrice: productInCatalog.price
       }];
     }
-    updateTicketMutation.mutate({ ticketId: activeTicket.id, data: { cart_items: newCartItems } });
+
+    // Prepare items for API: ensure only fields expected by SaleItemSchema in ticket API are sent
+    const cartItemsForAPI = newCartItemsClient.map(item => ({
+        productId: item.productId,
+        productName: item.productName,
+        quantity: item.quantity,
+        unitPrice: item.unitPrice,
+        costPrice: item.costPrice, // costPrice is now required
+        totalPrice: item.totalPrice,
+        // Ensure 'category' or other fields not in SaleItemSchema of ticket API are excluded
+    }));
+
+    updateTicketMutation.mutate({ ticketId: activeTicket.id, data: { cart_items: cartItemsForAPI } });
+    setSearchTerm('');
   }, [activeTicket, products, toast, updateTicketMutation]);
 
   const updateQuantity = useCallback((productId: string, newQuantity: number) => {
@@ -302,46 +340,65 @@ export default function POSPage() {
         return;
     }
 
-    let newCartItems: SaleItem[];
+    let newCartItemsClient: SaleItem[];
     if (newQuantity <= 0) {
-      newCartItems = activeTicket.cart_items.filter(item => item.productId !== productId);
+      newCartItemsClient = activeTicket.cart_items.filter(item => item.productId !== productId);
     } else if (newQuantity > productInCatalog.stock) {
       toast({ variant: "destructive", title: "Límite de Stock Excedido", description: `Solo hay ${productInCatalog.stock} unidades de ${productInCatalog.name} disponibles.`});
-      newCartItems = activeTicket.cart_items.map(item =>
+      newCartItemsClient = activeTicket.cart_items.map(item =>
         item.productId === productId ? { ...item, quantity: productInCatalog.stock, totalPrice: productInCatalog.stock * item.unitPrice } : item
       );
     } else {
-      newCartItems = activeTicket.cart_items.map(item =>
+      newCartItemsClient = activeTicket.cart_items.map(item =>
         item.productId === productId ? { ...item, quantity: newQuantity, totalPrice: newQuantity * item.unitPrice } : item
       );
     }
-    updateTicketMutation.mutate({ ticketId: activeTicket.id, data: { cart_items: newCartItems } });
+
+    const cartItemsForAPI = newCartItemsClient.map(item => ({
+        productId: item.productId,
+        productName: item.productName,
+        quantity: item.quantity,
+        unitPrice: item.unitPrice,
+        costPrice: item.costPrice,
+        totalPrice: item.totalPrice,
+    }));
+    updateTicketMutation.mutate({ ticketId: activeTicket.id, data: { cart_items: cartItemsForAPI } });
   }, [activeTicket, products, toast, updateTicketMutation]);
 
   const removeFromCart = (productId: string) => {
     if (!activeTicket) return;
-    const newCartItems = activeTicket.cart_items.filter(item => item.productId !== productId);
-    updateTicketMutation.mutate({ ticketId: activeTicket.id, data: { cart_items: newCartItems } });
+    const newCartItemsClient = activeTicket.cart_items.filter(item => item.productId !== productId);
+    const cartItemsForAPI = newCartItemsClient.map(item => ({
+        productId: item.productId,
+        productName: item.productName,
+        quantity: item.quantity,
+        unitPrice: item.unitPrice,
+        costPrice: item.costPrice,
+        totalPrice: item.totalPrice,
+    }));
+    updateTicketMutation.mutate({ ticketId: activeTicket.id, data: { cart_items: cartItemsForAPI } });
   };
 
   const cartTotal = useMemo(() => {
     return activeTicket?.cart_items.reduce((sum, item) => sum + item.totalPrice, 0) || 0;
   }, [activeTicket]);
 
-  const handleCreateNewTicket = (forceCreate: boolean = false) => {
+ const handleCreateNewTicket = useCallback((forceCreate: boolean = false) => {
     if (createTicketMutation.isPending && !forceCreate) return;
+    // Fetch current tickets from queryClient to get the latest count for naming
     const currentTickets = queryClient.getQueryData<SalesTicketDB[]>(['salesTickets']) || [];
     const nextTicketNumber = currentTickets.length + 1;
     const newTicketName = `Ticket ${nextTicketNumber}`;
-    
+
     createTicketMutation.mutate({
       name: newTicketName,
       cart_items: [],
       status: 'Active',
     });
     setSearchTerm('');
-  };
-  
+  }, [createTicketMutation, queryClient]);
+
+
   const switchTicket = (ticketId: string) => {
     setActiveTicketId(ticketId);
     setSearchTerm('');
@@ -359,16 +416,17 @@ export default function POSPage() {
       }
     });
   };
-  
+
   const handleUpdateTicketStatus = (ticketId: string, status: SalesTicketDB['status']) => {
      updateTicketMutation.mutate({ ticketId, data: { status } });
   };
 
-  const saleApiMutation = useMutation<Sale, Error, Omit<Sale, 'id' | 'date' | 'items'> & { items: SaleItem[] }>({
+  const saleApiMutation = useMutation<Sale, Error, Omit<Sale, 'id' | 'date'>>({
     mutationFn: createSaleAPI,
     onSuccess: (data) => {
-      setSaleToPrint(data);
+      setSaleToPrint(data); // data here is the successfully created Sale object from backend
       setIsPrintConfirmOpen(true);
+      // Toast and ticket closing moved to handleClosePrintDialog
     },
     onError: (error) => {
       toast({
@@ -386,17 +444,18 @@ export default function POSPage() {
     }
 
     const saleData = {
-      items: activeTicket.cart_items.map(item => ({ 
+      items: activeTicket.cart_items.map(item => ({
           productId: item.productId,
           productName: item.productName,
           quantity: item.quantity,
           unitPrice: item.unitPrice,
-          costPrice: item.costPrice, // Ensure costPrice is included
+          costPrice: item.costPrice, // Make sure this is included from the ticket item
           totalPrice: item.totalPrice,
+          // category: item.category // If needed by Sale schema, but ticket items might not have it.
       })),
       totalAmount: cartTotal,
       paymentMethod: paymentMethod,
-      cashierId: userRole || 'system',
+      cashierId: userRole || 'system', // Adjust as needed
     };
     saleApiMutation.mutate(saleData);
   };
@@ -404,10 +463,10 @@ export default function POSPage() {
   const handlePrintTicket = async () => {
     if (!printableTicketRef.current || !saleToPrint) {
         toast({ variant: "destructive", title: "Error de Impresión", description: "No hay datos de venta para imprimir o el elemento de impresión no está listo."});
-        handleClosePrintDialog();
+        handleClosePrintDialog(); // Ensure dialog closes even if print fails early
         return;
     }
-
+    // Ensure content is rendered
     setTimeout(async () => {
         try {
             const html2pdf = (await import('html2pdf.js')).default;
@@ -419,8 +478,8 @@ export default function POSPage() {
                 margin: 0.1,
                 filename: `recibo_${saleToPrint.id}.pdf`,
                 image: { type: 'jpeg', quality: 0.98 },
-                html2canvas: { scale: 3, logging: false, useCORS: true, width: 300 },
-                jsPDF: { unit: 'in', format: [3.15, 8], orientation: 'portrait' } 
+                html2canvas: { scale: 3, logging: false, useCORS: true, width: 300 }, // Set explicit width for html2canvas
+                jsPDF: { unit: 'in', format: [3.15, 8], orientation: 'portrait' } // Approx 80mm width, adjust height as needed
             };
             html2pdf().from(element).set(options).save();
         } catch (error) {
@@ -429,32 +488,32 @@ export default function POSPage() {
         } finally {
             handleClosePrintDialog();
         }
-    }, 100); 
+    }, 100); // Small delay to help ensure DOM is ready with saleToPrint data
   };
 
   const handleClosePrintDialog = () => {
-    if (saleToPrint) { 
+    if (saleToPrint) { // Only show toast if a sale was actually processed
         toast({
             title: "Venta Procesada Exitosamente",
             description: `Venta ID: ${saleToPrint.id} completada. Total: $${saleToPrint.totalAmount.toFixed(2)}.`,
         });
     }
     queryClient.invalidateQueries({ queryKey: ['products'] });
-    queryClient.invalidateQueries({ queryKey: ['sales'] });    
-    queryClient.invalidateQueries({ queryKey: ['todaysSales'] }); // For today's sales report
-    
-    if (activeTicket && saleToPrint) { 
-      deleteTicketMutation.mutate(activeTicket.id); 
+    queryClient.invalidateQueries({ queryKey: ['sales'] });
+    queryClient.invalidateQueries({ queryKey: ['todaysSales'] });
+
+    if (activeTicket && saleToPrint) { // Only delete if a sale was made
+      deleteTicketMutation.mutate(activeTicket.id);
     }
     setIsPrintConfirmOpen(false);
     setSaleToPrint(null);
     setSearchTerm('');
   };
-  
+
   const getTicketBadgeVariant = (status: SalesTicketDB['status']): "default" | "outline" | "secondary" | "destructive" | null | undefined => {
     switch(status) {
       case 'Active': return 'default';
-      case 'On Hold': return 'secondary'; 
+      case 'On Hold': return 'secondary';
       case 'Pending Payment': return 'outline';
       default: return 'default';
     }
@@ -475,7 +534,7 @@ export default function POSPage() {
       </AppLayout>
     );
   }
-  
+
   return (
     <AppLayout>
       <Card className="mb-4 shadow-md">
@@ -494,10 +553,10 @@ export default function POSPage() {
                 <div
                   key={ticket.id}
                   className={cn(
-                    "flex items-center justify-between rounded-md group text-sm min-h-[2.5rem] border transition-all", 
+                    "flex items-center justify-between rounded-md group text-sm min-h-[2.5rem] border transition-all",
                     ticket.id === activeTicketId
-                      ? "bg-primary text-primary-foreground px-3 py-2 shadow-md" 
-                      : "bg-card hover:bg-muted text-card-foreground px-[calc(0.75rem-1px)] py-[calc(0.5rem-1px)] hover:shadow-sm" 
+                      ? "bg-primary text-primary-foreground px-3 py-2 shadow-md"
+                      : "bg-card hover:bg-muted text-card-foreground px-[calc(0.75rem-1px)] py-[calc(0.5rem-1px)] hover:shadow-sm"
                   )}
                 >
                   <div
@@ -616,22 +675,23 @@ export default function POSPage() {
           <Card className="w-full md:w-3/5 flex flex-col shadow-lg">
             <CardHeader>
               <CardTitle className="flex items-center justify-between">
-                <span>Venta Actual: {activeTicket.name} 
-                  <Badge 
-                    variant={activeTicketId === activeTicket.id && activeTicket.status === 'Active' ? 'outline' : getTicketBadgeVariant(activeTicket.status)} 
+                <span>Venta Actual: {activeTicket.name}
+                  <Badge
+                    variant={activeTicketId === activeTicket.id ? 'outline' : getTicketBadgeVariant(activeTicket.status)}
                     className={cn(
                         "capitalize text-xs ml-2",
-                        activeTicketId === activeTicket.id && "border-primary-foreground/70 text-primary-foreground bg-primary-foreground/10"
+                        activeTicketId === activeTicket.id && activeTicket.status === 'Active' && "border-primary text-primary bg-primary/10",
+                        activeTicketId === activeTicket.id && activeTicket.status !== 'Active' && "border-primary-foreground/70 text-primary-foreground bg-primary-foreground/10"
                     )}
                   >
                     {activeTicket.status}
                   </Badge>
-                </span> 
+                </span>
                 <ShoppingCart className="h-6 w-6 text-primary" />
               </CardTitle>
             </CardHeader>
             <CardContent className="flex-grow overflow-hidden">
-              <ScrollArea className="h-full pr-3"> 
+              <ScrollArea className="h-full pr-3">
                 {activeTicket.cart_items.length > 0 ? (
                   <Table>
                     <TableHeader>
@@ -650,11 +710,11 @@ export default function POSPage() {
                           <TableCell className="text-center">
                             <div className="flex items-center justify-center gap-1">
                               <Button variant="outline" size="icon" className="h-7 w-7" onClick={() => updateQuantity(item.productId, item.quantity - 1)} disabled={isProcessingAnyTicketAction || isProcessingSale}><Minus className="h-3 w-3"/></Button>
-                              <Input type="number" value={item.quantity} 
+                              <Input type="number" value={item.quantity}
                                 onChange={(e) => {
                                   const val = parseInt(e.target.value);
                                   if (!isNaN(val)) updateQuantity(item.productId, val);
-                                }} 
+                                }}
                                 className="h-7 w-12 text-center px-1"
                                 disabled={isProcessingAnyTicketAction || isProcessingSale}/>
                               <Button variant="outline" size="icon" className="h-7 w-7" onClick={() => updateQuantity(item.productId, item.quantity + 1)} disabled={isProcessingAnyTicketAction || isProcessingSale}><Plus className="h-3 w-3"/></Button>
@@ -681,10 +741,10 @@ export default function POSPage() {
                 <span>${cartTotal.toFixed(2)}</span>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 w-full">
-                 <Button 
-                    size="lg" 
-                    variant="outline" 
-                    className="text-base py-6" 
+                 <Button
+                    size="lg"
+                    variant="outline"
+                    className="text-base py-6"
                     onClick={() => handleUpdateTicketStatus(activeTicket.id, 'On Hold')}
                     disabled={activeTicket.status === 'On Hold' || activeTicket.cart_items.length === 0 || isProcessingAnyTicketAction || isProcessingSale}
                   >
@@ -736,3 +796,5 @@ export default function POSPage() {
     </AppLayout>
   );
 }
+
+    
