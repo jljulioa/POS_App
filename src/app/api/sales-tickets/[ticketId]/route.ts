@@ -3,26 +3,26 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { query } from '@/lib/db';
 import { z } from 'zod';
-import type { SaleItem } from '@/lib/mockData';
+// import type { SaleItem } from '@/lib/mockData'; // Not needed if SaleItemSchema is defined locally
 import type { SalesTicketDB } from '@/app/api/sales-tickets/route'; // Import the type
 
-// Zod schema for SaleItem (consistent with POS page)
+// Zod schema for SaleItem (consistent with POS page and sales API)
 // Ensure costPrice is included here
 const SaleItemSchema = z.object({
   productId: z.string(),
   productName: z.string(),
   quantity: z.number().int().min(1),
   unitPrice: z.number().min(0),
-  costPrice: z.number().min(0), // Added costPrice
+  costPrice: z.number().min(0), // Added costPrice and ensured it's required
   totalPrice: z.number().min(0),
 });
 
 // Zod schema for SalesTicket update
 const SalesTicketUpdateSchema = z.object({
   name: z.string().min(1, { message: "Ticket name cannot be empty." }).optional(),
-  cart_items: z.array(SaleItemSchema).optional(),
+  cart_items: z.array(SaleItemSchema).optional(), // cart_items will be validated by SaleItemSchema
   status: z.enum(['Active', 'On Hold', 'Pending Payment']).optional(),
-  // last_updated_at will be updated by the database trigger
+  // last_updated_at will be updated by the database trigger or explicitly
 });
 
 // Helper function to parse SalesTicket from DB (can be shared or re-defined)
@@ -67,20 +67,22 @@ export async function PUT(request: NextRequest, { params }: { params: { ticketId
 
     const { name, cart_items, status } = validation.data;
 
-    // Fetch current ticket to merge updates
-    const currentTicketResult = await query('SELECT * FROM SalesTickets WHERE id = $1', [ticketId]);
+    // Fetch current ticket to merge updates if some fields are not provided
+    const currentTicketResult = await query('SELECT name, cart_items, status FROM SalesTickets WHERE id = $1', [ticketId]);
     if (currentTicketResult.length === 0) {
       return NextResponse.json({ message: 'Sales ticket not found for update' }, { status: 404 });
     }
-    const currentTicket = parseSalesTicketFromDB(currentTicketResult[0]);
+    const currentTicket = parseSalesTicketFromDB(currentTicketResult[0]); // Parse to get cart_items as array
 
     const updatedName = name ?? currentTicket.name;
     // Ensure cart_items being saved are valid according to the schema (includes costPrice)
+    // If cart_items is provided in the body, use it, otherwise use current ticket's cart_items
     const updatedCartItems = cart_items ?? currentTicket.cart_items; 
     const updatedStatus = status ?? currentTicket.status;
     
-    // PostgreSQL automatically updates last_updated_at via trigger if set up
-    // Otherwise, set it manually: last_updated_at = CURRENT_TIMESTAMP
+    // last_updated_at will be updated by database trigger if you have one,
+    // otherwise, set it manually: last_updated_at = CURRENT_TIMESTAMP
+    // For PostgreSQL, CURRENT_TIMESTAMP is fine.
     const sql = `
       UPDATE SalesTickets
       SET name = $1, cart_items = $2, status = $3, last_updated_at = CURRENT_TIMESTAMP
@@ -92,7 +94,8 @@ export async function PUT(request: NextRequest, { params }: { params: { ticketId
 
     const result = await query(sql, queryParams);
     if (result.length === 0) {
-        return NextResponse.json({ message: 'Sales ticket not found or update failed' }, { status: 404 });
+        // This should not happen if the ticket ID is valid and was fetched above
+        return NextResponse.json({ message: 'Sales ticket not found or update failed unexpectedly' }, { status: 404 });
     }
     const updatedTicket: SalesTicketDB = parseSalesTicketFromDB(result[0]);
 
@@ -120,4 +123,3 @@ export async function DELETE(request: NextRequest, { params }: { params: { ticke
     return NextResponse.json({ message: 'Failed to delete sales ticket', error: (error as Error).message }, { status: 500 });
   }
 }
-

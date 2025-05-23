@@ -3,16 +3,24 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { query } from '@/lib/db';
 import { z } from 'zod';
-import type { SaleItem } from '@/lib/mockData'; // Assuming SaleItem is defined here
+// Ensure SaleItem type includes costPrice if it's not already globally defined and imported
+// For consistency, let's define SaleItem locally here for tickets, ensuring costPrice is present.
+interface SaleItemForTicket {
+  productId: string;
+  productName: string;
+  quantity: number;
+  unitPrice: number;
+  costPrice: number; // This was the missing piece
+  totalPrice: number;
+}
 
-// Zod schema for SaleItem (consistent with POS page)
-// Ensure costPrice is included here
+// Zod schema for SaleItem (consistent with POS page and sales API)
 const SaleItemSchema = z.object({
   productId: z.string(),
   productName: z.string(),
   quantity: z.number().int().min(1),
   unitPrice: z.number().min(0),
-  costPrice: z.number().min(0), // Added costPrice
+  costPrice: z.number().min(0), // Ensure this is required and non-negative
   totalPrice: z.number().min(0),
 });
 
@@ -28,7 +36,7 @@ const SalesTicketCreateSchema = z.object({
 export interface SalesTicketDB {
   id: string;
   name: string;
-  cart_items: SaleItem[];
+  cart_items: SaleItemForTicket[]; // Use the local SaleItemForTicket
   status: 'Active' | 'On Hold' | 'Pending Payment';
   created_at: string;
   last_updated_at: string;
@@ -77,6 +85,7 @@ export async function POST(request: NextRequest) {
       VALUES ($1, $2, $3, $4)
       RETURNING *
     `;
+    // Ensure cart_items (which includes costPrice) are stringified for JSONB
     const params = [id, name, JSON.stringify(cart_items || []), status];
     
     const result = await query(sql, params);
@@ -89,4 +98,3 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ message: 'Failed to create sales ticket', error: (error as Error).message }, { status: 500 });
   }
 }
-
