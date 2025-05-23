@@ -3,38 +3,61 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { query } from '@/lib/db';
 import { z } from 'zod';
-// import type { SaleItem } from '@/lib/mockData'; // Not needed if SaleItemSchema is defined locally
-import type { SalesTicketDB } from '@/app/api/sales-tickets/route'; // Import the type
+import type { SalesTicketDB as ImportedSalesTicketDB, SaleItemForTicket } from '@/app/api/sales-tickets/route'; // Import the type
+
+// Re-define SalesTicketDB or ensure it's correctly typed if SaleItemForTicket is defined locally
+export interface SalesTicketDB extends ImportedSalesTicketDB {}
+
 
 // Zod schema for SaleItem (consistent with POS page and sales API)
-// Ensure costPrice is included here
 const SaleItemSchema = z.object({
   productId: z.string(),
   productName: z.string(),
-  quantity: z.number().int().min(1),
+  quantity: z.number().int().min(1, "Quantity must be at least 1"),
   unitPrice: z.number().min(0),
-  costPrice: z.number().min(0), // Added costPrice and ensured it's required
+  costPrice: z.number().min(0),
   totalPrice: z.number().min(0),
 });
 
 // Zod schema for SalesTicket update
 const SalesTicketUpdateSchema = z.object({
   name: z.string().min(1, { message: "Ticket name cannot be empty." }).optional(),
-  cart_items: z.array(SaleItemSchema).optional(), // cart_items will be validated by SaleItemSchema
+  cart_items: z.array(SaleItemSchema).optional(), 
   status: z.enum(['Active', 'On Hold', 'Pending Payment']).optional(),
-  // last_updated_at will be updated by the database trigger or explicitly
 });
 
 // Helper function to parse SalesTicket from DB (can be shared or re-defined)
+// with robust cart_item parsing
 const parseSalesTicketFromDB = (dbTicket: any): SalesTicketDB => {
-  if (!dbTicket) return null as any;
+  if (!dbTicket) return null as any; // Should not happen if query is correct
+
+  const parsedCartItems = (dbTicket.cart_items || []).map((item: any): SaleItemForTicket | null => {
+    const quantity = parseInt(String(item.quantity || '0'), 10);
+    const productId = String(item.productId || '');
+    
+    if (!productId || quantity < 1) {
+      // console.warn("Filtering out invalid cart item during single ticket parsing:", item);
+      return null;
+    }
+
+    return {
+      productId: productId,
+      productName: String(item.productName || 'Unknown Product'),
+      quantity: quantity,
+      unitPrice: parseFloat(String(item.unitPrice || '0')) || 0,
+      costPrice: parseFloat(String(item.costPrice || '0')) || 0,
+      totalPrice: parseFloat(String(item.totalPrice || '0')) || 0,
+    };
+  }).filter((item): item is SaleItemForTicket => item !== null);
+
+
   return {
-    id: dbTicket.id,
-    name: dbTicket.name,
-    cart_items: dbTicket.cart_items || [],
-    status: dbTicket.status,
-    created_at: new Date(dbTicket.created_at).toISOString(),
-    last_updated_at: new Date(dbTicket.last_updated_at).toISOString(),
+    id: String(dbTicket.id),
+    name: String(dbTicket.name || 'Unnamed Ticket'),
+    cart_items: parsedCartItems,
+    status: dbTicket.status || 'Active',
+    created_at: new Date(dbTicket.created_at || Date.now()).toISOString(),
+    last_updated_at: new Date(dbTicket.last_updated_at || Date.now()).toISOString(),
   };
 };
 
@@ -62,39 +85,35 @@ export async function PUT(request: NextRequest, { params }: { params: { ticketId
     const validation = SalesTicketUpdateSchema.safeParse(body);
 
     if (!validation.success) {
+      console.error(`SalesTicketUpdateSchema validation error for ticket ${ticketId}:`, validation.error.format());
       return NextResponse.json({ message: 'Invalid sales ticket data for update', errors: validation.error.format() }, { status: 400 });
     }
 
-    const { name, cart_items, status } = validation.data;
-
-    // Fetch current ticket to merge updates if some fields are not provided
-    const currentTicketResult = await query('SELECT name, cart_items, status FROM SalesTickets WHERE id = $1', [ticketId]);
+    // Fetch current ticket to only update provided fields
+    const currentTicketResult = await query('SELECT * FROM SalesTickets WHERE id = $1', [ticketId]);
     if (currentTicketResult.length === 0) {
       return NextResponse.json({ message: 'Sales ticket not found for update' }, { status: 404 });
     }
-    const currentTicket = parseSalesTicketFromDB(currentTicketResult[0]); // Parse to get cart_items as array
+    const currentTicket = parseSalesTicketFromDB(currentTicketResult[0]);
+
+    const { name, cart_items, status } = validation.data;
 
     const updatedName = name ?? currentTicket.name;
-    // Ensure cart_items being saved are valid according to the schema (includes costPrice)
-    // If cart_items is provided in the body, use it, otherwise use current ticket's cart_items
+    // If cart_items is provided in the body, use it (it's already validated by SaleItemSchema array)
+    // otherwise, use current ticket's cart_items.
     const updatedCartItems = cart_items ?? currentTicket.cart_items; 
     const updatedStatus = status ?? currentTicket.status;
     
-    // last_updated_at will be updated by database trigger if you have one,
-    // otherwise, set it manually: last_updated_at = CURRENT_TIMESTAMP
-    // For PostgreSQL, CURRENT_TIMESTAMP is fine.
     const sql = `
       UPDATE SalesTickets
       SET name = $1, cart_items = $2, status = $3, last_updated_at = CURRENT_TIMESTAMP
       WHERE id = $4
       RETURNING *
     `;
-    // Make sure updatedCartItems are stringified for JSONB
     const queryParams = [updatedName, JSON.stringify(updatedCartItems), updatedStatus, ticketId];
 
     const result = await query(sql, queryParams);
     if (result.length === 0) {
-        // This should not happen if the ticket ID is valid and was fetched above
         return NextResponse.json({ message: 'Sales ticket not found or update failed unexpectedly' }, { status: 404 });
     }
     const updatedTicket: SalesTicketDB = parseSalesTicketFromDB(result[0]);
