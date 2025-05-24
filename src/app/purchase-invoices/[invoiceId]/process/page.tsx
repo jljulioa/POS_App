@@ -7,16 +7,19 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import type { PurchaseInvoice, PurchaseInvoiceItem, Product } from '@/lib/mockData';
 import { useParams, useRouter } from 'next/navigation';
-import React, { useEffect, useState } from 'react';
-import { ArrowLeft, CheckCircle, Loader2, AlertTriangle, ShoppingBag, PlusCircle, Trash2 } from 'lucide-react';
+import React, { useEffect, useState, useMemo } from 'react';
+import { ArrowLeft, CheckCircle, Loader2, AlertTriangle, ShoppingBag, PlusCircle, Trash2, Search as SearchIcon } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useToast } from '@/hooks/use-toast';
 import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { ScrollArea } from '@/components/ui/scroll-area';
 
-interface ProcessedItem extends PurchaseInvoiceItem {
-  originalProductId: string; // To ensure we map back to a known product for stock updates
+interface ProcessedItem extends Omit<PurchaseInvoiceItem, 'productId' | 'productName' | 'totalCost'> {
+  productId: string; // original product id
+  productName: string;
+  totalCost: number;
+  newSellingPrice?: number; // Optional new selling price
 }
 
 // API fetch function for a single purchase invoice
@@ -37,7 +40,7 @@ const fetchProducts = async (): Promise<Product[]> => {
 };
 
 // API mutation function to update/process an invoice
-const processInvoiceAPI = async ({ invoiceId, data }: { invoiceId: string; data: Partial<PurchaseInvoice> & { items?: Array<{productId: string; quantity: number; costPrice: number}> } }): Promise<PurchaseInvoice> => {
+const processInvoiceAPI = async ({ invoiceId, data }: { invoiceId: string; data: Partial<PurchaseInvoice> & { items?: Array<{productId: string; quantity: number; costPrice: number; newSellingPrice?: number}> } }): Promise<PurchaseInvoice> => {
   const response = await fetch(`/api/purchase-invoices/${invoiceId}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
@@ -59,9 +62,12 @@ export default function ProcessPurchaseInvoicePage() {
   const invoiceId = params.invoiceId as string;
 
   const [itemsToProcess, setItemsToProcess] = useState<ProcessedItem[]>([]);
-  const [selectedProductId, setSelectedProductId] = useState<string>("");
+  
+  const [productSearchTerm, setProductSearchTerm] = useState<string>("");
+  const [selectedProductDetails, setSelectedProductDetails] = useState<Product | null>(null);
   const [quantity, setQuantity] = useState<number | string>(1);
-  const [costPrice, setCostPrice] = useState<number | string>(0);
+  const [costPrice, setCostPrice] = useState<number | string>(""); // Use string to allow empty input initially
+  const [newSellingPriceInput, setNewSellingPriceInput] = useState<number | string>(""); // Use string
 
   const { data: invoice, isLoading: isLoadingInvoice, error: invoiceError } = useQuery<PurchaseInvoice, Error>({
     queryKey: ['purchaseInvoice', invoiceId],
@@ -74,14 +80,14 @@ export default function ProcessPurchaseInvoicePage() {
     queryFn: fetchProducts,
   });
   
-  const processMutation = useMutation<PurchaseInvoice, Error, { invoiceId: string; data: Partial<PurchaseInvoice> & { items: Array<{productId: string; quantity: number; costPrice: number}> } }>({
+  const processMutation = useMutation<PurchaseInvoice, Error, { invoiceId: string; data: Partial<PurchaseInvoice> & { items: Array<{productId: string; quantity: number; costPrice: number; newSellingPrice?: number}> } }>({
     mutationFn: processInvoiceAPI,
     onSuccess: (data) => {
       toast({ title: "Invoice Processed", description: `Invoice ${data.invoiceNumber} has been successfully processed.` });
       queryClient.invalidateQueries({ queryKey: ['purchaseInvoices'] });
       queryClient.invalidateQueries({ queryKey: ['purchaseInvoice', invoiceId] });
-      queryClient.invalidateQueries({ queryKey: ['products'] }); // Invalidate products to reflect stock changes
-      queryClient.invalidateQueries({ queryKey: ['inventoryTransactions']}); // Invalidate transactions
+      queryClient.invalidateQueries({ queryKey: ['products'] });
+      queryClient.invalidateQueries({ queryKey: ['inventoryTransactions']});
       router.push('/purchase-invoices');
     },
     onError: (error) => {
@@ -89,37 +95,43 @@ export default function ProcessPurchaseInvoicePage() {
     },
   });
 
-  useEffect(() => {
-    if (invoice && invoice.items && invoice.items.length > 0) {
-        // If invoice already has items (e.g., re-opening a partially processed one, though current logic doesn't support this)
-        // For now, this assumes items are added fresh.
-    }
-  }, [invoice]);
+  const filteredProductsForSearch = useMemo(() => {
+    if (!productSearchTerm.trim()) return [];
+    const termLower = productSearchTerm.toLowerCase();
+    return products.filter(p => 
+      p.name.toLowerCase().includes(termLower) ||
+      p.code.toLowerCase().includes(termLower) ||
+      p.reference.toLowerCase().includes(termLower)
+    ).slice(0, 5); // Limit to 5 results for dropdown
+  }, [productSearchTerm, products]);
+
+  const handleProductSelect = (product: Product) => {
+    setSelectedProductDetails(product);
+    setCostPrice(product.cost); // Pre-fill with current cost
+    setNewSellingPriceInput(product.price); // Pre-fill with current selling price
+    setProductSearchTerm(""); // Clear search
+  };
 
   const handleAddItemToProcess = () => {
-    if (!selectedProductId || Number(quantity) <= 0 || Number(costPrice) < 0) {
+    if (!selectedProductDetails || Number(quantity) <= 0 || costPrice === "" || Number(costPrice) < 0) {
       toast({ variant: "destructive", title: "Invalid Item", description: "Please select a product and enter valid quantity and cost price." });
-      return;
-    }
-    const product = products.find(p => p.id === selectedProductId);
-    if (!product) {
-      toast({ variant: "destructive", title: "Product Not Found", description: "Selected product does not exist." });
       return;
     }
 
     const newItem: ProcessedItem = {
-      originalProductId: product.id, // original product id
-      productId: product.id, // Keep consistent, though in DB it's 'product_id'
-      productName: product.name,
+      productId: selectedProductDetails.id,
+      productName: selectedProductDetails.name,
       quantity: Number(quantity),
       costPrice: Number(costPrice),
       totalCost: Number(quantity) * Number(costPrice),
+      newSellingPrice: newSellingPriceInput !== "" && Number(newSellingPriceInput) !== selectedProductDetails.price ? Number(newSellingPriceInput) : undefined,
     };
 
     setItemsToProcess(prev => [...prev, newItem]);
-    setSelectedProductId("");
+    setSelectedProductDetails(null);
     setQuantity(1);
-    setCostPrice(0);
+    setCostPrice("");
+    setNewSellingPriceInput("");
   };
   
   const handleRemoveItem = (index: number) => {
@@ -133,9 +145,10 @@ export default function ProcessPurchaseInvoicePage() {
       return;
     }
     const itemsForAPI = itemsToProcess.map(item => ({
-        productId: item.originalProductId, // Send the actual product ID
+        productId: item.productId,
         quantity: item.quantity,
         costPrice: item.costPrice,
+        newSellingPrice: item.newSellingPrice, // Will be undefined if not set
     }));
     processMutation.mutate({ invoiceId: invoice.id, data: { processed: true, items: itemsForAPI } });
   };
@@ -189,11 +202,13 @@ export default function ProcessPurchaseInvoicePage() {
     );
   }
 
+  const totalCostOfItems = itemsToProcess.reduce((sum, item) => sum + item.totalCost, 0);
+
   return (
     <AppLayout>
       <PageHeader 
         title={`Process Invoice: ${invoice.invoiceNumber}`} 
-        description={`Supplier: ${invoice.supplierName} | Total: $${invoice.totalAmount.toFixed(2)}`}
+        description={`Supplier: ${invoice.supplierName} | Invoice Total: $${invoice.totalAmount.toFixed(2)}`}
       >
         <Button onClick={() => router.push('/purchase-invoices')} variant="outline">
           <ArrowLeft className="mr-2 h-4 w-4" /> Cancel
@@ -201,65 +216,110 @@ export default function ProcessPurchaseInvoicePage() {
       </PageHeader>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Product Selection and Item Entry Card */}
         <Card className="lg:col-span-1 shadow-lg">
           <CardHeader>
             <CardTitle className="flex items-center"><PlusCircle className="mr-2 h-5 w-5"/>Add Item to Invoice</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div>
-              <label htmlFor="product-select" className="block text-sm font-medium text-foreground mb-1">Product *</label>
-              <Select value={selectedProductId} onValueChange={setSelectedProductId}>
-                <SelectTrigger id="product-select">
-                  <SelectValue placeholder="Select a product" />
-                </SelectTrigger>
-                <SelectContent>
-                  {products.map(p => <SelectItem key={p.id} value={p.id}>{p.name} (Ref: {p.reference})</SelectItem>)}
-                </SelectContent>
-              </Select>
+            {/* Product Search */}
+            <div className="relative">
+              <label htmlFor="product-search" className="block text-sm font-medium text-foreground mb-1">Search Product (Code, Name, Ref) *</label>
+              <div className="relative">
+                <SearchIcon className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input 
+                  id="product-search"
+                  type="text" 
+                  value={productSearchTerm} 
+                  onChange={e => setProductSearchTerm(e.target.value)} 
+                  placeholder="Type to search..."
+                  className="pl-8"
+                  disabled={!!selectedProductDetails}
+                />
+              </div>
+              {productSearchTerm && filteredProductsForSearch.length > 0 && !selectedProductDetails && (
+                <ScrollArea className="absolute z-10 w-full bg-background border rounded-md shadow-lg max-h-48 mt-1">
+                  {filteredProductsForSearch.map(p => (
+                    <div 
+                      key={p.id} 
+                      onClick={() => handleProductSelect(p)}
+                      className="p-2 hover:bg-accent cursor-pointer text-sm"
+                    >
+                      {p.name} ({p.code})
+                    </div>
+                  ))}
+                </ScrollArea>
+              )}
             </div>
-            <div>
-              <label htmlFor="quantity" className="block text-sm font-medium text-foreground mb-1">Quantity *</label>
-              <Input id="quantity" type="number" value={quantity} onChange={e => setQuantity(Number(e.target.value))} placeholder="e.g., 10" min="1"/>
-            </div>
-            <div>
-              <label htmlFor="costPrice" className="block text-sm font-medium text-foreground mb-1">Cost Price (per unit) *</label>
-              <Input id="costPrice" type="number" value={costPrice} onChange={e => setCostPrice(Number(e.target.value))} placeholder="e.g., 25.50" step="0.01" min="0"/>
-            </div>
-            <Button onClick={handleAddItemToProcess} className="w-full">
-              <ShoppingBag className="mr-2 h-4 w-4"/> Add Item
-            </Button>
+
+            {/* Selected Product Details */}
+            {selectedProductDetails && (
+              <Card className="bg-muted/50 p-3 space-y-1">
+                <p className="text-sm font-semibold">{selectedProductDetails.name}</p>
+                <p className="text-xs text-muted-foreground">Code: {selectedProductDetails.code} | Ref: {selectedProductDetails.reference}</p>
+                <p className="text-xs text-muted-foreground">Current Stock: {selectedProductDetails.stock}</p>
+                <p className="text-xs text-muted-foreground">Current Cost: ${selectedProductDetails.cost.toFixed(2)}</p>
+                <p className="text-xs text-muted-foreground">Current Price: ${selectedProductDetails.price.toFixed(2)}</p>
+                <Button variant="link" size="sm" className="p-0 h-auto text-xs" onClick={() => setSelectedProductDetails(null)}>Clear Selection</Button>
+              </Card>
+            )}
+
+            {/* Item Details Inputs */}
+            {selectedProductDetails && (
+              <>
+                <div>
+                  <label htmlFor="quantity" className="block text-sm font-medium text-foreground mb-1">Quantity Received *</label>
+                  <Input id="quantity" type="number" value={quantity} onChange={e => setQuantity(Number(e.target.value))} placeholder="e.g., 10" min="1"/>
+                </div>
+                <div>
+                  <label htmlFor="costPrice" className="block text-sm font-medium text-foreground mb-1">Cost Price (per unit on Invoice) *</label>
+                  <Input id="costPrice" type="number" value={costPrice} onChange={e => setCostPrice(e.target.value)} placeholder="e.g., 25.50" step="0.01" min="0"/>
+                </div>
+                 <div>
+                  <label htmlFor="newSellingPrice" className="block text-sm font-medium text-foreground mb-1">New Selling Price (optional)</label>
+                  <Input id="newSellingPrice" type="number" value={newSellingPriceInput} onChange={e => setNewSellingPriceInput(e.target.value)} placeholder={`Current: $${selectedProductDetails.price.toFixed(2)}`} step="0.01" min="0"/>
+                </div>
+                <Button onClick={handleAddItemToProcess} className="w-full">
+                  <ShoppingBag className="mr-2 h-4 w-4"/> Add Item
+                </Button>
+              </>
+            )}
           </CardContent>
         </Card>
 
+        {/* Items to Process Card */}
         <Card className="lg:col-span-2 shadow-lg">
           <CardHeader>
-            <CardTitle>Items to Process</CardTitle>
+            <CardTitle>Items to Process for this Invoice</CardTitle>
             <CardDescription>
-              Review items before finalizing. Stock levels and product costs will be updated.
+              Review items before finalizing. Stock levels, product costs, and optionally selling prices will be updated.
+              Items Total: <span className="font-bold">${totalCostOfItems.toFixed(2)}</span>
             </CardDescription>
           </CardHeader>
           <CardContent>
             {itemsToProcess.length > 0 ? (
-              <div className="rounded-md border">
+              <ScrollArea className="rounded-md border max-h-96">
                 <Table>
                   <TableHeader>
                     <TableRow>
                       <TableHead>Product</TableHead>
-                      <TableHead className="text-center">Quantity</TableHead>
+                      <TableHead className="text-center">Qty</TableHead>
                       <TableHead className="text-right">Cost/Unit</TableHead>
+                      <TableHead className="text-right">New Price</TableHead>
                       <TableHead className="text-right">Total Cost</TableHead>
                       <TableHead className="text-center">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {itemsToProcess.map((item, index) => (
-                      <TableRow key={index}>
-                        <TableCell className="font-medium">{item.productName}</TableCell>
+                      <TableRow key={item.productId + index}> {/* Ensure key is unique if same product added multiple times */}
+                        <TableCell className="font-medium text-sm">{item.productName}</TableCell>
                         <TableCell className="text-center">{item.quantity}</TableCell>
                         <TableCell className="text-right">${item.costPrice.toFixed(2)}</TableCell>
-                        <TableCell className="text-right">${item.totalCost.toFixed(2)}</TableCell>
+                        <TableCell className="text-right">{item.newSellingPrice ? `$${item.newSellingPrice.toFixed(2)}` : 'N/A'}</TableCell>
+                        <TableCell className="text-right font-semibold">${item.totalCost.toFixed(2)}</TableCell>
                         <TableCell className="text-center">
-                          <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => handleRemoveItem(index)}>
+                          <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive h-8 w-8" onClick={() => handleRemoveItem(index)}>
                             <Trash2 className="h-4 w-4"/>
                           </Button>
                         </TableCell>
@@ -267,7 +327,7 @@ export default function ProcessPurchaseInvoicePage() {
                     ))}
                   </TableBody>
                 </Table>
-              </div>
+              </ScrollArea>
             ) : (
               <p className="text-muted-foreground text-center py-4">No items added for processing yet.</p>
             )}
@@ -283,4 +343,3 @@ export default function ProcessPurchaseInvoicePage() {
     </AppLayout>
   );
 }
-
