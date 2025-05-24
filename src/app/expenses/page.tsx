@@ -85,7 +85,7 @@ export default function ExpensesPage() {
 
   const form = useForm<ExpenseFormValues>({
     resolver: zodResolver(ExpenseFormSchema),
-    defaultValues,
+    defaultValues: defaultFormValues,
   });
 
   const addMutation = useMutation<DailyExpense, Error, ExpenseFormValues>({
