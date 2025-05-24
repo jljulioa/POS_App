@@ -14,6 +14,8 @@ export interface Product {
   price: number;
   imageUrl: string;
   dataAiHint?: string;
+  createdAt?: string; // Added
+  updatedAt?: string; // Added
 }
 
 export interface SaleItem {
@@ -67,6 +69,8 @@ export interface PurchaseInvoice {
   paymentTerms: 'Credit' | 'Cash';
   processed: boolean; // true if items added to inventory, false otherwise
   items?: PurchaseInvoiceItem[]; // Optional: list of items on the invoice, useful for processing
+  createdAt?: string; // Added
+  updatedAt?: string; // Added
 }
 
 // New interface for Sales Tickets
@@ -144,3 +148,4 @@ export const mockPurchaseInvoices: PurchaseInvoice[] = [
   { id: 'PI003', invoiceNumber: 'INV-SUPPLIER-A-1005', invoiceDate: '2024-07-22', supplierName: 'Supplier Alpha Parts', totalAmount: 2300.50, paymentTerms: 'Credit', processed: false },
   { id: 'PI004', invoiceNumber: 'INV-SUPPLIER-C-0012', invoiceDate: '2024-07-25', supplierName: 'Performance Imports', totalAmount: 550.20, paymentTerms: 'Cash', processed: true, items: [ {productId: 'P008', productName: 'Exhaust Akrapovic', quantity: 1, costPrice: 440.00, totalCost: 440.00 }]},
 ];
+

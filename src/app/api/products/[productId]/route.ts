@@ -5,8 +5,6 @@ import { query } from '@/lib/db';
 import { z } from 'zod';
 import type { Product } from '@/lib/mockData';
 
-// Zod schema for product update, similar to creation but all fields can be optional for partial updates if needed
-// For now, let's assume a full update is required or use .partial() if partial updates are desired.
 const ProductUpdateSchema = z.object({
   name: z.string().min(3),
   code: z.string().min(3),
@@ -23,31 +21,42 @@ const ProductUpdateSchema = z.object({
   dataAiHint: z.string().max(50).optional(),
 });
 
+// Re-use or ensure consistency with the parseProductFromDB in the main products route
 const parseProductFromDB = (dbProduct: any): Product => {
-  if (!dbProduct) return null as any; // Handle case where product might not be found
+  if (!dbProduct) return null as any;
+  const stock = parseInt(dbProduct.stock, 10);
+  const minStock = parseInt(dbProduct.minstock, 10);
+  const maxStockValue = dbProduct.maxstock !== null && dbProduct.maxstock !== undefined ? dbProduct.maxstock : 0;
+  const maxStock = parseInt(String(maxStockValue), 10);
+  const cost = parseFloat(dbProduct.cost);
+  const price = parseFloat(dbProduct.price);
+
   return {
-    id: dbProduct.id,
+    id: String(dbProduct.id),
     name: dbProduct.name,
     code: dbProduct.code,
     reference: dbProduct.reference,
     barcode: dbProduct.barcode,
-    stock: parseInt(dbProduct.stock, 10),
+    stock: !isNaN(stock) ? stock : 0,
     category: dbProduct.category,
     brand: dbProduct.brand,
-    minStock: parseInt(dbProduct.minstock, 10),
-    maxStock: dbProduct.maxstock !== null ? parseInt(dbProduct.maxstock, 10) : 0,
-    cost: parseFloat(dbProduct.cost),
-    price: parseFloat(dbProduct.price),
+    minStock: !isNaN(minStock) ? minStock : 0,
+    maxStock: !isNaN(maxStock) ? maxStock : 0,
+    cost: !isNaN(cost) ? cost : 0,
+    price: !isNaN(price) ? price : 0,
     imageUrl: dbProduct.imageurl,
     dataAiHint: dbProduct.dataaihint,
+    createdAt: dbProduct.createdat ? new Date(dbProduct.createdat).toISOString() : undefined,
+    updatedAt: dbProduct.updatedat ? new Date(dbProduct.updatedat).toISOString() : undefined,
   };
 };
+
 
 // GET handler to fetch a single product by ID
 export async function GET(request: NextRequest, { params }: { params: { productId: string } }) {
   const { productId } = params;
   try {
-    const dbProducts = await query('SELECT id, name, code, reference, barcode, stock, category, brand, minstock, maxstock, cost, price, imageurl, dataaihint FROM Products WHERE id = $1', [productId]);
+    const dbProducts = await query('SELECT id, name, code, reference, barcode, stock, category, brand, minstock, maxstock, cost, price, imageurl, dataaihint, createdat, updatedat FROM Products WHERE id = $1', [productId]);
     if (dbProducts.length === 0) {
       return NextResponse.json({ message: 'Product not found' }, { status: 404 });
     }
@@ -78,6 +87,7 @@ export async function PUT(request: NextRequest, { params }: { params: { productI
     const finalImageUrl = imageUrl || `https://placehold.co/100x100.png?text=${name.substring(0,3)}`;
     const finalDataAiHint = dataAiHint || (name.split(' ').slice(0,2).join(' ') || "product");
 
+    // 'updatedat' will be handled by the database trigger.
     const sql = `
       UPDATE products
       SET name = $1, code = $2, reference = $3, barcode = $4, stock = $5, category = $6, brand = $7,
@@ -112,10 +122,6 @@ export async function PUT(request: NextRequest, { params }: { params: { productI
 export async function DELETE(request: NextRequest, { params }: { params: { productId: string } }) {
   const { productId } = params;
   try {
-    // Before deleting, you might want to check if the product is part of any sales records
-    // or other entities, depending on your foreign key constraints (e.g., SET NULL, RESTRICT).
-    // For simplicity, we'll directly attempt deletion here.
-    // If there are foreign key constraints that prevent deletion, the query will fail.
     const result = await query('DELETE FROM Products WHERE id = $1 RETURNING id', [productId]);
 
     if (result.length === 0) {
@@ -125,8 +131,6 @@ export async function DELETE(request: NextRequest, { params }: { params: { produ
     return NextResponse.json({ message: `Product ${productId} deleted successfully` }, { status: 200 });
   } catch (error) {
     console.error(`Failed to delete product ${productId}:`, error);
-    // Handle potential foreign key violation errors if the product is referenced elsewhere
-    // PostgreSQL error code for foreign_key_violation is '23503'
     if (error instanceof Error && (error as any).code === '23503') {
         return NextResponse.json({ message: 'Failed to delete product: It is referenced in other records (e.g., sales).', error: (error as Error).message }, { status: 409 });
     }

@@ -5,18 +5,18 @@ import { query, getPool } from '@/lib/db';
 import { z } from 'zod';
 import type { PurchaseInvoice, PurchaseInvoiceItem, Product } from '@/lib/mockData';
 
-// Helper function (can be shared or defined per route if specific parsing is needed)
 const parsePurchaseInvoiceFromDB = (dbInvoice: any, items?: PurchaseInvoiceItem[]): PurchaseInvoice => {
   return {
     id: dbInvoice.id,
     invoiceNumber: dbInvoice.invoicenumber,
-    invoiceDate: new Date(dbInvoice.invoicedate).toISOString().split('T')[0], // Format as YYYY-MM-DD
+    invoiceDate: new Date(dbInvoice.invoicedate).toISOString().split('T')[0],
     supplierName: dbInvoice.suppliername,
     totalAmount: parseFloat(dbInvoice.totalamount),
     paymentTerms: dbInvoice.paymentterms,
     processed: dbInvoice.processed,
-    items: items || [], // Populate if items are fetched
-    // No createdAt or updatedAt as they are not in the user's schema for this table
+    items: items || [],
+    createdAt: dbInvoice.createdat ? new Date(dbInvoice.createdat).toISOString() : undefined,
+    updatedAt: dbInvoice.updatedat ? new Date(dbInvoice.updatedat).toISOString() : undefined,
   };
 };
 
@@ -52,14 +52,12 @@ const InvoiceUpdateSchema = z.object({
 export async function GET(request: NextRequest, { params }: { params: { invoiceId: string } }) {
   const { invoiceId } = params;
   try {
-    // Removed 'createdat' and 'updatedat' from SELECT as they are not in the user's schema
-    const invoiceResult = await query('SELECT id, invoicenumber, invoicedate, suppliername, totalamount, paymentterms, processed FROM PurchaseInvoices WHERE id = $1', [invoiceId]);
+    const invoiceResult = await query('SELECT id, invoicenumber, invoicedate, suppliername, totalamount, paymentterms, processed, createdat, updatedat FROM PurchaseInvoices WHERE id = $1', [invoiceId]);
     if (invoiceResult.length === 0) {
       return NextResponse.json({ message: 'Purchase invoice not found' }, { status: 404 });
     }
     
     let items: PurchaseInvoiceItem[] = [];
-    // If invoice is processed, items might exist (or might not if processing failed or items weren't saved for some reason)
     if (invoiceResult[0].processed === true) {
         const itemsResult = await query('SELECT id, purchase_invoice_id, product_id, productname, quantity, costprice, totalcost FROM PurchaseInvoiceItems WHERE purchase_invoice_id = $1', [invoiceId]);
         items = itemsResult.map(parsePurchaseInvoiceItemFromDB);
@@ -73,7 +71,7 @@ export async function GET(request: NextRequest, { params }: { params: { invoiceI
   }
 }
 
-// PUT handler to update an existing purchase invoice (e.g., mark as processed, update items during processing)
+// PUT handler to update an existing purchase invoice
 export async function PUT(request: NextRequest, { params }: { params: { invoiceId: string } }) {
   const { invoiceId } = params;
   const pool = await getPool();
@@ -84,7 +82,6 @@ export async function PUT(request: NextRequest, { params }: { params: { invoiceI
     const validation = InvoiceUpdateSchema.safeParse(body);
 
     if (!validation.success) {
-      await client.query('ROLLBACK').catch(err => console.error('Rollback failed on validation error:', err)); 
       client.release();
       console.error("InvoiceUpdateSchema validation error:", validation.error.format());
       return NextResponse.json({ message: 'Invalid purchase invoice data for update', errors: validation.error.format() }, { status: 400 });
@@ -95,25 +92,32 @@ export async function PUT(request: NextRequest, { params }: { params: { invoiceI
     await client.query('BEGIN');
 
     const updateFields: string[] = [];
-    const queryParams: any[] = [invoiceId];
-    let paramIndex = 2;
+    const queryParams: any[] = [];
+    let paramIndex = 1; // Start param index for actual values
 
-    if (invoiceNumber !== undefined) { updateFields.push(`invoicenumber = $${paramIndex++}`); queryParams.push(invoiceNumber); }
-    if (invoiceDate !== undefined) { updateFields.push(`invoicedate = $${paramIndex++}`); queryParams.push(invoiceDate); }
-    if (supplierName !== undefined) { updateFields.push(`suppliername = $${paramIndex++}`); queryParams.push(supplierName); }
-    if (totalAmount !== undefined) { updateFields.push(`totalamount = $${paramIndex++}`); queryParams.push(totalAmount); }
-    if (paymentTerms !== undefined) { updateFields.push(`paymentterms = $${paramIndex++}`); queryParams.push(paymentTerms); }
-
-    // No 'updatedat' column, so no trigger or explicit set for it.
+    // Build SET clause dynamically
+    const addParam = (value: any) => {
+        queryParams.push(value);
+        return `$${paramIndex++}`;
+    };
+    
+    if (invoiceNumber !== undefined) { updateFields.push(`invoicenumber = ${addParam(invoiceNumber)}`); }
+    if (invoiceDate !== undefined) { updateFields.push(`invoicedate = ${addParam(invoiceDate)}`); }
+    if (supplierName !== undefined) { updateFields.push(`suppliername = ${addParam(supplierName)}`); }
+    if (totalAmount !== undefined) { updateFields.push(`totalamount = ${addParam(totalAmount)}`); }
+    if (paymentTerms !== undefined) { updateFields.push(`paymentterms = ${addParam(paymentTerms)}`); }
+    
+    // The DB trigger handles 'updatedat'
     if (updateFields.length > 0) {
         const updateInvoiceSql = `
           UPDATE PurchaseInvoices
-          SET ${updateFields.join(', ')} 
-          WHERE id = $1
+          SET ${updateFields.join(', ')}
+          WHERE id = ${addParam(invoiceId)} 
           RETURNING *;
         `;
         await client.query(updateInvoiceSql, queryParams);
     }
+
 
     if (processed === true && items && items.length > 0) {
         // Mark invoice as processed first
@@ -137,10 +141,9 @@ export async function PUT(request: NextRequest, { params }: { params: { invoiceI
                     quantity = PurchaseInvoiceItems.quantity + EXCLUDED.quantity, 
                     costPrice = EXCLUDED.costPrice, 
                     totalCost = PurchaseInvoiceItems.totalCost + EXCLUDED.totalCost,
-                    productName = EXCLUDED.productName -- Use product name from productInfo
+                    productName = EXCLUDED.productName
                 RETURNING *;
             `;
-            // Use productInfo.name for productName when inserting/updating invoice items
             await client.query(itemInsertSql, [invoiceId, item.productId, productInfo.name, item.quantity, item.costPrice, item.quantity * item.costPrice]);
             
             let productUpdateSql = `
@@ -159,7 +162,7 @@ export async function PUT(request: NextRequest, { params }: { params: { invoiceI
             await client.query(productUpdateSql, productUpdateParams);
 
             const currentInvoiceDataResult = await client.query('SELECT invoicenumber FROM PurchaseInvoices WHERE id = $1', [invoiceId]);
-            const currentInvoiceNumber = currentInvoiceDataResult.rows[0]?.invoicenumber || invoiceId; // Fallback to invoiceId if number somehow not found
+            const currentInvoiceNumber = currentInvoiceDataResult.rows[0]?.invoicenumber || invoiceId;
             
             const transactionSql = `
               INSERT INTO InventoryTransactions (product_id, product_name, transaction_type, quantity_change, stock_before, stock_after, related_document_id, notes)
@@ -176,21 +179,20 @@ export async function PUT(request: NextRequest, { params }: { params: { invoiceI
               `Received ${item.quantity} units from supplier invoice ${currentInvoiceNumber}. Cost updated to ${item.costPrice}. ${item.newSellingPrice !== undefined && item.newSellingPrice !== null ? `Price updated to ${item.newSellingPrice}.`:''}`
             ]);
         }
-    } else if (processed === true && !updateFields.some(f => f.startsWith('processed'))) {
+    } else if (processed === true && (queryParams.length === 0 || (queryParams.length > 0 && !updateFields.some(f => f.startsWith('processed'))))) {
+        // If only marking as processed, or if processed is true and other fields were updated too.
         await client.query('UPDATE PurchaseInvoices SET processed = TRUE WHERE id = $1', [invoiceId]);
-    } else if (processed === false && !updateFields.some(f => f.startsWith('processed'))) {
-        // Note: Reverting a processed invoice is complex and typically not done by just flipping 'processed' to false.
-        // Stock levels would need manual adjustment or a "reverse processing" feature.
-        // For now, we allow setting to false, but it doesn't undo stock changes.
-        await client.query('UPDATE PurchaseInvoices SET processed = FALSE WHERE id = $1', [invoiceId]);
+    } else if (processed === false && (queryParams.length === 0 || (queryParams.length > 0 && !updateFields.some(f => f.startsWith('processed'))))) {
+         await client.query('UPDATE PurchaseInvoices SET processed = FALSE WHERE id = $1', [invoiceId]);
     }
+
 
     await client.query('COMMIT');
 
-    const updatedInvoiceResult = await client.query('SELECT * FROM PurchaseInvoices WHERE id = $1', [invoiceId]);
+    const updatedInvoiceResult = await client.query('SELECT id, invoicenumber, invoicedate, suppliername, totalamount, paymentterms, processed, createdat, updatedat FROM PurchaseInvoices WHERE id = $1', [invoiceId]);
     let finalItems: PurchaseInvoiceItem[] = [];
     if (updatedInvoiceResult.rows[0] && updatedInvoiceResult.rows[0].processed) {
-        const updatedItemsResult = await client.query('SELECT * FROM PurchaseInvoiceItems WHERE purchase_invoice_id = $1', [invoiceId]);
+        const updatedItemsResult = await client.query('SELECT id, purchase_invoice_id, product_id, productname, quantity, costprice, totalcost FROM PurchaseInvoiceItems WHERE purchase_invoice_id = $1', [invoiceId]);
         finalItems = updatedItemsResult.rows.map(parsePurchaseInvoiceItemFromDB);
     }
     
@@ -220,37 +222,26 @@ export async function DELETE(request: NextRequest, { params }: { params: { invoi
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    // Check if invoice was processed. We might want different behavior or warnings
-    // if deleting a processed invoice, as stock levels won't be automatically reverted.
     const invoiceStatusResult = await client.query('SELECT processed FROM PurchaseInvoices WHERE id = $1', [invoiceId]);
     if (invoiceStatusResult.rows.length === 0) {
       await client.query('ROLLBACK');
       client.release();
       return NextResponse.json({ message: 'Purchase invoice not found.' }, { status: 404 });
     }
-    // const isProcessed = invoiceStatusResult.rows[0].processed;
 
-    // First delete related items to avoid foreign key constraint violations
     await client.query('DELETE FROM PurchaseInvoiceItems WHERE purchase_invoice_id = $1', [invoiceId]);
-    // Then delete the invoice itself
     const result = await client.query('DELETE FROM PurchaseInvoices WHERE id = $1 RETURNING id', [invoiceId]);
     await client.query('COMMIT');
 
-    if (result.rowCount === 0) { // Check rowCount for DELETE
-      // This case might not be reached if the select before already confirmed existence
+    if (result.rowCount === 0) {
       return NextResponse.json({ message: 'Purchase invoice not found or already deleted' }, { status: 404 });
     }
-    // Add a note about stock if it was processed.
-    // const message = `Purchase invoice ${invoiceId} and its items deleted successfully.` + 
-    //                 (isProcessed ? " Stock levels NOT automatically reverted." : "");
     return NextResponse.json({ message: `Purchase invoice ${invoiceId} and its items deleted successfully. Stock levels NOT automatically reverted.` }, { status: 200 });
   } catch (error) {
     await client.query('ROLLBACK').catch(err => console.error('Rollback failed on delete error:', err));
     console.error(`Failed to delete purchase invoice ${invoiceId}:`, error);
-    // Check for foreign key violations is usually handled by deleting items first,
-    // but if other constraints exist, this might be relevant.
     if (error instanceof Error && (error as any).code === '23503') {
-        return NextResponse.json({ message: 'Failed to delete purchase invoice: It may have associated items that need to be removed first or other integrity constraints.', error: (error as Error).message }, { status: 409 });
+        return NextResponse.json({ message: 'Failed to delete purchase invoice: It may have associated items or other integrity constraints.', error: (error as Error).message }, { status: 409 });
     }
     return NextResponse.json({ message: 'Failed to delete purchase invoice', error: (error as Error).message }, { status: 500 });
   } finally {
