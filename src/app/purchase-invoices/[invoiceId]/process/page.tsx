@@ -8,7 +8,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import type { PurchaseInvoice, PurchaseInvoiceItem, Product } from '@/lib/mockData';
 import { useParams, useRouter } from 'next/navigation';
 import React, { useEffect, useState } from 'react';
-import { ArrowLeft, CheckCircle, Loader2, AlertTriangle, ShoppingBag, PlusCircle } from 'lucide-react';
+import { ArrowLeft, CheckCircle, Loader2, AlertTriangle, ShoppingBag, PlusCircle, Trash2 } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useToast } from '@/hooks/use-toast';
 import { Input } from '@/components/ui/input';
@@ -81,6 +81,7 @@ export default function ProcessPurchaseInvoicePage() {
       queryClient.invalidateQueries({ queryKey: ['purchaseInvoices'] });
       queryClient.invalidateQueries({ queryKey: ['purchaseInvoice', invoiceId] });
       queryClient.invalidateQueries({ queryKey: ['products'] }); // Invalidate products to reflect stock changes
+      queryClient.invalidateQueries({ queryKey: ['inventoryTransactions']}); // Invalidate transactions
       router.push('/purchase-invoices');
     },
     onError: (error) => {
@@ -282,3 +283,4 @@ export default function ProcessPurchaseInvoicePage() {
     </AppLayout>
   );
 }
+
