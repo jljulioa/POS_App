@@ -13,3 +13,4 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ message: 'Failed to fetch product stats', error: (error as Error).message }, { status: 500 });
   }
 }
+

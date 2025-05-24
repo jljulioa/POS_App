@@ -80,57 +80,98 @@ const processReturnAPI = async (returnData: z.infer<typeof ProcessReturnSchema>)
 
 // Helper function to generate HTML for the sales receipt
 const generateSaleReceiptHtml = (sale: Sale | null): string => {
-  if (!sale || !sale.items || sale.items.length === 0) {
-    return `<div style="width: 280px; padding: 10px; font-family: 'Courier New', Courier, monospace; border: 1px solid #ccc;"><p>No items in receipt or sale data missing.</p></div>`;
+  if (!sale) {
+    return `<p>No sale data available for receipt.</p>`;
   }
 
   const itemsHtml = sale.items.map(item => `
-    <tr>
-      <td style="padding: 2px 5px 2px 0; vertical-align: top; font-size: 10px; border-bottom: 1px dotted #ccc; word-break: break-word;">
-        ${item.quantity} x ${item.productName || 'N/A Product'}
-      </td>
-      <td style="text-align: right; vertical-align: top; font-size: 10px; border-bottom: 1px dotted #ccc; padding: 2px 0;">${Number(item.unitPrice).toFixed(2)}</td>
-      <td style="text-align: right; vertical-align: top; font-size: 10px; border-bottom: 1px dotted #ccc; padding: 2px 0 2px 5px;">${Number(item.totalPrice).toFixed(2)}</td>
+    <tr class="item">
+      <td>${item.productName}</td>
+      <td>${item.productName}</td> 
+      <td>${item.quantity}</td>
+      <td>$${Number(item.totalPrice).toFixed(2)}</td>
     </tr>
   `).join('');
 
   return `
-    <div id="receipt-content-${sale.id}" style="width: 280px; font-family: 'Courier New', Courier, monospace; color: black; background-color: white; padding: 10px; border: 1px solid #eee; box-shadow: 0 0 5px rgba(0,0,0,0.1); margin: auto;">
-      <div style="text-align: center; margin-bottom: 8px;">
-        <h2 style="font-size: 16px; font-weight: bold; margin: 0 0 2px 0;">MotoFox POS</h2>
-        <p style="font-size: 9px; margin:0;">Your Motorcycle Parts Specialist</p>
-      </div>
-      <hr style="border: none; border-top: 1px dashed #000; margin: 5px 0;" />
-      <div style="font-size: 9px;">
-        <p style="margin: 0;">Receipt No: ${sale.id}</p>
-        <p style="margin: 0;">Date: ${format(new Date(sale.date), 'dd/MM/yyyy HH:mm:ss')}</p>
-        ${sale.cashierId ? `<p style="margin: 0;">Cashier: ${sale.cashierId}</p>` : ''}
-        ${sale.customerName ? `<p style="margin: 0;">Customer: ${sale.customerName}</p>` : ''}
-      </div>
-      <hr style="border: none; border-top: 1px dashed #000; margin: 5px 0;" />
-      <table style="width: 100%; border-collapse: collapse; margin-bottom: 5px;">
-        <thead>
-          <tr>
-            <th style="text-align: left; padding: 2px 5px 2px 0; border-bottom: 1px solid #ccc; font-size: 10px;">Item</th>
-            <th style="text-align: right; padding: 2px 0; border-bottom: 1px solid #ccc; font-size: 10px;">Price</th>
-            <th style="text-align: right; padding: 2px 0 2px 5px; border-bottom: 1px solid #ccc; font-size: 10px;">Total</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${itemsHtml}
-        </tbody>
+  <!DOCTYPE html>
+  <html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>Invoice - ${sale.id}</title>
+    <style>
+      body { font-family: Arial, sans-serif; margin: 0; padding: 0; color: #333; background-color: #fff; }
+      .invoice-box { max-width: 800px; margin: 20px auto; padding: 30px; border: 1px solid #eee; box-shadow: 0 0 10px rgba(0, 0, 0, 0.15); }
+      .invoice-box table { width: 100%; line-height: inherit; text-align: left; border-collapse: collapse; }
+      .invoice-box table td { padding: 8px; vertical-align: top; }
+      .invoice-box table tr.top table td { padding-bottom: 20px; border-bottom: 2px solid #ddd; }
+      .invoice-box table tr.information table td { padding-bottom: 20px; border-bottom: 1px dashed #ccc; }
+      .invoice-box table tr.heading td { background: #eee; border-bottom: 1px solid #ddd; font-weight: bold; }
+      .invoice-box table tr.item td { border-bottom: 1px solid #eee; }
+      .invoice-box table tr.item:last-child td { border-bottom: none; }
+      .invoice-box table tr.total td:nth-child(3), .invoice-box table tr.total td:nth-child(4) { border-top: 2px solid #eee; font-weight: bold; text-align: right; }
+      .company-details { text-align: left; font-size: 1.2em; }
+      .invoice-details { text-align: right; }
+      .client-details-left { text-align: left; }
+      .client-details-right { text-align: left; } /* Adjusted to left for consistency as per example, but often client info is right */
+      .footer-note { margin-top: 30px; font-size: 0.9em; color: #666; text-align: center; }
+      @media print {
+        body { margin: 0; background-color: #fff; -webkit-print-color-adjust: exact; print-color-adjust: exact;}
+        .invoice-box { box-shadow: none; border: none; margin: 0; padding: 10px; max-width: 100%; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="invoice-box">
+      <table cellpadding="0" cellspacing="0">
+        <tr class="top">
+          <td colspan="4">
+            <table>
+              <tr>
+                <td class="company-details"><strong>MotoFox POS</strong></td>
+                <td class="invoice-details">
+                  Receipt #: ${sale.id}<br/>
+                  Date: ${format(new Date(sale.date), 'PPpp')}<br/>
+                  Cashier: ${sale.cashierId || 'N/A'}
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+        ${sale.customerName ? `
+        <tr class="information">
+          <td colspan="4">
+            <table>
+              <tr>
+                <td class="client-details-left">
+                  Customer:<br/>
+                  ${sale.customerName}
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>` : ''}
+        <tr class="heading">
+          <td>Item</td>
+          <td>Description</td>
+          <td style="text-align: center;">Qty</td>
+          <td style="text-align: right;">Total Price</td>
+        </tr>
+        ${itemsHtml}
+        <tr class="total">
+          <td colspan="2"></td>
+          <td style="text-align: right;"><strong>Total:</strong></td>
+          <td style="text-align: right;"><strong>$${Number(sale.totalAmount).toFixed(2)}</strong></td>
+        </tr>
       </table>
-      <hr style="border: none; border-top: 1px dashed #000; margin: 5px 0;" />
-      <div style="text-align: right; margin-top: 8px;">
-        <div style="font-size: 14px; font-weight: bold;">TOTAL: $${Number(sale.totalAmount).toFixed(2)}</div>
-      </div>
-      ${sale.paymentMethod ? `<div style="font-size: 10px; text-align: right; margin-top: 3px;">Payment: ${sale.paymentMethod}</div>` : ''}
-      <hr style="border: none; border-top: 1px solid #000; margin: 8px 0;" />
-      <div style="text-align: center; margin-top: 10px; font-size: 10px;">
-        Thank you for your purchase!
-        <br>MotoFox POS - We keep you riding!
+      <div class="footer-note">
+        <p>Payment Method: ${sale.paymentMethod}</p>
+        <p><strong>Thank you for your business!</strong></p>
       </div>
     </div>
+  </body>
+  </html>
   `;
 };
 
@@ -144,7 +185,7 @@ export default function SalesPage() {
   const [isViewModalOpen, setIsViewModalOpen] = useState(false);
   const [isReturnModalOpen, setIsReturnModalOpen] = useState(false);
   const [returnItems, setReturnItems] = useState<ReturnItemFormValues>({});
-
+  
   const [isPrintingReceipt, setIsPrintingReceipt] = useState(false);
   const receiptHtmlRef = useRef<HTMLDivElement>(null);
 
@@ -155,7 +196,7 @@ export default function SalesPage() {
   const { data: sales = [], isLoading, error, isError, refetch } = useQuery<Sale[], Error>({
     queryKey: ['sales', startDate, endDate],
     queryFn: () => fetchSales(startDate, endDate),
-    enabled: true,
+    enabled: true, // Fetch on mount and when queryKey changes
     onError: (err) => {
       toast({
         variant: "destructive",
@@ -185,7 +226,7 @@ export default function SalesPage() {
       initialReturnItems[item.productId] = { quantity: 0, unitPrice: item.unitPrice, maxQuantity: item.quantity };
     });
     setReturnItems(initialReturnItems);
-    setIsViewModalOpen(false);
+    setIsViewModalOpen(false); // Close view modal before opening return modal
     setIsReturnModalOpen(true);
   };
 
@@ -231,7 +272,7 @@ export default function SalesPage() {
       queryClient.invalidateQueries({ queryKey: ['products'] });
       queryClient.invalidateQueries({ queryKey: ['sales', startDate, endDate] });
       queryClient.invalidateQueries({ queryKey: ['todaysSales'] });
-      queryClient.invalidateQueries({ queryKey: ['inventoryTransactions'] });
+      queryClient.invalidateQueries({ queryKey: ['inventoryTransactions']});
       setIsReturnModalOpen(false);
       setSelectedSale(null);
     },
@@ -278,60 +319,53 @@ export default function SalesPage() {
       toast({ variant: 'destructive', title: 'Print Error', description: 'No sale selected, print already in progress, or print area not ready.' });
       return;
     }
-
     setIsPrintingReceipt(true);
     console.log("Printing sale:", JSON.stringify(saleToPrint));
 
     const htmlContent = generateSaleReceiptHtml(saleToPrint);
     console.log("Generated HTML for receipt:", htmlContent.substring(0, 300) + "...");
 
+    if (!receiptHtmlRef.current) {
+        console.error("receiptHtmlRef.current is null");
+        setIsPrintingReceipt(false);
+        return;
+    }
     receiptHtmlRef.current.innerHTML = htmlContent;
     console.log("receiptHtmlRef.current.innerHTML (after set):", receiptHtmlRef.current.innerHTML.substring(0, 300) + "...");
-
-
+    
     // Give the browser a moment to render the injected HTML
     setTimeout(async () => {
       try {
-        if (!receiptHtmlRef.current || receiptHtmlRef.current.innerHTML.trim() === "" || !receiptHtmlRef.current.hasChildNodes()) {
+        const elementToPrint = receiptHtmlRef.current;
+        if (!elementToPrint || elementToPrint.innerHTML.trim() === "" || !elementToPrint.hasChildNodes()) {
           console.error("Printable element is empty or not found after timeout. Sale data for render:", JSON.stringify(saleToPrint));
           toast({
             variant: 'destructive',
             title: 'Print Error',
             description: 'Failed to prepare receipt content for printing. Please try again.',
           });
+          if (receiptHtmlRef.current) receiptHtmlRef.current.innerHTML = ''; // Clear on error
           setIsPrintingReceipt(false);
-          if (receiptHtmlRef.current) receiptHtmlRef.current.innerHTML = '';
           return;
         }
         
-        console.log("Element to print innerHTML (before html2pdf):", receiptHtmlRef.current.innerHTML.substring(0, 300) + "...");
-
+        console.log("Element to print innerHTML (before html2pdf):", elementToPrint.innerHTML.substring(0, 300) + "...");
         const html2pdf = (await import('html2pdf.js')).default;
-        
-        const elementToPrint = receiptHtmlRef.current.querySelector(`#receipt-content-${saleToPrint.id}`) as HTMLElement;
-
-        if (!elementToPrint) {
-            console.error("Could not find the specific receipt div to print (#receipt-content-" + saleToPrint.id + ")");
-            toast({ variant: 'destructive', title: 'Print Error', description: 'Receipt content wrapper not found for PDF generation.' });
-            setIsPrintingReceipt(false);
-            if (receiptHtmlRef.current) receiptHtmlRef.current.innerHTML = '';
-            return;
-        }
         
         const options = {
           margin:       [2, 2, 2, 2], // mm [top, left, bottom, right]
-          filename:     `receipt_${saleToPrint.id}.pdf`,
+          filename:     `receipt_${saleToPrint.id.replace(/\s+/g, '_')}.pdf`,
           image:        { type: 'jpeg', quality: 0.98 },
           html2canvas:  { 
-            scale: 3, 
+            scale: 2, 
             logging: true, // Enable for detailed logs from html2canvas
             useCORS: true,
-            width: 280, // Explicit width in pixels, matching the receipt HTML style
-            windowWidth: 280, // Explicit window width
+            width: 800, // Corresponds to max-width in CSS
+            windowWidth: typeof window !== 'undefined' ? window.innerWidth : 1024,
           },
           jsPDF:        { 
             unit: 'mm', 
-            format: [76, 'auto'], // Approx 3-inch width receipt, auto height
+            format: 'a4', 
             orientation: 'portrait' 
           },
         };
@@ -352,7 +386,7 @@ export default function SalesPage() {
           receiptHtmlRef.current.innerHTML = ''; // Clear the div after printing
         }
       }
-    }, 300); // Increased delay
+    }, 300);
   };
 
 
@@ -453,7 +487,7 @@ export default function SalesPage() {
                 mode="single"
                 selected={endDate}
                 onSelect={setEndDate}
-                disabled={{ before: startDate }}
+                disabled={startDate ? { before: startDate } : undefined}
                 initialFocus
               />
             </PopoverContent>
@@ -636,7 +670,7 @@ export default function SalesPage() {
         </Dialog>
       )}
       {/* Hidden div for printing receipts */}
-      <div ref={receiptHtmlRef} style={{ position: 'absolute', left: '-9999px', top: '-9999px', zIndex: -100 }}></div>
+      <div ref={receiptHtmlRef} style={{ position: 'absolute', left: '-9999px', top: '-9999px', zIndex: -100, width: '800px', backgroundColor: 'white' }}></div>
     </AppLayout>
   );
 }
