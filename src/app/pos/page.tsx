@@ -96,10 +96,10 @@ const deleteSalesTicketAPI = async (ticketId: string): Promise<{ message: string
 };
 
 const generateTicketHtml = (ticketName: string, items: SaleItemForTicket[], totalAmount: number, currentDate: string): string => {
-  console.log("generateTicketHtml called with items:", JSON.stringify(items)); // DEBUG
+  console.log("generateTicketHtml called with items:", JSON.stringify(items));
   if (!items || items.length === 0) {
-    console.log("generateTicketHtml: No items to print.");
-    return "<p>No items in ticket.</p>"; // Return minimal HTML if no items
+    console.log("generateTicketHtml: No items in ticket.");
+    return "<p>No items in ticket.</p>";
   }
 
   const itemsHtml = items.map(item => `
@@ -151,7 +151,7 @@ const generateTicketHtml = (ticketName: string, items: SaleItemForTicket[], tota
       </div>
     </div>
   `;
-  console.log("Generated HTML (end of generateTicketHtml):", html.substring(0, 500) + "..."); // DEBUG
+  console.log("Generated HTML for PDF (end of generateTicketHtml):", html.substring(0, 500) + "...");
   return html;
 };
 
@@ -195,7 +195,7 @@ export default function POSPage() {
       status: 'Active',
     });
     setSearchTerm('');
-  }, [queryClient]);
+  }, [queryClient, createTicketMutation]);
 
 
   const createTicketMutation = useMutation<SalesTicketDB, Error, Pick<SalesTicketDB, 'name' | 'cart_items' | 'status'>>({
@@ -203,7 +203,7 @@ export default function POSPage() {
     onSuccess: (newTicket) => {
       queryClient.setQueryData(['salesTickets'], (oldData: SalesTicketDB[] = []) => [...oldData, newTicket] );
       queryClient.invalidateQueries({ queryKey: ['salesTickets'] });
-      setActiveTicketId(newTicket.id); // Switch to the new ticket immediately
+      setActiveTicketId(newTicket.id);
       toast({ title: 'Ticket Created', description: `${newTicket.name} has been created.` });
     },
     onError: (error) => {
@@ -235,7 +235,7 @@ export default function POSPage() {
       );
     },
     onError: (error) => {
-      toast({ variant: 'destructive', title: 'Error Updating Ticket', description: error.message });
+      toast({ variant: 'destructive', title: 'Failed to Update Sales Ticket', description: error.message });
       refetchSalesTickets(); 
     },
   });
@@ -244,7 +244,7 @@ export default function POSPage() {
     mutationFn: deleteSalesTicketAPI,
     onSuccess: (data, deletedTicketId) => {
       toast({ title: 'Ticket Closed', description: `The ticket has been closed.` });
-      if (finalizedTicketIdRef.current === deletedTicketId) {
+       if (finalizedTicketIdRef.current === deletedTicketId) {
            finalizedTicketIdRef.current = null;
       }
       queryClient.setQueryData(['salesTickets'], (oldData: SalesTicketDB[] | undefined) =>
@@ -255,19 +255,19 @@ export default function POSPage() {
         if (activeTicketId === deletedTicketId) {
             if (currentTickets.length > 0) {
                 const sortedTickets = [...currentTickets].sort((a, b) => new Date(b.last_updated_at).getTime() - new Date(a.last_updated_at).getTime());
-                setActiveTicketId(sortedTickets[0].id);
+                 setTimeout(() => setActiveTicketId(sortedTickets[0].id), 100);
             } else {
-                setTimeout(() => handleCreateNewTicket(true), 250); 
+                setTimeout(() => handleCreateNewTicket(true), 260); 
             }
         } else if (currentTickets.length === 0) {
-             setTimeout(() => handleCreateNewTicket(true), 250); 
+             setTimeout(() => handleCreateNewTicket(true), 270); 
         }
       });
       setSearchTerm(''); 
     },
     onError: (error, variables_ticketIdAttempted) => {
       toast({ variant: 'destructive', title: 'Error Closing Ticket', description: error.message });
-      if (finalizedTicketIdRef.current === variables_ticketIdAttempted) {
+       if (finalizedTicketIdRef.current === variables_ticketIdAttempted) {
           finalizedTicketIdRef.current = null;
       }
     },
@@ -510,13 +510,13 @@ export default function POSPage() {
     saleApiMutation.mutate(saleData);
   };
 
- const handlePrintCurrentTicket = useCallback(async () => {
+  const handlePrintCurrentTicket = useCallback(async () => {
     if (!activeTicket || activeTicket.cart_items.length === 0) {
       toast({ variant: 'destructive', title: 'Print Error', description: 'No active ticket or items to print.' });
       return;
     }
     setIsPrintingPdf(true);
-    console.log("Printing ticket data:", JSON.stringify(activeTicket)); // DEBUG
+    console.log("Printing ticket data:", activeTicket);
 
     const htmlTicketContent = generateTicketHtml(
       activeTicket.name,
@@ -524,21 +524,29 @@ export default function POSPage() {
       cartTotal,
       format(new Date(), 'dd/MM/yyyy HH:mm:ss')
     );
-    console.log("Generated HTML for PDF:", htmlTicketContent.substring(0, 500) + "..."); // DEBUG
-
+    console.log("Generated HTML for PDF:", htmlTicketContent.substring(0, 500) + "...");
 
     const printDiv = document.createElement('div');
     printDiv.style.position = 'absolute';
-    // For debugging, make it visible:
-    // printDiv.style.left = '10px'; printDiv.style.top = '10px'; printDiv.style.border = '1px solid red'; printDiv.style.backgroundColor = 'white'; printDiv.style.zIndex = '10000';
     printDiv.style.left = '-9999px';
     printDiv.style.top = '-9999px';
+    // printDiv.style.border = '1px solid green'; // For visual debugging
+    // printDiv.style.zIndex = '10001'; // For visual debugging
+    // printDiv.style.backgroundColor = 'lightyellow'; // For visual debugging
     printDiv.innerHTML = htmlTicketContent;
     document.body.appendChild(printDiv);
     
     setTimeout(async () => {
       try {
-        if (!printDiv || !printDiv.hasChildNodes() || printDiv.innerHTML.trim() === "") {
+        console.log("Element to print (outerHTML):", printDiv.outerHTML.substring(0, 500) + "...");
+        console.log("Element to print innerHTML (before html2pdf):", printDiv.innerHTML.substring(0, 500) + "...");
+        console.log("PrintDiv first child:", printDiv.firstChild);
+        if (printDiv.firstChild && (printDiv.firstChild as HTMLElement).offsetWidth) {
+           console.log("PrintDiv first child offsetWidth:", (printDiv.firstChild as HTMLElement).offsetWidth);
+        }
+
+
+        if (!printDiv || !printDiv.hasChildNodes() || printDiv.innerHTML.trim() === "" || !printDiv.firstChild) {
           console.error("Printable element is empty or not found after timeout. Ticket data used for render:", JSON.stringify(activeTicket));
           toast({
             variant: 'destructive',
@@ -551,25 +559,30 @@ export default function POSPage() {
           }
           return;
         }
-        console.log("Element to print innerHTML (before html2pdf):", printDiv.innerHTML.substring(0, 500) + "..."); // DEBUG
         
         const html2pdf = (await import('html2pdf.js')).default;
+        
+        let canvasWidth = (printDiv.firstChild as HTMLElement).offsetWidth;
+        if (!canvasWidth || canvasWidth <= 0) {
+            console.warn("Calculated canvasWidth is invalid, defaulting to 280px.");
+            canvasWidth = 280; // Default receipt width in pixels
+        }
+        console.log("Using canvasWidth for html2canvas:", canvasWidth);
+
         const options = {
-          margin: [2, 2, 2, 2], // Minimal margins
+          margin: [2, 2, 2, 2], 
           filename: `ticket_${activeTicket.name.replace(/\s+/g, '_')}_${format(new Date(), 'yyyyMMdd_HHmmss')}.pdf`,
           image: { type: 'jpeg', quality: 0.95 },
           html2canvas: {
-            scale: 3, // Increased scale might help with clarity
-            logging: false, 
+            scale: 3, 
+            logging: true, 
             useCORS: true,
-            width: printDiv.firstChild ? (printDiv.firstChild as HTMLElement).offsetWidth : 290, // Use actual styled width
-            windowWidth: printDiv.firstChild ? (printDiv.firstChild as HTMLElement).offsetWidth : 290,
+            width: canvasWidth, 
+            windowWidth: canvasWidth, 
           },
           jsPDF: {
             unit: 'mm',
-            // Common thermal receipt paper widths are 57mm or 80mm. 280px at 96DPI is ~74mm.
-            // Let's try a width slightly larger than 280px equivalent in mm for safety.
-            format: [76, 'auto'], // Width 76mm (approx 3 inches), auto height
+            format: [76, 'auto'], 
             orientation: 'portrait',
           },
         };
@@ -587,7 +600,7 @@ export default function POSPage() {
             document.body.removeChild(printDiv);
         }
       }
-    }, 350); // Slightly increased delay
+    }, 350); 
   }, [activeTicket, cartTotal, toast]);
 
 
