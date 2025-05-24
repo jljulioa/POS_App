@@ -175,6 +175,19 @@ export default function POSPage() {
     queryFn: fetchSalesTickets,
   });
   
+  const createTicketMutation = useMutation<SalesTicketDB, Error, Pick<SalesTicketDB, 'name' | 'cart_items' | 'status'>>({
+    mutationFn: createSalesTicketAPI,
+    onSuccess: (newTicket) => {
+      queryClient.setQueryData(['salesTickets'], (oldData: SalesTicketDB[] = []) => [...oldData, newTicket] );
+      queryClient.invalidateQueries({ queryKey: ['salesTickets'] });
+      setActiveTicketId(newTicket.id);
+      toast({ title: 'Ticket Created', description: `${newTicket.name} has been created.` });
+    },
+    onError: (error) => {
+      toast({ variant: 'destructive', title: 'Error Creating Ticket', description: error.message });
+    },
+  });
+  
   const handleCreateNewTicket = useCallback((forceCreate: boolean = false) => {
     if (createTicketMutation.isPending && !forceCreate) return;
 
@@ -197,19 +210,6 @@ export default function POSPage() {
     setSearchTerm('');
   }, [queryClient, createTicketMutation]);
 
-
-  const createTicketMutation = useMutation<SalesTicketDB, Error, Pick<SalesTicketDB, 'name' | 'cart_items' | 'status'>>({
-    mutationFn: createSalesTicketAPI,
-    onSuccess: (newTicket) => {
-      queryClient.setQueryData(['salesTickets'], (oldData: SalesTicketDB[] = []) => [...oldData, newTicket] );
-      queryClient.invalidateQueries({ queryKey: ['salesTickets'] });
-      setActiveTicketId(newTicket.id);
-      toast({ title: 'Ticket Created', description: `${newTicket.name} has been created.` });
-    },
-    onError: (error) => {
-      toast({ variant: 'destructive', title: 'Error Creating Ticket', description: error.message });
-    },
-  });
 
   useEffect(() => {
     if (!isLoadingSalesTickets && salesTickets) {
@@ -255,12 +255,12 @@ export default function POSPage() {
         if (activeTicketId === deletedTicketId) {
             if (currentTickets.length > 0) {
                 const sortedTickets = [...currentTickets].sort((a, b) => new Date(b.last_updated_at).getTime() - new Date(a.last_updated_at).getTime());
-                 setTimeout(() => setActiveTicketId(sortedTickets[0].id), 100);
+                 setTimeout(() => setActiveTicketId(sortedTickets[0].id), 260);
             } else {
-                setTimeout(() => handleCreateNewTicket(true), 260); 
+                setTimeout(() => handleCreateNewTicket(true), 270); 
             }
         } else if (currentTickets.length === 0) {
-             setTimeout(() => handleCreateNewTicket(true), 270); 
+             setTimeout(() => handleCreateNewTicket(true), 280); 
         }
       });
       setSearchTerm(''); 
@@ -509,7 +509,7 @@ export default function POSPage() {
     };
     saleApiMutation.mutate(saleData);
   };
-
+  
   const handlePrintCurrentTicket = useCallback(async () => {
     if (!activeTicket || activeTicket.cart_items.length === 0) {
       toast({ variant: 'destructive', title: 'Print Error', description: 'No active ticket or items to print.' });
@@ -541,9 +541,14 @@ export default function POSPage() {
         console.log("Element to print (outerHTML):", printDiv.outerHTML.substring(0, 500) + "...");
         console.log("Element to print innerHTML (before html2pdf):", printDiv.innerHTML.substring(0, 500) + "...");
         console.log("PrintDiv first child:", printDiv.firstChild);
-        if (printDiv.firstChild && (printDiv.firstChild as HTMLElement).offsetWidth) {
-           console.log("PrintDiv first child offsetWidth:", (printDiv.firstChild as HTMLElement).offsetWidth);
+        
+        let canvasWidth = 280; // Default
+        if (printDiv.firstChild && (printDiv.firstChild as HTMLElement).offsetWidth && (printDiv.firstChild as HTMLElement).offsetWidth > 0) {
+           canvasWidth = (printDiv.firstChild as HTMLElement).offsetWidth;
+        } else {
+            console.warn("Calculated canvasWidth is invalid, defaulting to 280px.");
         }
+        console.log("Using canvasWidth for html2canvas:", canvasWidth);
 
 
         if (!printDiv || !printDiv.hasChildNodes() || printDiv.innerHTML.trim() === "" || !printDiv.firstChild) {
@@ -562,20 +567,13 @@ export default function POSPage() {
         
         const html2pdf = (await import('html2pdf.js')).default;
         
-        let canvasWidth = (printDiv.firstChild as HTMLElement).offsetWidth;
-        if (!canvasWidth || canvasWidth <= 0) {
-            console.warn("Calculated canvasWidth is invalid, defaulting to 280px.");
-            canvasWidth = 280; // Default receipt width in pixels
-        }
-        console.log("Using canvasWidth for html2canvas:", canvasWidth);
-
         const options = {
           margin: [2, 2, 2, 2], 
           filename: `ticket_${activeTicket.name.replace(/\s+/g, '_')}_${format(new Date(), 'yyyyMMdd_HHmmss')}.pdf`,
           image: { type: 'jpeg', quality: 0.95 },
           html2canvas: {
             scale: 3, 
-            logging: true, 
+            logging: false, 
             useCORS: true,
             width: canvasWidth, 
             windowWidth: canvasWidth, 
@@ -893,5 +891,7 @@ export default function POSPage() {
     </AppLayout>
   );
 }
+
+    
 
     
