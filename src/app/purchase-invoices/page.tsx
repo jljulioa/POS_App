@@ -7,7 +7,7 @@ import type { PurchaseInvoice } from '@/lib/mockData'; // Keep type
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { PlusCircle, FileDown, Eye, Settings2, Loader2, AlertTriangle, Trash2 } from 'lucide-react';
+import { PlusCircle, FileDown, Settings2, Loader2, AlertTriangle, Trash2 } from 'lucide-react';
 import React, { useState, useMemo } from 'react';
 import { format } from 'date-fns';
 import { Badge } from '@/components/ui/badge';
@@ -63,11 +63,11 @@ export default function PurchaseInvoicesPage() {
     onSuccess: (data) => {
       toast({ title: "Purchase Invoice Deleted", description: data.message });
       queryClient.invalidateQueries({ queryKey: ['purchaseInvoices'] });
-      setInvoiceToDelete(null);
+      setInvoiceToDelete(null); // Close dialog on success
     },
     onError: (error) => {
       toast({ variant: "destructive", title: "Failed to Delete Invoice", description: error.message });
-      setInvoiceToDelete(null);
+      setInvoiceToDelete(null); // Close dialog on error
     },
   });
 
@@ -165,11 +165,6 @@ export default function PurchaseInvoicesPage() {
                   </Badge>
                 </TableCell>
                 <TableCell className="text-center space-x-1">
-                  {/* <Button variant="ghost" size="icon" className="hover:text-primary" asChild>
-                    <Link href={`/purchase-invoices/${invoice.id}/view`}> 
-                      <Eye className="h-4 w-4" />
-                    </Link>
-                  </Button> */}
                   {!invoice.processed ? (
                     <Button variant="ghost" size="icon" className="hover:text-accent" asChild>
                       <Link href={`/purchase-invoices/${invoice.id}/process`}>
@@ -199,6 +194,7 @@ export default function PurchaseInvoicesPage() {
           </TableBody>
         </Table>
       </div>
+
       <AlertDialog open={!!invoiceToDelete} onOpenChange={(open) => !open && setInvoiceToDelete(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
