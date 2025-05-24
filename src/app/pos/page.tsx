@@ -96,27 +96,33 @@ const deleteSalesTicketAPI = async (ticketId: string): Promise<{ message: string
 };
 
 const generateTicketHtml = (ticketName: string, items: SaleItemForTicket[], totalAmount: number, currentDate: string): string => {
+  console.log("generateTicketHtml called with items:", JSON.stringify(items)); // DEBUG
+  if (!items || items.length === 0) {
+    console.log("generateTicketHtml: No items to print.");
+    return "<p>No items in ticket.</p>"; // Return minimal HTML if no items
+  }
+
   const itemsHtml = items.map(item => `
     <tr>
-      <td style="padding-right: 5px; vertical-align: top; font-size: 10px;">
-        ${item.productName}
-        ${item.discountPercentage && item.discountPercentage > 0 ? `<br><span style="font-size: 9px;">(Disc: ${item.discountPercentage.toFixed(0)}%)</span>` : ''}
+      <td style="padding-right: 5px; vertical-align: top; font-size: 10px; border-bottom: 1px solid #eee;">
+        ${item.productName || 'N/A Product'}
+        ${item.discountPercentage && item.discountPercentage > 0 ? `<br><span style="font-size: 9px;">(Disc: ${Number(item.discountPercentage).toFixed(0)}%)</span>` : ''}
       </td>
-      <td style="text-align: center; vertical-align: top; font-size: 10px;">${item.quantity}</td>
-      <td style="text-align: right; vertical-align: top; font-size: 10px;">${Number(item.unitPrice).toFixed(2)}</td>
-      <td style="text-align: right; vertical-align: top; font-size: 10px;">${Number(item.totalPrice).toFixed(2)}</td>
+      <td style="text-align: center; vertical-align: top; font-size: 10px; border-bottom: 1px solid #eee;">${item.quantity || 0}</td>
+      <td style="text-align: right; vertical-align: top; font-size: 10px; border-bottom: 1px solid #eee;">${Number(item.unitPrice).toFixed(2)}</td>
+      <td style="text-align: right; vertical-align: top; font-size: 10px; border-bottom: 1px solid #eee;">${Number(item.totalPrice).toFixed(2)}</td>
     </tr>
   `).join('');
 
-  return `
-    <div style="width: 280px; font-family: 'Courier New', Courier, monospace; color: black; background-color: white; padding: 10px;">
+  const html = `
+    <div style="width: 280px; font-family: 'Courier New', Courier, monospace; color: black; background-color: white; padding: 10px; border: 1px solid #ccc;">
       <div style="text-align: center; margin-bottom: 8px;">
         <h2 style="font-size: 16px; font-weight: bold; margin: 0 0 2px 0;">MotoFox POS</h2>
         <div style="font-size: 9px;">Your Motorcycle Parts Specialist</div>
       </div>
       <hr style="border: none; border-top: 1px dashed #000; margin: 5px 0;" />
       <div style="display: flex; justify-content: space-between; font-size: 9px;">
-        <span>Ticket: ${ticketName}</span>
+        <span>Ticket: ${ticketName || 'N/A Ticket'}</span>
         <span>Date: ${currentDate.split(' ')[0]}</span>
       </div>
       <div style="text-align: right; font-size: 9px; margin-bottom: 5px;">Time: ${currentDate.split(' ')[1]}</div>
@@ -124,10 +130,10 @@ const generateTicketHtml = (ticketName: string, items: SaleItemForTicket[], tota
       <table style="width: 100%; border-collapse: collapse; margin-bottom: 5px;">
         <thead>
           <tr>
-            <th style="text-align: left; padding: 2px 5px 2px 0; border-bottom: 1px solid #eee; font-size: 10px;">Item</th>
-            <th style="text-align: center; padding: 2px 0; border-bottom: 1px solid #eee; font-size: 10px;">Qty</th>
-            <th style="text-align: right; padding: 2px 0; border-bottom: 1px solid #eee; font-size: 10px;">Price</th>
-            <th style="text-align: right; padding: 2px 0 2px 5px; border-bottom: 1px solid #eee; font-size: 10px;">Total</th>
+            <th style="text-align: left; padding: 2px 5px 2px 0; border-bottom: 1px solid #ccc; font-size: 10px;">Item</th>
+            <th style="text-align: center; padding: 2px 0; border-bottom: 1px solid #ccc; font-size: 10px;">Qty</th>
+            <th style="text-align: right; padding: 2px 0; border-bottom: 1px solid #ccc; font-size: 10px;">Price</th>
+            <th style="text-align: right; padding: 2px 0 2px 5px; border-bottom: 1px solid #ccc; font-size: 10px;">Total</th>
           </tr>
         </thead>
         <tbody>
@@ -145,6 +151,8 @@ const generateTicketHtml = (ticketName: string, items: SaleItemForTicket[], tota
       </div>
     </div>
   `;
+  console.log("Generated HTML (end of generateTicketHtml):", html.substring(0, 500) + "..."); // DEBUG
+  return html;
 };
 
 
@@ -187,7 +195,7 @@ export default function POSPage() {
       status: 'Active',
     });
     setSearchTerm('');
-  }, [queryClient, /* createTicketMutation is defined later */]);
+  }, [queryClient]);
 
 
   const createTicketMutation = useMutation<SalesTicketDB, Error, Pick<SalesTicketDB, 'name' | 'cart_items' | 'status'>>({
@@ -207,7 +215,7 @@ export default function POSPage() {
     if (!isLoadingSalesTickets && salesTickets) {
       if (salesTickets.length === 0) {
         if (!createTicketMutation.isPending && !activeTicketId) { 
-            setTimeout(() => handleCreateNewTicket(true), 100); 
+            setTimeout(() => handleCreateNewTicket(true), 250); 
         }
       } else if (!activeTicketId || !salesTickets.find(t => t.id === activeTicketId)) {
         const sortedTickets = [...salesTickets].sort((a, b) => new Date(b.last_updated_at).getTime() - new Date(a.last_updated_at).getTime());
@@ -225,11 +233,10 @@ export default function POSPage() {
       queryClient.setQueryData(['salesTickets'], (oldData: SalesTicketDB[] | undefined) =>
         oldData ? oldData.map(t => t.id === updatedTicket.id ? updatedTicket : t) : []
       );
-      // No toast here, to avoid cluttering on every cart update
     },
     onError: (error) => {
       toast({ variant: 'destructive', title: 'Error Updating Ticket', description: error.message });
-      refetchSalesTickets(); // Refetch to get consistent state if update fails
+      refetchSalesTickets(); 
     },
   });
 
@@ -243,7 +250,6 @@ export default function POSPage() {
       queryClient.setQueryData(['salesTickets'], (oldData: SalesTicketDB[] | undefined) =>
         oldData ? oldData.filter(t => t.id !== deletedTicketId) : []
       );
-      // Invalidate and then ensure an active ticket exists or a new one is created
       queryClient.invalidateQueries({ queryKey: ['salesTickets'] }).then(() => {
         const currentTickets = queryClient.getQueryData<SalesTicketDB[]>(['salesTickets']) || [];
         if (activeTicketId === deletedTicketId) {
@@ -251,10 +257,10 @@ export default function POSPage() {
                 const sortedTickets = [...currentTickets].sort((a, b) => new Date(b.last_updated_at).getTime() - new Date(a.last_updated_at).getTime());
                 setActiveTicketId(sortedTickets[0].id);
             } else {
-                setTimeout(() => handleCreateNewTicket(true), 200); // Add a small delay
+                setTimeout(() => handleCreateNewTicket(true), 250); 
             }
         } else if (currentTickets.length === 0) {
-             setTimeout(() => handleCreateNewTicket(true), 200); // Add a small delay
+             setTimeout(() => handleCreateNewTicket(true), 250); 
         }
       });
       setSearchTerm(''); 
@@ -506,15 +512,11 @@ export default function POSPage() {
 
  const handlePrintCurrentTicket = useCallback(async () => {
     if (!activeTicket || activeTicket.cart_items.length === 0) {
-      toast({
-        variant: 'destructive',
-        title: 'Print Error',
-        description: 'No active ticket or items to print.',
-      });
+      toast({ variant: 'destructive', title: 'Print Error', description: 'No active ticket or items to print.' });
       return;
     }
     setIsPrintingPdf(true);
-    console.log("Printing ticket data:", activeTicket);
+    console.log("Printing ticket data:", JSON.stringify(activeTicket)); // DEBUG
 
     const htmlTicketContent = generateTicketHtml(
       activeTicket.name,
@@ -522,9 +524,8 @@ export default function POSPage() {
       cartTotal,
       format(new Date(), 'dd/MM/yyyy HH:mm:ss')
     );
+    console.log("Generated HTML for PDF:", htmlTicketContent.substring(0, 500) + "..."); // DEBUG
 
-    // For debugging: log the generated HTML
-    console.log("Generated HTML for PDF:", htmlTicketContent.substring(0, 500) + "...");
 
     const printDiv = document.createElement('div');
     printDiv.style.position = 'absolute';
@@ -535,11 +536,10 @@ export default function POSPage() {
     printDiv.innerHTML = htmlTicketContent;
     document.body.appendChild(printDiv);
     
-    // Give the browser a moment to render the content in the hidden div
     setTimeout(async () => {
       try {
         if (!printDiv || !printDiv.hasChildNodes() || printDiv.innerHTML.trim() === "") {
-          console.error("Printable element is empty or not found after timeout. Ticket data used for render:", activeTicket);
+          console.error("Printable element is empty or not found after timeout. Ticket data used for render:", JSON.stringify(activeTicket));
           toast({
             variant: 'destructive',
             title: 'Print Error',
@@ -551,24 +551,25 @@ export default function POSPage() {
           }
           return;
         }
-         console.log("Element to print innerHTML (before html2pdf):", printDiv.innerHTML.substring(0, 500) + "...");
+        console.log("Element to print innerHTML (before html2pdf):", printDiv.innerHTML.substring(0, 500) + "..."); // DEBUG
         
         const html2pdf = (await import('html2pdf.js')).default;
         const options = {
-          margin: [5, 2, 5, 2], // top, left, bottom, right in mm
+          margin: [2, 2, 2, 2], // Minimal margins
           filename: `ticket_${activeTicket.name.replace(/\s+/g, '_')}_${format(new Date(), 'yyyyMMdd_HHmmss')}.pdf`,
-          image: { type: 'jpeg', quality: 0.98 },
+          image: { type: 'jpeg', quality: 0.95 },
           html2canvas: {
-            scale: 2, 
-            logging: false, // Set to true for more html2canvas logs
+            scale: 3, // Increased scale might help with clarity
+            logging: false, 
             useCORS: true,
-            // Try to use the actual width of the styled content
-            width: printDiv.firstChild ? (printDiv.firstChild as HTMLElement).offsetWidth : 300, 
-            windowWidth: printDiv.firstChild ? (printDiv.firstChild as HTMLElement).offsetWidth : 300,
+            width: printDiv.firstChild ? (printDiv.firstChild as HTMLElement).offsetWidth : 290, // Use actual styled width
+            windowWidth: printDiv.firstChild ? (printDiv.firstChild as HTMLElement).offsetWidth : 290,
           },
           jsPDF: {
             unit: 'mm',
-            format: [76, 210], // Approx 3-inch width, continuous length
+            // Common thermal receipt paper widths are 57mm or 80mm. 280px at 96DPI is ~74mm.
+            // Let's try a width slightly larger than 280px equivalent in mm for safety.
+            format: [76, 'auto'], // Width 76mm (approx 3 inches), auto height
             orientation: 'portrait',
           },
         };
@@ -586,7 +587,7 @@ export default function POSPage() {
             document.body.removeChild(printDiv);
         }
       }
-    }, 300); // Increased delay slightly
+    }, 350); // Slightly increased delay
   }, [activeTicket, cartTotal, toast]);
 
 
@@ -635,9 +636,9 @@ export default function POSPage() {
                   className={cn(
                     "flex items-center justify-between rounded-md group text-sm min-h-[2.5rem] border transition-all",
                     ticket.id === activeTicketId
-                      ? "bg-primary text-primary-foreground shadow-md" // No extra ring for active
+                      ? "bg-primary text-primary-foreground shadow-md" 
                       : "bg-card hover:bg-muted text-card-foreground hover:shadow-sm",
-                     "px-3 py-2" // Consistent padding
+                     "px-3 py-2" 
                   )}
                 >
                   <div
@@ -733,7 +734,7 @@ export default function POSPage() {
                           <Image src={product.imageUrl || `https://placehold.co/40x40.png?text=${product.name.substring(0,2)}`} alt={product.name} width={40} height={40} className="rounded-sm object-cover" data-ai-hint={product.dataAiHint || "motorcycle part"}/>
                           <div className="flex-grow">
                             <p className="font-medium text-xs sm:text-sm line-clamp-1">{product.name}</p>
-                            <p className="text-xs text-muted-foreground">Stock: {product.stock} | Price: ${product.price.toFixed(2)}</p>
+                            <p className="text-xs text-muted-foreground">Stock: {product.stock} | Price: ${Number(product.price).toFixed(2)}</p>
                           </div>
                         </div>
                         <Button size="sm" onClick={() => addToCart(product)} disabled={product.stock === 0 || isProcessingAnyTicketAction || isProcessingSale} className="w-full sm:w-auto text-xs sm:text-sm">
