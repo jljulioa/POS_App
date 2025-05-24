@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/componen
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
-import type { Product as ProductType, Sale } from '@/lib/mockData'; // SaleItem removed as it's defined locally
+import type { Product as ProductType, Sale } from '@/lib/mockData';
 import type { SalesTicketDB } from '@/app/api/sales-tickets/route';
 import Image from 'next/image';
 import { Search, X, Plus, Minus, Save, ShoppingCart, CreditCard, DollarSign, PlusSquare, ListFilter, Loader2, AlertTriangle, Ticket, Printer, Percent } from 'lucide-react';
@@ -37,8 +37,6 @@ import { cn } from '@/lib/utils';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/hooks/useAuth';
 import { format } from 'date-fns';
-// Dynamic import for html2pdf.js
-// import html2pdf from 'html2pdf.js'; // Remove static import
 
 // Local SaleItem type for POS, including discount fields
 interface SaleItem {
@@ -177,6 +175,7 @@ export default function POSPage() {
   const queryClient = useQueryClient();
   const { userRole } = useAuth();
   const [activeTicketId, setActiveTicketId] = useState<string | null>(null);
+  const finalizedTicketIdRef = useRef<string | null>(null); // To store ID of ticket being processed
 
   const [saleToPrint, setSaleToPrint] = useState<Sale | null>(null);
   const [isPrintConfirmOpen, setIsPrintConfirmOpen] = useState(false);
@@ -212,7 +211,7 @@ export default function POSPage() {
 
     const currentTickets = queryClient.getQueryData<SalesTicketDB[]>(['salesTickets']) || [];
     const nextTicketNumber = currentTickets.length > 0
-        ? Math.max(...currentTickets.map(t => {
+        ? Math.max(0, ...currentTickets.map(t => { // Ensure Math.max gets at least 0 if no tickets
             const nameMatch = t.name.match(/Ticket (\d+)/);
             return nameMatch ? parseInt(nameMatch[1], 10) : 0;
           })) + 1
@@ -252,7 +251,7 @@ export default function POSPage() {
     },
     onError: (error) => {
       toast({ variant: 'destructive', title: 'Error Updating Ticket', description: error.message });
-      refetchSalesTickets();
+      refetchSalesTickets(); // Refetch to get the consistent server state
     },
   });
 
@@ -260,6 +259,9 @@ export default function POSPage() {
     mutationFn: deleteSalesTicketAPI,
     onSuccess: (data, deletedTicketId) => {
        toast({ title: 'Ticket Closed', description: `The ticket has been closed.` });
+       if (finalizedTicketIdRef.current === deletedTicketId) {
+           finalizedTicketIdRef.current = null;
+       }
       queryClient.setQueryData(['salesTickets'], (oldData: SalesTicketDB[] | undefined) =>
         oldData ? oldData.filter(t => t.id !== deletedTicketId) : []
       );
@@ -270,15 +272,18 @@ export default function POSPage() {
                 const sortedTickets = [...currentTickets].sort((a, b) => new Date(b.last_updated_at).getTime() - new Date(a.last_updated_at).getTime());
                 setActiveTicketId(sortedTickets[0].id);
             } else {
-                setTimeout(() => handleCreateNewTicket(true), 0);
+                setTimeout(() => handleCreateNewTicket(true), 50); // Slight delay
             }
         } else if (currentTickets.length === 0) {
-            setTimeout(() => handleCreateNewTicket(true), 0);
+            setTimeout(() => handleCreateNewTicket(true), 50); // Slight delay
         }
       });
     },
-    onError: (error) => {
+    onError: (error, variables_ticketIdAttempted) => {
       toast({ variant: 'destructive', title: 'Error Closing Ticket', description: error.message });
+      if (finalizedTicketIdRef.current === variables_ticketIdAttempted) {
+          finalizedTicketIdRef.current = null;
+      }
     },
   });
 
@@ -329,7 +334,7 @@ export default function POSPage() {
           item.productId === productInCatalog.id ? { 
             ...item, 
             quantity: item.quantity + 1, 
-            totalPrice: (item.quantity + 1) * item.unitPrice // unitPrice is already potentially discounted
+            totalPrice: (item.quantity + 1) * item.unitPrice 
           } : item
         );
       } else {
@@ -342,14 +347,24 @@ export default function POSPage() {
         productName: productInCatalog.name,
         quantity: 1,
         originalUnitPrice: productInCatalog.price,
-        unitPrice: productInCatalog.price, // Initially, unitPrice is originalUnitPrice
+        unitPrice: productInCatalog.price,
         costPrice: itemCostPrice,
         discountPercentage: 0,
         totalPrice: productInCatalog.price,
       }];
     }
     
-    updateTicketMutation.mutate({ ticketId: activeTicket.id, data: { cart_items: newCartItemsClient } });
+    const cartItemsForAPI = newCartItemsClient.map(item => ({
+        productId: item.productId,
+        productName: item.productName,
+        quantity: item.quantity,
+        unitPrice: Number(item.unitPrice) || 0,
+        originalUnitPrice: Number(item.originalUnitPrice) || 0,
+        costPrice: Number(item.costPrice) || 0,
+        discountPercentage: Number(item.discountPercentage) || 0,
+        totalPrice: Number(item.totalPrice) || 0,
+    }));
+    updateTicketMutation.mutate({ ticketId: activeTicket.id, data: { cart_items: cartItemsForAPI } });
     setSearchTerm('');
   }, [activeTicket, products, toast, updateTicketMutation]);
 
@@ -374,19 +389,23 @@ export default function POSPage() {
         item.productId === productId ? { ...item, quantity: newQuantity, totalPrice: newQuantity * item.unitPrice } : item
       );
     }
-    updateTicketMutation.mutate({ ticketId: activeTicket.id, data: { cart_items: newCartItemsClient } });
+    const cartItemsForAPI = newCartItemsClient.map(item => ({
+        productId: item.productId,
+        productName: item.productName,
+        quantity: item.quantity,
+        unitPrice: Number(item.unitPrice) || 0,
+        originalUnitPrice: Number(item.originalUnitPrice) || 0,
+        costPrice: Number(item.costPrice) || 0,
+        discountPercentage: Number(item.discountPercentage) || 0,
+        totalPrice: Number(item.totalPrice) || 0,
+    }));
+    updateTicketMutation.mutate({ ticketId: activeTicket.id, data: { cart_items: cartItemsForAPI } });
   }, [activeTicket, products, toast, updateTicketMutation]);
 
   const handleDiscountChange = useCallback((productId: string, discountStr: string) => {
     if (!activeTicket) return;
     
     const discountPercentage = parseFloat(discountStr);
-    if (isNaN(discountPercentage) || discountPercentage < 0 || discountPercentage > 100) {
-        // Optionally show a toast for invalid discount percentage
-        // For now, let's assume it resets or keeps previous if invalid, or treat as 0 if empty
-        // Or, let the input field's min/max attributes handle direct user input mostly
-        // A more robust way would be to validate and provide feedback
-    }
 
     const newCartItemsClient = activeTicket.cart_items.map(item => {
       if (item.productId === productId) {
@@ -395,20 +414,40 @@ export default function POSPage() {
         return {
           ...item,
           discountPercentage: currentDiscount,
-          unitPrice: parseFloat(newUnitPrice.toFixed(2)), // Keep 2 decimal places
+          unitPrice: parseFloat(newUnitPrice.toFixed(2)),
           totalPrice: parseFloat((newUnitPrice * item.quantity).toFixed(2)),
         };
       }
       return item;
     });
-    updateTicketMutation.mutate({ ticketId: activeTicket.id, data: { cart_items: newCartItemsClient } });
+    const cartItemsForAPI = newCartItemsClient.map(item => ({
+        productId: item.productId,
+        productName: item.productName,
+        quantity: item.quantity,
+        unitPrice: Number(item.unitPrice) || 0,
+        originalUnitPrice: Number(item.originalUnitPrice) || 0,
+        costPrice: Number(item.costPrice) || 0,
+        discountPercentage: Number(item.discountPercentage) || 0,
+        totalPrice: Number(item.totalPrice) || 0,
+    }));
+    updateTicketMutation.mutate({ ticketId: activeTicket.id, data: { cart_items: cartItemsForAPI } });
   }, [activeTicket, updateTicketMutation]);
 
 
   const removeFromCart = (productId: string) => {
     if (!activeTicket) return;
     const newCartItemsClient = activeTicket.cart_items.filter(item => item.productId !== productId);
-    updateTicketMutation.mutate({ ticketId: activeTicket.id, data: { cart_items: newCartItemsClient } });
+    const cartItemsForAPI = newCartItemsClient.map(item => ({
+        productId: item.productId,
+        productName: item.productName,
+        quantity: item.quantity,
+        unitPrice: Number(item.unitPrice) || 0,
+        originalUnitPrice: Number(item.originalUnitPrice) || 0,
+        costPrice: Number(item.costPrice) || 0,
+        discountPercentage: Number(item.discountPercentage) || 0,
+        totalPrice: Number(item.totalPrice) || 0,
+    }));
+    updateTicketMutation.mutate({ ticketId: activeTicket.id, data: { cart_items: cartItemsForAPI } });
   };
 
   const cartTotal = useMemo(() => {
@@ -436,8 +475,9 @@ export default function POSPage() {
 
   const saleApiMutation = useMutation<Sale, Error, Omit<Sale, 'id' | 'date'>>({
     mutationFn: createSaleAPI,
-    onSuccess: (data) => {
-      setSaleToPrint(data);
+    onSuccess: (completedSale) => {
+      setSaleToPrint(completedSale);
+      // finalizedTicketIdRef.current is already set by handleProcessSale
       setIsPrintConfirmOpen(true); 
     },
     onError: (error) => {
@@ -446,6 +486,7 @@ export default function POSPage() {
         title: "Failed to Process Sale",
         description: error.message || "An unexpected error occurred.",
       });
+      finalizedTicketIdRef.current = null; // Clear if sale failed
     },
   });
 
@@ -454,15 +495,16 @@ export default function POSPage() {
       toast({ variant: "destructive", title: "Empty Cart", description: "Please add items to the cart before processing." });
       return;
     }
+    finalizedTicketIdRef.current = activeTicket.id; // Capture ID for deletion later
 
     const saleData = {
       items: activeTicket.cart_items.map(item => ({
           productId: item.productId,
           productName: item.productName,
           quantity: item.quantity,
-          unitPrice: Number(item.unitPrice) || 0, // Effective discounted price
+          unitPrice: Number(item.unitPrice) || 0,
           costPrice: Number(item.costPrice) || 0,
-          totalPrice: Number(item.totalPrice) || 0, // Effective discounted total
+          totalPrice: Number(item.totalPrice) || 0,
       })),
       totalAmount: cartTotal,
       paymentMethod: paymentMethod,
@@ -480,7 +522,7 @@ export default function POSPage() {
 
     setTimeout(async () => {
         try {
-            const html2pdf = (await import('html2pdf.js')).default; // Dynamic import
+            const html2pdf = (await import('html2pdf.js')).default;
             const element = printableTicketRef.current;
             if (!element) {
                 throw new Error("Element to print not found in DOM.");
@@ -511,11 +553,14 @@ export default function POSPage() {
     }
     queryClient.invalidateQueries({ queryKey: ['products'] });
     queryClient.invalidateQueries({ queryKey: ['sales'] });
-    queryClient.invalidateQueries({ queryKey: ['todaysSales'] });
+    queryClient.invalidateQueries({ queryKey: ['todaysSales']});
     
-    if (activeTicket && saleToPrint) { // Ensure activeTicket is checked before calling mutate
-      deleteTicketMutation.mutate(activeTicket.id);
+    const ticketIdToDelete = finalizedTicketIdRef.current;
+    if (ticketIdToDelete) {
+      deleteTicketMutation.mutate(ticketIdToDelete);
+      // finalizedTicketIdRef.current will be cleared by the mutation's onSuccess/onError
     }
+    
     setIsPrintConfirmOpen(false);
     setSaleToPrint(null);
     setSearchTerm('');
@@ -771,16 +816,16 @@ export default function POSPage() {
                     size="lg"
                     variant="outline"
                     className="text-xs sm:text-base py-3 sm:py-6"
-                    onClick={() => handleUpdateTicketStatus(activeTicket.id, 'On Hold')}
-                    disabled={activeTicket.status === 'On Hold' || activeTicket.cart_items.length === 0 || isProcessingAnyTicketAction || isProcessingSale}
+                    onClick={() => activeTicket && handleUpdateTicketStatus(activeTicket.id, 'On Hold')}
+                    disabled={!activeTicket || activeTicket.status === 'On Hold' || activeTicket.cart_items.length === 0 || isProcessingAnyTicketAction || isProcessingSale}
                   >
                   <Save className="mr-2 h-4 w-4 sm:h-5 sm:w-5" /> Hold Ticket
                 </Button>
-                <Button size="lg" className="bg-green-600 hover:bg-green-700 text-xs sm:text-base py-3 sm:py-6 col-span-1 sm:col-span-1" onClick={() => handleProcessSale('Cash')}  disabled={activeTicket.cart_items.length === 0 || isProcessingAnyTicketAction || isProcessingSale}>
+                <Button size="lg" className="bg-green-600 hover:bg-green-700 text-xs sm:text-base py-3 sm:py-6 col-span-1 sm:col-span-1" onClick={() => handleProcessSale('Cash')}  disabled={!activeTicket || activeTicket.cart_items.length === 0 || isProcessingAnyTicketAction || isProcessingSale}>
                   {isProcessingSale && saleApiMutation.variables?.paymentMethod === 'Cash' ? <Loader2 className="mr-2 h-4 w-4 sm:h-5 sm:w-5 animate-spin" /> : <DollarSign className="mr-2 h-4 w-4 sm:h-5 sm:w-5" />}
                   {isProcessingSale && saleApiMutation.variables?.paymentMethod === 'Cash' ? 'Processing...' : 'Cash'}
                 </Button>
-                <Button size="lg" className="text-xs sm:text-base py-3 sm:py-6 col-span-1 sm:col-span-1" onClick={() => handleProcessSale('Card')}  disabled={activeTicket.cart_items.length === 0 || isProcessingAnyTicketAction || isProcessingSale}>
+                <Button size="lg" className="text-xs sm:text-base py-3 sm:py-6 col-span-1 sm:col-span-1" onClick={() => handleProcessSale('Card')}  disabled={!activeTicket || activeTicket.cart_items.length === 0 || isProcessingAnyTicketAction || isProcessingSale}>
                   {isProcessingSale && saleApiMutation.variables?.paymentMethod === 'Card' ? <Loader2 className="mr-2 h-4 w-4 sm:h-5 sm:w-5 animate-spin" /> : <CreditCard className="mr-2 h-4 w-4 sm:h-5 sm:w-5" />}
                   {isProcessingSale && saleApiMutation.variables?.paymentMethod === 'Card' ? 'Processing...' : 'Card'}
                 </Button>
@@ -822,3 +867,4 @@ export default function POSPage() {
     </AppLayout>
   );
 }
+
