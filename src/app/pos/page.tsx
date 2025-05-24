@@ -9,7 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import type { Product as ProductType, Sale } from '@/lib/mockData';
-import type { SalesTicketDB, SaleItemForTicket } from '@/app/api/sales-tickets/route'; // Use SaleItemForTicket
+import type { SalesTicketDB, SaleItemForTicket } from '@/app/api/sales-tickets/route';
 import Image from 'next/image';
 import { Search, X, Plus, Minus, Save, ShoppingCart, CreditCard, DollarSign, PlusSquare, ListFilter, Loader2, AlertTriangle, Ticket, Printer, Percent } from 'lucide-react';
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
@@ -165,7 +165,6 @@ export default function POSPage() {
   const [activeTicketId, setActiveTicketId] = useState<string | null>(null);
   
   const [saleToPrint, setSaleToPrint] = useState<Sale | null>(null);
-  const [isPrintConfirmOpen, setIsPrintConfirmOpen] = useState(false);
   const [isPrintingPdf, setIsPrintingPdf] = useState(false);
   const printableTicketRef = useRef<HTMLDivElement>(null);
   const finalizedTicketIdRef = useRef<string | null>(null);
@@ -187,6 +186,7 @@ export default function POSPage() {
       queryClient.setQueryData(['salesTickets'], (oldData: SalesTicketDB[] | undefined) =>
         oldData ? [...oldData, newTicket] : [newTicket]
       );
+      queryClient.invalidateQueries({ queryKey: ['salesTickets'] });
       setActiveTicketId(newTicket.id);
       toast({ title: 'Ticket Created', description: `${newTicket.name} has been created.` });
     },
@@ -214,6 +214,7 @@ export default function POSPage() {
     });
     setSearchTerm('');
   }, [createTicketMutation, queryClient]);
+
 
   useEffect(() => {
     if (!isLoadingSalesTickets && salesTickets) {
@@ -261,10 +262,10 @@ export default function POSPage() {
                 const sortedTickets = [...currentTickets].sort((a, b) => new Date(b.last_updated_at).getTime() - new Date(a.last_updated_at).getTime());
                 setActiveTicketId(sortedTickets[0].id);
             } else {
-                setTimeout(() => handleCreateNewTicket(true), 100); 
+                setTimeout(() => handleCreateNewTicket(true), 200); 
             }
         } else if (currentTickets.length === 0) {
-            setTimeout(() => handleCreateNewTicket(true), 100); 
+            setTimeout(() => handleCreateNewTicket(true), 200); 
         }
       });
       setSearchTerm(''); 
@@ -344,7 +345,17 @@ export default function POSPage() {
       }];
     }
     
-    updateTicketMutation.mutate({ ticketId: activeTicket.id, data: { cart_items: newCartItemsClient } });
+    const cartItemsForAPI = newCartItemsClient.map(item => ({
+        productId: item.productId,
+        productName: item.productName,
+        quantity: item.quantity,
+        originalUnitPrice: item.originalUnitPrice,
+        unitPrice: item.unitPrice,
+        costPrice: Number(item.costPrice) || 0,
+        discountPercentage: item.discountPercentage,
+        totalPrice: item.totalPrice,
+    }));
+    updateTicketMutation.mutate({ ticketId: activeTicket.id, data: { cart_items: cartItemsForAPI } });
     setSearchTerm('');
   }, [activeTicket, products, toast, updateTicketMutation]);
 
@@ -369,7 +380,17 @@ export default function POSPage() {
         item.productId === productId ? { ...item, quantity: newQuantity, totalPrice: parseFloat((newQuantity * item.unitPrice).toFixed(2)) } : item
       );
     }
-    updateTicketMutation.mutate({ ticketId: activeTicket.id, data: { cart_items: newCartItemsClient } });
+    const cartItemsForAPI = newCartItemsClient.map(item => ({
+        productId: item.productId,
+        productName: item.productName,
+        quantity: item.quantity,
+        originalUnitPrice: item.originalUnitPrice,
+        unitPrice: item.unitPrice,
+        costPrice: Number(item.costPrice) || 0,
+        discountPercentage: item.discountPercentage,
+        totalPrice: item.totalPrice,
+    }));
+    updateTicketMutation.mutate({ ticketId: activeTicket.id, data: { cart_items: cartItemsForAPI } });
   }, [activeTicket, products, toast, updateTicketMutation]);
 
   const handleDiscountChange = useCallback((productId: string, discountStr: string) => {
@@ -390,14 +411,34 @@ export default function POSPage() {
       }
       return item;
     });
-    updateTicketMutation.mutate({ ticketId: activeTicket.id, data: { cart_items: newCartItemsClient } });
+     const cartItemsForAPI = newCartItemsClient.map(item => ({
+        productId: item.productId,
+        productName: item.productName,
+        quantity: item.quantity,
+        originalUnitPrice: item.originalUnitPrice,
+        unitPrice: item.unitPrice,
+        costPrice: Number(item.costPrice) || 0,
+        discountPercentage: item.discountPercentage,
+        totalPrice: item.totalPrice,
+    }));
+    updateTicketMutation.mutate({ ticketId: activeTicket.id, data: { cart_items: cartItemsForAPI } });
   }, [activeTicket, updateTicketMutation]);
 
 
   const removeFromCart = (productId: string) => {
     if (!activeTicket) return;
     const newCartItemsClient = activeTicket.cart_items.filter(item => item.productId !== productId);
-    updateTicketMutation.mutate({ ticketId: activeTicket.id, data: { cart_items: newCartItemsClient } });
+     const cartItemsForAPI = newCartItemsClient.map(item => ({
+        productId: item.productId,
+        productName: item.productName,
+        quantity: item.quantity,
+        originalUnitPrice: item.originalUnitPrice,
+        unitPrice: item.unitPrice,
+        costPrice: Number(item.costPrice) || 0,
+        discountPercentage: item.discountPercentage,
+        totalPrice: item.totalPrice,
+    }));
+    updateTicketMutation.mutate({ ticketId: activeTicket.id, data: { cart_items: cartItemsForAPI } });
   };
 
   const cartTotal = useMemo(() => {
@@ -426,9 +467,21 @@ export default function POSPage() {
   const saleApiMutation = useMutation<Sale, Error, Omit<Sale, 'id' | 'date'>>({
     mutationFn: createSaleAPI,
     onSuccess: (completedSale) => {
-      finalizedTicketIdRef.current = activeTicket?.id || null;
-      setSaleToPrint(completedSale);
-      setIsPrintConfirmOpen(true); 
+      setSaleToPrint(completedSale); // Store for printing
+      toast({
+          title: "Sale Processed Successfully",
+          description: `Sale ID: ${completedSale.id} completed. Total: $${completedSale.totalAmount.toFixed(2)}.`,
+      });
+      queryClient.invalidateQueries({ queryKey: ['products'] });
+      queryClient.invalidateQueries({ queryKey: ['sales'] });
+      queryClient.invalidateQueries({ queryKey: ['todaysSales']});
+      
+      const ticketIdToDelete = finalizedTicketIdRef.current;
+      if (ticketIdToDelete) {
+          deleteTicketMutation.mutate(ticketIdToDelete);
+      } else if (activeTicket) { // Fallback if ref wasn't set (should not happen)
+          deleteTicketMutation.mutate(activeTicket.id);
+      }
     },
     onError: (error) => {
       toast({
@@ -440,37 +493,38 @@ export default function POSPage() {
     },
   });
   
-  const finalizeSaleAndClearTicket = useCallback(() => {
-    if (saleToPrint) {
-        toast({
-            title: "Sale Processed Successfully",
-            description: `Sale ID: ${saleToPrint.id} completed. Total: $${saleToPrint.totalAmount.toFixed(2)}.`,
-        });
-    }
-    queryClient.invalidateQueries({ queryKey: ['products'] });
-    queryClient.invalidateQueries({ queryKey: ['sales'] });
-    queryClient.invalidateQueries({ queryKey: ['todaysSales']});
-    
-    const ticketIdToDelete = finalizedTicketIdRef.current;
-    if (ticketIdToDelete) {
-        deleteTicketMutation.mutate(ticketIdToDelete);
-    }
-    
-    setIsPrintConfirmOpen(false);
-    setSaleToPrint(null);
-    setIsPrintingPdf(false);
-  }, [queryClient, deleteTicketMutation, toast, saleToPrint]);
 
+  const handleProcessSale = (paymentMethod: 'Cash' | 'Card' | 'Transfer' | 'Combined') => {
+    if (!activeTicket || activeTicket.cart_items.length === 0) {
+      toast({ variant: "destructive", title: "Empty Cart", description: "Please add items to the cart before processing." });
+      return;
+    }
+    finalizedTicketIdRef.current = activeTicket.id; // Store ID of ticket being processed
 
-  const handlePrintConfirmed = useCallback(async () => {
+    const saleData = {
+      items: activeTicket.cart_items.map(item => ({
+          productId: item.productId,
+          productName: item.productName,
+          quantity: item.quantity,
+          unitPrice: Number(item.unitPrice) || 0,
+          costPrice: Number(item.costPrice) || 0,
+          totalPrice: Number(item.totalPrice) || 0,
+      })),
+      totalAmount: cartTotal,
+      paymentMethod: paymentMethod,
+      cashierId: userRole || 'system', 
+    };
+    saleApiMutation.mutate(saleData);
+  };
+
+  const handlePrintLastReceipt = useCallback(async () => {
     if (!printableTicketRef.current || !saleToPrint) {
-        toast({ variant: "destructive", title: "Print Error", description: "Internal error: Missing data for printing."});
-        finalizeSaleAndClearTicket();
+        toast({ variant: "destructive", title: "Print Error", description: "No sale data available to print."});
         return;
     }
     setIsPrintingPdf(true);
 
-    setTimeout(async () => {
+    setTimeout(async () => { // Ensure DOM is updated
         try {
             const html2pdf = (await import('html2pdf.js')).default;
             const element = printableTicketRef.current;
@@ -489,32 +543,11 @@ export default function POSPage() {
             console.error("Error generating PDF:", error);
             toast({ variant: "destructive", title: "Print Error", description: (error as Error).message });
         } finally {
-            finalizeSaleAndClearTicket();
+            setIsPrintingPdf(false);
         }
     }, 150); 
-  }, [saleToPrint, toast, finalizeSaleAndClearTicket]);
+  }, [saleToPrint, toast]);
 
-  const handleProcessSale = (paymentMethod: 'Cash' | 'Card' | 'Transfer' | 'Combined') => {
-    if (!activeTicket || activeTicket.cart_items.length === 0) {
-      toast({ variant: "destructive", title: "Empty Cart", description: "Please add items to the cart before processing." });
-      return;
-    }
-
-    const saleData = {
-      items: activeTicket.cart_items.map(item => ({
-          productId: item.productId,
-          productName: item.productName,
-          quantity: item.quantity,
-          unitPrice: Number(item.unitPrice) || 0,
-          costPrice: Number(item.costPrice) || 0,
-          totalPrice: Number(item.totalPrice) || 0,
-      })),
-      totalAmount: cartTotal,
-      paymentMethod: paymentMethod,
-      cashierId: userRole || 'system', 
-    };
-    saleApiMutation.mutate(saleData);
-  };
 
   const getTicketBadgeVariant = (status: SalesTicketDB['status']): "default" | "outline" | "secondary" | "destructive" | null | undefined => {
     switch(status) {
@@ -780,6 +813,15 @@ export default function POSPage() {
                   {isProcessingSale && saleApiMutation.variables?.paymentMethod === 'Card' ? 'Processing...' : 'Card'}
                 </Button>
               </div>
+              <Button 
+                variant="outline" 
+                onClick={handlePrintLastReceipt} 
+                disabled={!saleToPrint || isPrintingPdf}
+                className="w-full mt-2 text-xs sm:text-base py-3 sm:py-6"
+              >
+                {isPrintingPdf ? <Loader2 className="mr-2 h-4 w-4 sm:h-5 sm:w-5 animate-spin" /> : <Printer className="mr-2 h-4 w-4 sm:h-5 sm:w-5" />}
+                Print Last Receipt
+              </Button>
             </CardFooter>
           </Card>
         </div>
@@ -793,29 +835,6 @@ export default function POSPage() {
         </div>
       )}
 
-      <AlertDialog open={isPrintConfirmOpen} onOpenChange={(open) => {
-        setIsPrintConfirmOpen(open);
-        if (!open && saleToPrint && !isPrintingPdf) { 
-            finalizeSaleAndClearTicket();
-        }
-      }}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Print Receipt?</AlertDialogTitle>
-            <AlertDialogDescription>
-              The sale has been processed. Would you like to print a receipt?
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel onClick={finalizeSaleAndClearTicket} disabled={isPrintingPdf}>No, Thanks</AlertDialogCancel>
-            <AlertDialogAction onClick={handlePrintConfirmed} disabled={isPrintingPdf}>
-              {isPrintingPdf ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Printer className="mr-2 h-4 w-4"/>}
-              {isPrintingPdf ? 'Printing...' : 'Yes, Print'}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-
       <div ref={printableTicketRef} style={{ position: 'absolute', left: '-9999px', top: '-9999px', zIndex: -1, border: '1px solid black' }}>
          {saleToPrint && <PrintableTicket sale={saleToPrint} />}
       </div>
@@ -823,5 +842,3 @@ export default function POSPage() {
     </AppLayout>
   );
 }
-
-    
