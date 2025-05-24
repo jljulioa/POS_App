@@ -9,9 +9,9 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import type { Product as ProductType, Sale } from '@/lib/mockData';
-import type { SalesTicketDB, SaleItemForTicket } from '@/app/api/sales-tickets/route';
+import type { SalesTicketDB, SaleItemForTicket as TicketItemBackend } from '@/app/api/sales-tickets/route'; // Renamed to avoid conflict
 import Image from 'next/image';
-import { Search, X, Plus, Minus, Save, ShoppingCart, CreditCard, DollarSign, PlusSquare, ListFilter, Loader2, AlertTriangle, Ticket, Printer, Percent } from 'lucide-react';
+import { Search, X, Plus, Minus, Save, ShoppingCart, CreditCard, DollarSign, PlusSquare, ListFilter, Loader2, AlertTriangle, Ticket, Printer } from 'lucide-react';
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { Badge } from '@/components/ui/badge';
@@ -37,7 +37,6 @@ import { cn } from '@/lib/utils';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/hooks/useAuth';
 import { format } from 'date-fns';
-
 
 // API fetch function for products
 const fetchProducts = async (): Promise<ProductType[]> => {
@@ -106,23 +105,25 @@ const deleteSalesTicketAPI = async (ticketId: string): Promise<{ message: string
 };
 
 interface PrintableTicketProps {
-  sale: Sale | null;
+  ticketName: string;
+  items: TicketItemBackend[];
+  totalAmount: number;
+  currentDate: string;
 }
 
-const PrintableTicket: React.FC<PrintableTicketProps> = ({ sale }) => {
-  if (!sale) return null;
+const PrintableTicket: React.FC<PrintableTicketProps> = (props) => {
+  const { ticketName, items, totalAmount, currentDate } = props;
+  if (!items) return null; // or some placeholder
 
   return (
     <div className="p-2 font-mono text-xs" style={{ width: '300px', color: 'black', backgroundColor: 'white', border: '1px solid #ccc' }}>
       <div className="text-center mb-1">
         <h2 className="font-bold text-sm">MotoFox POS</h2>
-        <p>Thank you for your purchase!</p>
+        <p>Current Ticket</p>
       </div>
       <Separator className="my-0.5 bg-black" />
-      <p>Receipt: {sale.id}</p>
-      <p>Date: {format(new Date(sale.date), 'dd/MM/yyyy HH:mm:ss')}</p>
-      {sale.customerName && <p>Customer: {sale.customerName}</p>}
-      <p>Cashier: {sale.cashierId}</p>
+      <p>Ticket: {ticketName}</p>
+      <p>Date: {currentDate}</p>
       <Separator className="my-0.5 bg-black" />
       <h3 className="font-bold my-0.5 text-xs">Items:</h3>
       <table className="w-full text-left text-xs">
@@ -130,15 +131,17 @@ const PrintableTicket: React.FC<PrintableTicketProps> = ({ sale }) => {
           <tr>
             <th className="py-0.5 pr-1">Product</th>
             <th className="py-0.5 px-0.5 text-center">Qty</th>
+            <th className="py-0.5 px-0.5 text-right">Disc. %</th>
             <th className="py-0.5 px-0.5 text-right">Price</th>
             <th className="py-0.5 pl-1 text-right">Total</th>
           </tr>
         </thead>
         <tbody>
-          {sale.items.map((item) => (
+          {items.map((item) => (
             <tr key={item.productId}>
               <td className="py-0.5 pr-1">{item.productName}</td>
               <td className="py-0.5 px-0.5 text-center">{item.quantity}</td>
+              <td className="py-0.5 px-0.5 text-right">{item.discountPercentage?.toFixed(0) || 0}%</td>
               <td className="py-0.5 px-0.5 text-right">${Number(item.unitPrice).toFixed(2)}</td>
               <td className="py-0.5 pl-1 text-right">${Number(item.totalPrice).toFixed(2)}</td>
             </tr>
@@ -147,11 +150,8 @@ const PrintableTicket: React.FC<PrintableTicketProps> = ({ sale }) => {
       </table>
       <Separator className="my-0.5 bg-black" />
       <div className="text-right mt-1">
-        <p className="font-bold text-sm">TOTAL: ${Number(sale.totalAmount).toFixed(2)}</p>
+        <p className="font-bold text-sm">TOTAL: ${Number(totalAmount).toFixed(2)}</p>
       </div>
-      <p className="text-center mt-1 text-xs">
-        Payment Method: {sale.paymentMethod}
-      </p>
     </div>
   );
 };
@@ -164,7 +164,6 @@ export default function POSPage() {
   const { userRole } = useAuth();
   const [activeTicketId, setActiveTicketId] = useState<string | null>(null);
   
-  const [saleToPrint, setSaleToPrint] = useState<Sale | null>(null);
   const [isPrintingPdf, setIsPrintingPdf] = useState(false);
   const printableTicketRef = useRef<HTMLDivElement>(null);
   const finalizedTicketIdRef = useRef<string | null>(null);
@@ -183,9 +182,7 @@ export default function POSPage() {
   const createTicketMutation = useMutation<SalesTicketDB, Error, Pick<SalesTicketDB, 'name' | 'cart_items' | 'status'>>({
     mutationFn: createSalesTicketAPI,
     onSuccess: (newTicket) => {
-      queryClient.setQueryData(['salesTickets'], (oldData: SalesTicketDB[] | undefined) =>
-        oldData ? [...oldData, newTicket] : [newTicket]
-      );
+      queryClient.setQueryData(['salesTickets'], (oldData: SalesTicketDB[] = []) => [...oldData, newTicket] );
       queryClient.invalidateQueries({ queryKey: ['salesTickets'] });
       setActiveTicketId(newTicket.id);
       toast({ title: 'Ticket Created', description: `${newTicket.name} has been created.` });
@@ -306,7 +303,7 @@ export default function POSPage() {
         toast({
         variant: "destructive",
         title: "Product Data Error",
-        description: `The cost for "${productInCatalog.name}" is invalid. Please check product data in inventory.`
+        description: `The cost for "${productInCatalog.name}" is invalid (${productInCatalog.cost}). Please check product data.`
         });
         return;
     }
@@ -317,7 +314,7 @@ export default function POSPage() {
     }
 
     const existingItem = activeTicket.cart_items.find(item => item.productId === productInCatalog.id);
-    let newCartItemsClient: SaleItemForTicket[];
+    let newCartItemsClient: TicketItemBackend[];
 
     if (existingItem) {
       if (existingItem.quantity < productInCatalog.stock) {
@@ -337,10 +334,10 @@ export default function POSPage() {
         productId: productInCatalog.id,
         productName: productInCatalog.name,
         quantity: 1,
-        originalUnitPrice: productInCatalog.price,
-        unitPrice: productInCatalog.price,
+        originalUnitPrice: productInCatalog.price, // Store original price
+        unitPrice: productInCatalog.price, // Effective unit price
         costPrice: itemCostPrice,
-        discountPercentage: 0,
+        discountPercentage: 0, // Initialize discount
         totalPrice: productInCatalog.price,
       }];
     }
@@ -349,11 +346,11 @@ export default function POSPage() {
         productId: item.productId,
         productName: item.productName,
         quantity: item.quantity,
-        originalUnitPrice: item.originalUnitPrice,
-        unitPrice: item.unitPrice,
+        originalUnitPrice: Number(item.originalUnitPrice) || 0,
+        unitPrice: Number(item.unitPrice) || 0,
         costPrice: Number(item.costPrice) || 0,
-        discountPercentage: item.discountPercentage,
-        totalPrice: item.totalPrice,
+        discountPercentage: Number(item.discountPercentage) || 0,
+        totalPrice: Number(item.totalPrice) || 0,
     }));
     updateTicketMutation.mutate({ ticketId: activeTicket.id, data: { cart_items: cartItemsForAPI } });
     setSearchTerm('');
@@ -367,7 +364,7 @@ export default function POSPage() {
         return;
     }
 
-    let newCartItemsClient: SaleItemForTicket[];
+    let newCartItemsClient: TicketItemBackend[];
     if (newQuantity <= 0) {
       newCartItemsClient = activeTicket.cart_items.filter(item => item.productId !== productId);
     } else if (newQuantity > productInCatalog.stock) {
@@ -384,11 +381,11 @@ export default function POSPage() {
         productId: item.productId,
         productName: item.productName,
         quantity: item.quantity,
-        originalUnitPrice: item.originalUnitPrice,
-        unitPrice: item.unitPrice,
+        originalUnitPrice: Number(item.originalUnitPrice) || 0,
+        unitPrice: Number(item.unitPrice) || 0,
         costPrice: Number(item.costPrice) || 0,
-        discountPercentage: item.discountPercentage,
-        totalPrice: item.totalPrice,
+        discountPercentage: Number(item.discountPercentage) || 0,
+        totalPrice: Number(item.totalPrice) || 0,
     }));
     updateTicketMutation.mutate({ ticketId: activeTicket.id, data: { cart_items: cartItemsForAPI } });
   }, [activeTicket, products, toast, updateTicketMutation]);
@@ -400,8 +397,8 @@ export default function POSPage() {
 
     const newCartItemsClient = activeTicket.cart_items.map(item => {
       if (item.productId === productId) {
-        const currentDiscount = isNaN(discountPercentage) || discountPercentage < 0 || discountPercentage > 100 ? item.discountPercentage : discountPercentage;
-        const newUnitPrice = item.originalUnitPrice * (1 - (currentDiscount / 100));
+        const currentDiscount = isNaN(discountPercentage) || discountPercentage < 0 || discountPercentage > 100 ? (item.discountPercentage || 0) : discountPercentage;
+        const newUnitPrice = (item.originalUnitPrice || item.unitPrice) * (1 - (currentDiscount / 100));
         return {
           ...item,
           discountPercentage: currentDiscount,
@@ -415,11 +412,11 @@ export default function POSPage() {
         productId: item.productId,
         productName: item.productName,
         quantity: item.quantity,
-        originalUnitPrice: item.originalUnitPrice,
-        unitPrice: item.unitPrice,
+        originalUnitPrice: Number(item.originalUnitPrice) || 0,
+        unitPrice: Number(item.unitPrice) || 0,
         costPrice: Number(item.costPrice) || 0,
-        discountPercentage: item.discountPercentage,
-        totalPrice: item.totalPrice,
+        discountPercentage: Number(item.discountPercentage) || 0,
+        totalPrice: Number(item.totalPrice) || 0,
     }));
     updateTicketMutation.mutate({ ticketId: activeTicket.id, data: { cart_items: cartItemsForAPI } });
   }, [activeTicket, updateTicketMutation]);
@@ -432,11 +429,11 @@ export default function POSPage() {
         productId: item.productId,
         productName: item.productName,
         quantity: item.quantity,
-        originalUnitPrice: item.originalUnitPrice,
-        unitPrice: item.unitPrice,
+        originalUnitPrice: Number(item.originalUnitPrice) || 0,
+        unitPrice: Number(item.unitPrice) || 0,
         costPrice: Number(item.costPrice) || 0,
-        discountPercentage: item.discountPercentage,
-        totalPrice: item.totalPrice,
+        discountPercentage: Number(item.discountPercentage) || 0,
+        totalPrice: Number(item.totalPrice) || 0,
     }));
     updateTicketMutation.mutate({ ticketId: activeTicket.id, data: { cart_items: cartItemsForAPI } });
   };
@@ -451,7 +448,7 @@ export default function POSPage() {
     setSearchTerm('');
   };
 
-  const handleManualCloseTicket = (ticketId: string) => {
+  const handleCloseTicket = (ticketId: string) => {
     const currentTickets = queryClient.getQueryData<SalesTicketDB[]>(['salesTickets']) || [];
     if(currentTickets.length <= 1){
       toast({ variant: 'destructive', title: 'Cannot Close Last Ticket', description: "You must have at least one active ticket. Process the sale or create a new ticket first." });
@@ -467,7 +464,6 @@ export default function POSPage() {
   const saleApiMutation = useMutation<Sale, Error, Omit<Sale, 'id' | 'date'>>({
     mutationFn: createSaleAPI,
     onSuccess: (completedSale) => {
-      setSaleToPrint(completedSale); // Store for printing
       toast({
           title: "Sale Processed Successfully",
           description: `Sale ID: ${completedSale.id} completed. Total: $${completedSale.totalAmount.toFixed(2)}.`,
@@ -479,7 +475,7 @@ export default function POSPage() {
       const ticketIdToDelete = finalizedTicketIdRef.current;
       if (ticketIdToDelete) {
           deleteTicketMutation.mutate(ticketIdToDelete);
-      } else if (activeTicket) { // Fallback if ref wasn't set (should not happen)
+      } else if (activeTicket) { 
           deleteTicketMutation.mutate(activeTicket.id);
       }
     },
@@ -499,7 +495,7 @@ export default function POSPage() {
       toast({ variant: "destructive", title: "Empty Cart", description: "Please add items to the cart before processing." });
       return;
     }
-    finalizedTicketIdRef.current = activeTicket.id; // Store ID of ticket being processed
+    finalizedTicketIdRef.current = activeTicket.id; 
 
     const saleData = {
       items: activeTicket.cart_items.map(item => ({
@@ -517,14 +513,14 @@ export default function POSPage() {
     saleApiMutation.mutate(saleData);
   };
 
-  const handlePrintLastReceipt = useCallback(async () => {
-    if (!printableTicketRef.current || !saleToPrint) {
-        toast({ variant: "destructive", title: "Print Error", description: "No sale data available to print."});
+  const handlePrintCurrentTicket = useCallback(async () => {
+    if (!activeTicket || !printableTicketRef.current ) {
+        toast({ variant: "destructive", title: "Print Error", description: "No active ticket data available to print."});
         return;
     }
     setIsPrintingPdf(true);
 
-    setTimeout(async () => { // Ensure DOM is updated
+    setTimeout(async () => { 
         try {
             const html2pdf = (await import('html2pdf.js')).default;
             const element = printableTicketRef.current;
@@ -533,7 +529,7 @@ export default function POSPage() {
             }
             const options = {
                 margin: 0.1,
-                filename: `receipt_${saleToPrint.id}.pdf`,
+                filename: `ticket_${activeTicket.name.replace(/\s+/g, '_')}_${format(new Date(), 'yyyyMMdd_HHmmss')}.pdf`,
                 image: { type: 'jpeg', quality: 0.98 },
                 html2canvas: { scale: 3, logging: false, useCORS: true, width: 300 },
                 jsPDF: { unit: 'in', format: [3.15, 8], orientation: 'portrait' }
@@ -546,7 +542,7 @@ export default function POSPage() {
             setIsPrintingPdf(false);
         }
     }, 150); 
-  }, [saleToPrint, toast]);
+  }, [activeTicket, toast]);
 
 
   const getTicketBadgeVariant = (status: SalesTicketDB['status']): "default" | "outline" | "secondary" | "destructive" | null | undefined => {
@@ -637,7 +633,7 @@ export default function POSPage() {
                       <DropdownMenuItem onClick={() => handleUpdateTicketStatus(ticket.id, 'On Hold')} disabled={ticket.status === 'On Hold' || isProcessingAnyTicketAction || isProcessingSale}>Mark On Hold</DropdownMenuItem>
                       <DropdownMenuItem onClick={() => handleUpdateTicketStatus(ticket.id, 'Pending Payment')} disabled={ticket.status === 'Pending Payment' || isProcessingAnyTicketAction || isProcessingSale}>Mark Pending Payment</DropdownMenuItem>
                       <DropdownMenuSeparator />
-                      <DropdownMenuItem onClick={() => handleManualCloseTicket(ticket.id)} className="text-destructive focus:text-destructive focus:bg-destructive/10" disabled={isProcessingAnyTicketAction || isProcessingSale || (salesTickets && salesTickets.length <= 1) }>
+                      <DropdownMenuItem onClick={() => handleCloseTicket(ticket.id)} className="text-destructive focus:text-destructive focus:bg-destructive/10" disabled={isProcessingAnyTicketAction || isProcessingSale || (salesTickets && salesTickets.length <= 1) }>
                         Close Ticket
                       </DropdownMenuItem>
                     </DropdownMenuContent>
@@ -815,12 +811,12 @@ export default function POSPage() {
               </div>
               <Button 
                 variant="outline" 
-                onClick={handlePrintLastReceipt} 
-                disabled={!saleToPrint || isPrintingPdf}
+                onClick={handlePrintCurrentTicket} 
+                disabled={!activeTicket || activeTicket.cart_items.length === 0 || isPrintingPdf}
                 className="w-full mt-2 text-xs sm:text-base py-3 sm:py-6"
               >
                 {isPrintingPdf ? <Loader2 className="mr-2 h-4 w-4 sm:h-5 sm:w-5 animate-spin" /> : <Printer className="mr-2 h-4 w-4 sm:h-5 sm:w-5" />}
-                Print Last Receipt
+                Print Current Ticket
               </Button>
             </CardFooter>
           </Card>
@@ -835,10 +831,18 @@ export default function POSPage() {
         </div>
       )}
 
-      <div ref={printableTicketRef} style={{ position: 'absolute', left: '-9999px', top: '-9999px', zIndex: -1, border: '1px solid black' }}>
-         {saleToPrint && <PrintableTicket sale={saleToPrint} />}
+      <div ref={printableTicketRef} style={{ position: 'absolute', left: '-9999px', top: '-9999px', zIndex: -1 }}>
+         {activeTicket && (
+           <PrintableTicket 
+             ticketName={activeTicket.name} 
+             items={activeTicket.cart_items} 
+             totalAmount={cartTotal}
+             currentDate={format(new Date(), 'dd/MM/yyyy HH:mm:ss')}
+            />
+         )}
       </div>
 
     </AppLayout>
   );
 }
+
