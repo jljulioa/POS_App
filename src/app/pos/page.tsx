@@ -95,55 +95,57 @@ const deleteSalesTicketAPI = async (ticketId: string): Promise<{ message: string
   return res.json();
 };
 
-interface PrintableTicketProps {
-  ticketName: string;
-  items: TicketItemBackend[];
-  totalAmount: number;
-  currentDate?: string;
-}
 
-const PrintableTicket: React.FC<PrintableTicketProps> = (props) => {
-  const { ticketName, items, totalAmount, currentDate } = props;
-  if (!items) return null; 
+const generateTicketHtml = (ticketName: string, items: TicketItemBackend[], totalAmount: number, currentDate: string): string => {
+  const itemsHtml = items.map(item => `
+    <tr>
+      <td style="padding-right: 5px; vertical-align: top;">
+        ${item.productName}
+        ${item.discountPercentage && item.discountPercentage > 0 ? `<br><span style="font-size: 9px;">(Disc: ${item.discountPercentage.toFixed(0)}%)</span>` : ''}
+      </td>
+      <td style="text-align: center; vertical-align: top;">${item.quantity}</td>
+      <td style="text-align: right; vertical-align: top;">${Number(item.unitPrice).toFixed(2)}</td>
+      <td style="text-align: right; vertical-align: top;">${Number(item.totalPrice).toFixed(2)}</td>
+    </tr>
+  `).join('');
 
-  return (
-    <div className="p-2 font-mono text-xs" style={{ width: '300px', color: 'black', backgroundColor: 'white', border: '1px solid #ccc' }}>
-      <div className="text-center mb-1">
-        <h2 className="font-bold text-sm">MotoFox POS</h2>
+  return `
+    <div style="width: 280px; font-family: 'Courier New', Courier, monospace; font-size: 10px; color: black; background-color: white; padding: 10px;">
+      <div style="text-align: center; margin-bottom: 8px;">
+        <h2 style="font-size: 16px; font-weight: bold; margin: 0 0 2px 0;">MotoFox POS</h2>
+        <div style="font-size: 9px;">Your Motorcycle Parts Specialist</div>
       </div>
-      <Separator className="my-0.5 bg-black" />
-      <p>Ticket: {ticketName}</p>
-      {currentDate && <p>Date: {currentDate}</p>}
-      <Separator className="my-0.5 bg-black" />
-      <h3 className="font-bold my-0.5 text-xs">Items:</h3>
-      <table className="w-full text-left text-xs">
+      <hr style="border: none; border-top: 1px dashed #000; margin: 5px 0;" />
+      <div style="display: flex; justify-content: space-between; font-size: 9px;">
+        <span>Ticket: ${ticketName}</span>
+        <span>Date: ${currentDate.split(' ')[0]}</span>
+      </div>
+      <div style="text-align: right; font-size: 9px; margin-bottom: 5px;">Time: ${currentDate.split(' ')[1]}</div>
+      <hr style="border: none; border-top: 1px dashed #000; margin: 5px 0;" />
+      <table style="width: 100%; font-size: 10px; border-collapse: collapse; margin-bottom: 5px;">
         <thead>
           <tr>
-            <th className="py-0.5 pr-1">Product</th>
-            <th className="py-0.5 px-0.5 text-center">Qty</th>
-            <th className="py-0.5 px-0.5 text-right">Disc. %</th>
-            <th className="py-0.5 px-0.5 text-right">Price</th>
-            <th className="py-0.5 pl-1 text-right">Total</th>
+            <th style="text-align: left; padding: 2px 5px 2px 0; border-bottom: 1px solid #eee;">Item</th>
+            <th style="text-align: center; padding: 2px 0; border-bottom: 1px solid #eee;">Qty</th>
+            <th style="text-align: right; padding: 2px 0; border-bottom: 1px solid #eee;">Price</th>
+            <th style="text-align: right; padding: 2px 0 2px 5px; border-bottom: 1px solid #eee;">Total</th>
           </tr>
         </thead>
         <tbody>
-          {items.map((item) => (
-            <tr key={item.productId}>
-              <td className="py-0.5 pr-1">{item.productName}</td>
-              <td className="py-0.5 px-0.5 text-center">{item.quantity}</td>
-              <td className="py-0.5 px-0.5 text-right">{item.discountPercentage?.toFixed(0) || 0}%</td>
-              <td className="py-0.5 px-0.5 text-right">${Number(item.unitPrice).toFixed(2)}</td>
-              <td className="py-0.5 pl-1 text-right">${Number(item.totalPrice).toFixed(2)}</td>
-            </tr>
-          ))}
+          ${itemsHtml}
         </tbody>
       </table>
-      <Separator className="my-0.5 bg-black" />
-      <div className="text-right mt-1">
-        <p className="font-bold text-sm">TOTAL: ${Number(totalAmount).toFixed(2)}</p>
+      <hr style="border: none; border-top: 1px dashed #000; margin: 5px 0;" />
+      <div style="text-align: right; margin-top: 8px;">
+        <div style="font-size: 14px; font-weight: bold;">TOTAL: $${Number(totalAmount).toFixed(2)}</div>
+      </div>
+      <hr style="border: none; border-top: 1px solid #000; margin: 8px 0;" />
+      <div style="text-align: center; margin-top: 10px; font-size: 10px;">
+        Thank you for your purchase!
+        <br>MotoFox POS - We keep you riding!
       </div>
     </div>
-  );
+  `;
 };
 
 
@@ -153,10 +155,8 @@ export default function POSPage() {
   const queryClient = useQueryClient();
   const { userRole } = useAuth();
   const [activeTicketId, setActiveTicketId] = useState<string | null>(null);
-  
-  const [isPrintingPdf, setIsPrintingPdf] = useState(false);
-  const printableTicketRef = useRef<HTMLDivElement>(null);
   const finalizedTicketIdRef = useRef<string | null>(null);
+  const [isPrintingPdf, setIsPrintingPdf] = useState(false);
 
   const { data: products = [], isLoading: isLoadingProducts, error: productsError, isError: isProductsError } = useQuery<ProductType[], Error>({
     queryKey: ['products'],
@@ -187,7 +187,7 @@ export default function POSPage() {
     const currentTickets = queryClient.getQueryData<SalesTicketDB[]>(['salesTickets']) || [];
     const nextTicketNumber = currentTickets.length > 0
         ? Math.max(0, ...currentTickets.map(t => {
-            const nameMatch = t.name.match(/Ticket (\d+)/i); // Case-insensitive match
+            const nameMatch = t.name.match(/Ticket (\d+)/i);
             return nameMatch ? parseInt(nameMatch[1], 10) : 0;
           })) + 1
         : 1;
@@ -206,7 +206,7 @@ export default function POSPage() {
     if (!isLoadingSalesTickets && salesTickets) {
       if (salesTickets.length === 0) {
         if (!createTicketMutation.isPending && !activeTicketId) { 
-            setTimeout(() => handleCreateNewTicket(true), 50); // Small delay
+            setTimeout(() => handleCreateNewTicket(true), 100); 
         }
       } else if (!activeTicketId || !salesTickets.find(t => t.id === activeTicketId)) {
         const sortedTickets = [...salesTickets].sort((a, b) => new Date(b.last_updated_at).getTime() - new Date(a.last_updated_at).getTime());
@@ -248,12 +248,10 @@ export default function POSPage() {
                 const sortedTickets = [...currentTickets].sort((a, b) => new Date(b.last_updated_at).getTime() - new Date(a.last_updated_at).getTime());
                 setActiveTicketId(sortedTickets[0].id);
             } else {
-                 // Delay slightly to allow state to settle from invalidateQueries
-                setTimeout(() => handleCreateNewTicket(true), 100); 
+                setTimeout(() => handleCreateNewTicket(true), 150); 
             }
         } else if (currentTickets.length === 0) {
-             // Delay slightly
-            setTimeout(() => handleCreateNewTicket(true), 100);
+            setTimeout(() => handleCreateNewTicket(true), 150);
         }
       });
       setSearchTerm(''); 
@@ -455,20 +453,20 @@ export default function POSPage() {
   const saleApiMutation = useMutation<Sale, Error, Omit<Sale, 'id' | 'date'>>({
     mutationFn: createSaleAPI,
     onSuccess: (completedSale) => {
-      toast({
-          title: "Sale Processed Successfully",
-          description: `Sale ID: ${completedSale.id} completed. Total: $${completedSale.totalAmount.toFixed(2)}.`,
-      });
-      queryClient.invalidateQueries({ queryKey: ['products'] });
-      queryClient.invalidateQueries({ queryKey: ['sales'] });
-      queryClient.invalidateQueries({ queryKey: ['todaysSales']});
+        toast({
+            title: "Sale Processed Successfully",
+            description: `Sale ID: ${completedSale.id} completed. Total: $${completedSale.totalAmount.toFixed(2)}.`,
+        });
+        queryClient.invalidateQueries({ queryKey: ['products'] });
+        queryClient.invalidateQueries({ queryKey: ['sales'] });
+        queryClient.invalidateQueries({ queryKey: ['todaysSales']});
       
-      const ticketIdToDelete = finalizedTicketIdRef.current;
-      if (ticketIdToDelete) {
-          deleteTicketMutation.mutate(ticketIdToDelete);
-      } else if (activeTicket) { 
-          deleteTicketMutation.mutate(activeTicket.id);
-      }
+        const ticketIdToDelete = finalizedTicketIdRef.current;
+        if (ticketIdToDelete) {
+            deleteTicketMutation.mutate(ticketIdToDelete);
+        } else if (activeTicket) { 
+            deleteTicketMutation.mutate(activeTicket.id);
+        }
     },
     onError: (error) => {
       toast({
@@ -505,10 +503,7 @@ export default function POSPage() {
   };
 
   const handlePrintCurrentTicket = useCallback(async () => {
-    console.log("handlePrintCurrentTicket called. Active ticket:", activeTicket);
-    const currentTicketDataForPrint = activeTicket; // Capture current active ticket
-
-    if (!currentTicketDataForPrint || currentTicketDataForPrint.cart_items.length === 0 || !printableTicketRef.current) {
+    if (!activeTicket || activeTicket.cart_items.length === 0) {
       toast({
         variant: 'destructive',
         title: 'Print Error',
@@ -517,55 +512,64 @@ export default function POSPage() {
       return;
     }
     setIsPrintingPdf(true);
-    console.log("isPrintingPdf set to true");
 
-    // Log the data that *should* be rendered in PrintableTicket
+    const htmlContent = generateTicketHtml(
+      activeTicket.name,
+      activeTicket.cart_items,
+      cartTotal,
+      format(new Date(), 'dd/MM/yyyy HH:mm:ss')
+    );
+
+    // Create a temporary hidden div to render the HTML for PDF generation
+    const printDiv = document.createElement('div');
+    printDiv.style.position = 'absolute';
+    printDiv.style.left = '-9999px';
+    printDiv.style.top = '-9999px';
+    printDiv.innerHTML = htmlContent;
+    document.body.appendChild(printDiv);
+    
     console.log("Data for PrintableTicket:", {
-        name: currentTicketDataForPrint.name,
-        items: currentTicketDataForPrint.cart_items,
-        total: cartTotal, // cartTotal is derived from activeTicket, so it should be in sync
+        name: activeTicket.name,
+        items: activeTicket.cart_items,
+        total: cartTotal,
     });
+    console.log("Element to print innerHTML:", printDiv.innerHTML.substring(0, 300) + "...");
 
+
+    // Give the browser a moment to render the content in the hidden div
     setTimeout(async () => {
       try {
-        const html2pdf = (await import('html2pdf.js')).default;
-        const elementToPrint = printableTicketRef.current;
-
-        console.log("Inside setTimeout. Element to print:", elementToPrint);
-        if (elementToPrint) {
-            console.log("Element innerHTML before print:", elementToPrint.innerHTML);
-        }
-
-
-        if (!elementToPrint || !elementToPrint.hasChildNodes() || elementToPrint.innerHTML.trim() === "") {
-           console.error("Printable element is empty or not found after timeout. Ticket data used for render:", currentTicketDataForPrint);
+        if (!printDiv || !printDiv.hasChildNodes() || printDiv.innerHTML.trim() === "") {
+          console.error("Printable element is empty or not found after timeout. Ticket data used for render:", activeTicket);
           toast({
             variant: 'destructive',
             title: 'Print Error',
             description: 'Failed to prepare ticket content for printing. Please try again.',
           });
           setIsPrintingPdf(false);
+          document.body.removeChild(printDiv);
           return;
         }
         
+        const html2pdf = (await import('html2pdf.js')).default;
         const options = {
-          margin: 0.1, // inches
-          filename: `ticket_${currentTicketDataForPrint.name.replace(/\s+/g, '_')}_${format(new Date(), 'yyyyMMdd_HHmmss')}.pdf`,
+          margin: [5, 2, 5, 2], // top, left, bottom, right in mm
+          filename: `ticket_${activeTicket.name.replace(/\s+/g, '_')}_${format(new Date(), 'yyyyMMdd_HHmmss')}.pdf`,
           image: { type: 'jpeg', quality: 0.98 },
           html2canvas: {
-            scale: 3, 
+            scale: 2, 
             logging: false,
             useCORS: true,
-            width: 300, 
+            width: printDiv.firstChild ? (printDiv.firstChild as HTMLElement).offsetWidth : 300, // Use actual width of styled content
+            windowWidth: printDiv.firstChild ? (printDiv.firstChild as HTMLElement).offsetWidth : 300,
           },
           jsPDF: {
-            unit: 'in',
-            format: [3.15, 8], 
+            unit: 'mm',
+            format: [76, 210], // Approx 3-inch width, continuous length (adjust as needed)
             orientation: 'portrait',
           },
         };
-        await html2pdf().from(elementToPrint).set(options).save();
-        console.log("PDF generation attempted.");
+        await html2pdf().from(printDiv).set(options).save();
       } catch (error) {
         console.error('Error generating PDF:', error);
         toast({
@@ -575,9 +579,9 @@ export default function POSPage() {
         });
       } finally {
         setIsPrintingPdf(false);
-        console.log("isPrintingPdf set to false");
+        document.body.removeChild(printDiv);
       }
-    }, 250); // Increased delay slightly
+    }, 250); 
   }, [activeTicket, cartTotal, toast]);
 
 
@@ -866,19 +870,6 @@ export default function POSPage() {
           )}
         </div>
       )}
-
-      <div ref={printableTicketRef} style={{ position: 'absolute', left: '-9999px', top: '-9999px', zIndex: -1 }}>
-         {activeTicket && (
-           <PrintableTicket 
-             ticketName={activeTicket.name} 
-             items={activeTicket.cart_items} 
-             totalAmount={cartTotal}
-             currentDate={format(new Date(), 'dd/MM/yyyy HH:mm:ss')}
-            />
-         )}
-      </div>
-
     </AppLayout>
   );
 }
-
