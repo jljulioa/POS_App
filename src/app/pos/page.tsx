@@ -11,7 +11,7 @@ import { Separator } from '@/components/ui/separator';
 import type { Product as ProductType, Sale } from '@/lib/mockData';
 import type { SalesTicketDB, SaleItemForTicket } from '@/app/api/sales-tickets/route';
 import Image from 'next/image';
-import { Search, X, Plus, Minus, Save, ShoppingCart, CreditCard, DollarSign, PlusSquare, ListFilter, Loader2, AlertTriangle, Ticket, Printer } from 'lucide-react';
+import { Search, X, Plus, Minus, Save, ShoppingCart, CreditCard, DollarSign, PlusSquare, ListFilter, Loader2, AlertTriangle, Ticket } from 'lucide-react';
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { Badge } from '@/components/ui/badge';
@@ -26,8 +26,6 @@ import {
 import { cn } from '@/lib/utils';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/hooks/useAuth';
-import { format } from 'date-fns';
-// html2pdf.js will be imported dynamically
 
 // API fetch function for products
 const fetchProducts = async (): Promise<ProductType[]> => {
@@ -95,66 +93,6 @@ const deleteSalesTicketAPI = async (ticketId: string): Promise<{ message: string
   return res.json();
 };
 
-const generateTicketHtml = (ticketName: string, items: SaleItemForTicket[], totalAmount: number, currentDate: string): string => {
-  console.log("generateTicketHtml called with items:", JSON.stringify(items));
-  if (!items || items.length === 0) {
-    console.log("generateTicketHtml: No items in ticket.");
-    return `<div style="width: 280px; padding: 10px; font-family: 'Courier New', Courier, monospace; border: 1px solid #ccc;"><p>No items in ticket.</p></div>`;
-  }
-
-  const itemsHtml = items.map(item => `
-    <tr>
-      <td style="padding-right: 5px; vertical-align: top; font-size: 10px; border-bottom: 1px solid #eee;">
-        ${item.productName || 'N/A Product'}
-        ${item.discountPercentage && Number(item.discountPercentage) > 0 ? `<br><span style="font-size: 9px;">(Disc: ${Number(item.discountPercentage).toFixed(0)}%)</span>` : ''}
-      </td>
-      <td style="text-align: center; vertical-align: top; font-size: 10px; border-bottom: 1px solid #eee;">${item.quantity || 0}</td>
-      <td style="text-align: right; vertical-align: top; font-size: 10px; border-bottom: 1px solid #eee;">${Number(item.unitPrice).toFixed(2)}</td>
-      <td style="text-align: right; vertical-align: top; font-size: 10px; border-bottom: 1px solid #eee;">${Number(item.totalPrice).toFixed(2)}</td>
-    </tr>
-  `).join('');
-
-  const html = `
-    <div style="width: 280px; font-family: 'Courier New', Courier, monospace; color: black; background-color: white; padding: 10px; border: 1px solid #ccc;">
-      <div style="text-align: center; margin-bottom: 8px;">
-        <h2 style="font-size: 16px; font-weight: bold; margin: 0 0 2px 0;">MotoFox POS</h2>
-        <div style="font-size: 9px;">Your Motorcycle Parts Specialist</div>
-      </div>
-      <hr style="border: none; border-top: 1px dashed #000; margin: 5px 0;" />
-      <div style="display: flex; justify-content: space-between; font-size: 9px;">
-        <span>Ticket: ${ticketName || 'N/A Ticket'}</span>
-        <span>Date: ${currentDate.split(' ')[0]}</span>
-      </div>
-      <div style="text-align: right; font-size: 9px; margin-bottom: 5px;">Time: ${currentDate.split(' ')[1]}</div>
-      <hr style="border: none; border-top: 1px dashed #000; margin: 5px 0;" />
-      <table style="width: 100%; border-collapse: collapse; margin-bottom: 5px;">
-        <thead>
-          <tr>
-            <th style="text-align: left; padding: 2px 5px 2px 0; border-bottom: 1px solid #ccc; font-size: 10px;">Item</th>
-            <th style="text-align: center; padding: 2px 0; border-bottom: 1px solid #ccc; font-size: 10px;">Qty</th>
-            <th style="text-align: right; padding: 2px 0; border-bottom: 1px solid #ccc; font-size: 10px;">Price</th>
-            <th style="text-align: right; padding: 2px 0 2px 5px; border-bottom: 1px solid #ccc; font-size: 10px;">Total</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${itemsHtml}
-        </tbody>
-      </table>
-      <hr style="border: none; border-top: 1px dashed #000; margin: 5px 0;" />
-      <div style="text-align: right; margin-top: 8px;">
-        <div style="font-size: 14px; font-weight: bold;">TOTAL: $${Number(totalAmount).toFixed(2)}</div>
-      </div>
-      <hr style="border: none; border-top: 1px solid #000; margin: 8px 0;" />
-      <div style="text-align: center; margin-top: 10px; font-size: 10px;">
-        Thank you for your purchase!
-        <br>MotoFox POS - We keep you riding!
-      </div>
-    </div>
-  `;
-  console.log("Generated HTML for PDF (end of generateTicketHtml):", html.substring(0, 500) + "...");
-  return html;
-};
-
 
 export default function POSPage() {
   const [searchTerm, setSearchTerm] = useState('');
@@ -162,9 +100,8 @@ export default function POSPage() {
   const queryClient = useQueryClient();
   const { userRole } = useAuth();
   const [activeTicketId, setActiveTicketId] = useState<string | null>(null);
-  const finalizedTicketIdRef = useRef<string | null>(null);
-  const [isPrintingPdf, setIsPrintingPdf] = useState(false);
-
+  const finalizedTicketIdRef = useRef<string | null>(null); // Used to track the ticket being finalized
+  
   const { data: products = [], isLoading: isLoadingProducts, error: productsError, isError: isProductsError } = useQuery<ProductType[], Error>({
     queryKey: ['products'],
     queryFn: fetchProducts,
@@ -214,29 +151,37 @@ export default function POSPage() {
   useEffect(() => {
     if (!isLoadingSalesTickets && salesTickets) {
       if (salesTickets.length === 0) {
+        // Only create a new ticket if one isn't already being created or doesn't exist
         if (!createTicketMutation.isPending && !activeTicketId) { 
-            setTimeout(() => handleCreateNewTicket(true), 250); 
+            // console.log("No tickets found, creating a new one.");
+            setTimeout(() => handleCreateNewTicket(true), 260); // force create
         }
       } else if (!activeTicketId || !salesTickets.find(t => t.id === activeTicketId)) {
+        // If activeTicketId is not set or not in current list, set to most recent
         const sortedTickets = [...salesTickets].sort((a, b) => new Date(b.last_updated_at).getTime() - new Date(a.last_updated_at).getTime());
         if (sortedTickets.length > 0) {
+            // console.log("Setting active ticket to most recent:", sortedTickets[0].id);
             setActiveTicketId(sortedTickets[0].id);
         }
       }
     }
-  }, [salesTickets, isLoadingSalesTickets, activeTicketId, createTicketMutation.isPending, handleCreateNewTicket]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [salesTickets, isLoadingSalesTickets, activeTicketId, createTicketMutation.isPending]); // Removed handleCreateNewTicket from deps
 
 
   const updateTicketMutation = useMutation<SalesTicketDB, Error, { ticketId: string; data: Partial<Pick<SalesTicketDB, 'name' | 'cart_items' | 'status'>> }>({
     mutationFn: updateSalesTicketAPI,
     onSuccess: (updatedTicket) => {
+      // Manually update the query cache to reflect the change immediately
       queryClient.setQueryData(['salesTickets'], (oldData: SalesTicketDB[] | undefined) =>
         oldData ? oldData.map(t => t.id === updatedTicket.id ? updatedTicket : t) : []
       );
+      // Optionally, can still invalidate if other parts of the app depend on this query
+      // queryClient.invalidateQueries({ queryKey: ['salesTickets'] });
     },
     onError: (error) => {
       toast({ variant: 'destructive', title: 'Failed to Update Sales Ticket', description: error.message });
-      refetchSalesTickets(); 
+      refetchSalesTickets(); // Refetch to get the correct state from server
     },
   });
 
@@ -244,29 +189,35 @@ export default function POSPage() {
     mutationFn: deleteSalesTicketAPI,
     onSuccess: (data, deletedTicketId) => {
       toast({ title: 'Ticket Closed', description: `The ticket has been closed.` });
+       // If the deleted ticket was the one being finalized, clear the ref
        if (finalizedTicketIdRef.current === deletedTicketId) {
            finalizedTicketIdRef.current = null;
       }
       queryClient.setQueryData(['salesTickets'], (oldData: SalesTicketDB[] | undefined) =>
         oldData ? oldData.filter(t => t.id !== deletedTicketId) : []
       );
+      // After optimistic update, invalidate to ensure consistency
       queryClient.invalidateQueries({ queryKey: ['salesTickets'] }).then(() => {
+        // This logic runs after invalidation and fresh data is likely available
         const currentTickets = queryClient.getQueryData<SalesTicketDB[]>(['salesTickets']) || [];
-        if (activeTicketId === deletedTicketId) {
+        if (activeTicketId === deletedTicketId) { // If the active ticket was deleted
             if (currentTickets.length > 0) {
+                // Sort by last_updated_at to get the most recently active or created
                 const sortedTickets = [...currentTickets].sort((a, b) => new Date(b.last_updated_at).getTime() - new Date(a.last_updated_at).getTime());
-                 setTimeout(() => setActiveTicketId(sortedTickets[0].id), 260);
+                 setTimeout(() => setActiveTicketId(sortedTickets[0].id), 270); // Small delay to ensure state updates
             } else {
-                setTimeout(() => handleCreateNewTicket(true), 270); 
+                // If no tickets left, create a new one
+                setTimeout(() => handleCreateNewTicket(true), 280); // force create
             }
-        } else if (currentTickets.length === 0) {
-             setTimeout(() => handleCreateNewTicket(true), 280); 
+        } else if (currentTickets.length === 0) { // If all tickets were somehow deleted
+             setTimeout(() => handleCreateNewTicket(true), 290); // force create
         }
       });
-      setSearchTerm(''); 
+      setSearchTerm(''); // Clear search term
     },
     onError: (error, variables_ticketIdAttempted) => {
       toast({ variant: 'destructive', title: 'Error Closing Ticket', description: error.message });
+       // If the error was for the ticket being finalized, clear the ref
        if (finalizedTicketIdRef.current === variables_ticketIdAttempted) {
           finalizedTicketIdRef.current = null;
       }
@@ -334,12 +285,13 @@ export default function POSPage() {
         quantity: 1,
         originalUnitPrice: Number(productInCatalog.price) || 0,
         unitPrice: Number(productInCatalog.price) || 0,
-        costPrice: itemCostPrice,
+        costPrice: itemCostPrice, // Ensuring this is set from product.cost
         discountPercentage: 0,
         totalPrice: Number(productInCatalog.price) || 0,
       }];
     }
     
+    // Prepare data for API, ensuring all fields are correct numbers
     const cartItemsForAPI = newCartItemsClient.map(item => ({
         productId: item.productId,
         productName: item.productName,
@@ -395,6 +347,7 @@ export default function POSPage() {
 
     const newCartItemsClient = activeTicket.cart_items.map(item => {
       if (item.productId === productId) {
+        // Validate discount: 0 to 100. If invalid, use current or 0.
         const currentDiscount = isNaN(discountPercentage) || discountPercentage < 0 || discountPercentage > 100 ? (item.discountPercentage || 0) : discountPercentage;
         const newUnitPrice = (item.originalUnitPrice || item.unitPrice) * (1 - (currentDiscount / 100));
         return {
@@ -456,7 +409,7 @@ export default function POSPage() {
   };
 
   const handleUpdateTicketStatus = (ticketId: string, status: SalesTicketDB['status']) => {
-     if (!activeTicket) return;
+     if (!activeTicket) return; // Should not happen if button is enabled
      updateTicketMutation.mutate({ ticketId, data: { status } });
   };
 
@@ -468,9 +421,11 @@ export default function POSPage() {
             description: `Sale ID: ${completedSale.id} completed. Total: $${completedSale.totalAmount.toFixed(2)}.`,
         });
         queryClient.invalidateQueries({ queryKey: ['products'] });
-        queryClient.invalidateQueries({ queryKey: ['sales'] });
-        queryClient.invalidateQueries({ queryKey: ['todaysSales']});
+        queryClient.invalidateQueries({ queryKey: ['sales'] }); // For all sales records page
+        queryClient.invalidateQueries({ queryKey: ['todaysSales']}); // For today's sales report
+        queryClient.invalidateQueries({ queryKey: ['inventoryTransactions']});
         
+        // The ticket that was just finalized should be deleted
         const ticketIdToDelete = finalizedTicketIdRef.current;
         if (ticketIdToDelete) {
             deleteTicketMutation.mutate(ticketIdToDelete);
@@ -482,7 +437,7 @@ export default function POSPage() {
         title: "Failed to Process Sale",
         description: error.message || "An unexpected error occurred.",
       });
-      finalizedTicketIdRef.current = null; 
+      finalizedTicketIdRef.current = null; // Clear the ref on error
     },
   });
   
@@ -492,126 +447,25 @@ export default function POSPage() {
       toast({ variant: "destructive", title: "Empty Cart", description: "Please add items to the cart before processing." });
       return;
     }
+    // Store the ID of the ticket being processed so it can be deleted after sale completion
     finalizedTicketIdRef.current = activeTicket.id; 
 
     const saleData = {
-      items: activeTicket.cart_items.map(item => ({
+      items: activeTicket.cart_items.map(item => ({ // Map to ensure only SaleItem fields are sent
           productId: item.productId,
           productName: item.productName,
           quantity: item.quantity,
-          unitPrice: Number(item.unitPrice) || 0,
-          costPrice: Number(item.costPrice) || 0,
-          totalPrice: Number(item.totalPrice) || 0,
+          unitPrice: Number(item.unitPrice) || 0, // Ensure this is the discounted price
+          costPrice: Number(item.costPrice) || 0, // Make sure costPrice is included
+          totalPrice: Number(item.totalPrice) || 0, // Ensure this is the discounted total
       })),
       totalAmount: cartTotal,
       paymentMethod: paymentMethod,
-      cashierId: userRole || 'system', 
+      cashierId: userRole || 'system', // Replace with actual cashier ID if available
     };
     saleApiMutation.mutate(saleData);
   };
   
-  const handlePrintCurrentTicket = useCallback(async () => {
-    if (!activeTicket || isPrintingPdf) {
-      toast({ variant: 'destructive', title: 'Print Error', description: 'No active ticket or print already in progress.' });
-      return;
-    }
-    if (activeTicket.cart_items.length === 0) {
-        toast({ variant: 'destructive', title: 'Print Error', description: 'Cannot print an empty ticket.' });
-        return;
-    }
-
-    setIsPrintingPdf(true);
-    console.log("Printing ticket data:", activeTicket);
-
-    const htmlTicketContent = generateTicketHtml(
-      activeTicket.name,
-      activeTicket.cart_items,
-      cartTotal,
-      format(new Date(), 'dd/MM/yyyy HH:mm:ss')
-    );
-    
-    const printDiv = document.createElement('div');
-    printDiv.style.position = 'absolute';
-    printDiv.style.left = '-9999px';
-    printDiv.style.top = '-9999px';
-    // printDiv.style.border = '1px solid green'; 
-    // printDiv.style.zIndex = '10001'; 
-    // printDiv.style.backgroundColor = 'lightyellow'; 
-    printDiv.innerHTML = htmlTicketContent;
-    document.body.appendChild(printDiv);
-    
-    // Give the browser a moment to render the div and its content
-    setTimeout(async () => {
-      try {
-        if (!printDiv || !printDiv.hasChildNodes() || printDiv.innerHTML.trim() === "" ) {
-          console.error("Printable element is empty or not found after timeout. Ticket data used for render:", JSON.stringify(activeTicket));
-          toast({
-            variant: 'destructive',
-            title: 'Print Error',
-            description: 'Failed to prepare ticket content for printing. Please try again.',
-          });
-          if (document.body.contains(printDiv)) {
-            document.body.removeChild(printDiv);
-          }
-          setIsPrintingPdf(false);
-          return;
-        }
-        
-        console.log("Element to print (outerHTML):", printDiv.outerHTML.substring(0, 500) + "...");
-        console.log("Element to print innerHTML (before html2pdf):", printDiv.innerHTML.substring(0, 500) + "...");
-        
-        const html2pdf = (await import('html2pdf.js')).default;
-        
-        // Forcing a fixed width for html2canvas
-        const canvasWidth = 280; // Corresponds to width: 280px in generateTicketHtml
-        console.log("Using fixed canvasWidth for html2canvas:", canvasWidth);
-
-        const options = {
-          margin: [2, 2, 2, 2], 
-          filename: `ticket_${activeTicket.name.replace(/\s+/g, '_')}_${format(new Date(), 'yyyyMMdd_HHmmss')}.pdf`,
-          image: { type: 'jpeg', quality: 0.95 },
-          html2canvas: {
-            scale: 3, 
-            logging: true, // Enable html2canvas logging
-            useCORS: true,
-            width: canvasWidth, 
-            windowWidth: canvasWidth, 
-          },
-          jsPDF: {
-            unit: 'mm',
-            format: [76, 'auto'], 
-            orientation: 'portrait',
-          },
-        };
-        
-        try {
-          await html2pdf().from(printDiv).set(options).save();
-        } catch (pdfError) {
-            console.error('Error during html2pdf().save():', pdfError);
-            toast({
-                variant: 'destructive',
-                title: 'PDF Generation Error',
-                description: (pdfError as Error).message || "Unknown error during PDF saving.",
-            });
-        }
-
-      } catch (error) {
-        console.error('Error generating PDF:', error);
-        toast({
-          variant: 'destructive',
-          title: 'Print Error',
-          description: (error as Error).message || "Unknown error during PDF generation.",
-        });
-      } finally {
-        setIsPrintingPdf(false);
-        if (document.body.contains(printDiv)) {
-            document.body.removeChild(printDiv);
-        }
-      }
-    }, 350); 
-  }, [activeTicket, cartTotal, toast, isPrintingPdf]);
-
-
   const getTicketBadgeVariant = (status: SalesTicketDB['status']): "default" | "outline" | "secondary" | "destructive" | null | undefined => {
     switch(status) {
       case 'Active': return 'default';
@@ -717,7 +571,8 @@ export default function POSPage() {
       </Card>
 
       {activeTicket ? (
-        <div className="flex flex-col md:flex-row gap-4 sm:gap-6 h-[calc(100vh-4rem-3rem-10rem)]">
+        <div className="flex flex-col md:flex-row gap-4 sm:gap-6 h-[calc(100vh-4rem-3rem-10rem)]"> {/* Adjust height calculation as needed */}
+          {/* Product Search Panel */}
           <Card className="w-full md:w-2/5 flex flex-col shadow-lg">
             <CardHeader className="p-4 sm:p-6">
               <CardTitle className="text-base sm:text-lg">Product Search</CardTitle>
@@ -775,6 +630,7 @@ export default function POSPage() {
             </CardContent>
           </Card>
 
+          {/* Current Sale Panel */}
           <Card className="w-full md:w-3/5 flex flex-col shadow-lg">
             <CardHeader className="p-4 sm:p-6">
               <CardTitle className="flex items-center justify-between text-base sm:text-lg">
@@ -877,20 +733,11 @@ export default function POSPage() {
                   {isProcessingSale && saleApiMutation.variables?.paymentMethod === 'Card' ? 'Processing...' : 'Card'}
                 </Button>
               </div>
-               <Button 
-                variant="outline" 
-                onClick={handlePrintCurrentTicket} 
-                disabled={!activeTicket || activeTicket.cart_items.length === 0 || isPrintingPdf || isProcessingAnyTicketAction || isProcessingSale}
-                className="w-full mt-2 text-xs sm:text-base py-3 sm:py-6"
-              >
-                {isPrintingPdf ? <Loader2 className="mr-2 h-4 w-4 sm:h-5 sm:w-5 animate-spin" /> : <Printer className="mr-2 h-4 w-4 sm:h-5 sm:w-5" />}
-                Print Current Ticket
-              </Button>
             </CardFooter>
           </Card>
         </div>
       ) : (
-        <div className="flex items-center justify-center h-[calc(100vh-4rem-3rem-10rem)]"> 
+        <div className="flex items-center justify-center h-[calc(100vh-4rem-3rem-10rem)]"> {/* Adjust height calculation as needed */}
           {isLoadingSalesTickets || createTicketMutation.isPending ? (
             <Loader2 className="h-10 w-10 animate-spin text-primary" />
           ) : (
@@ -901,8 +748,3 @@ export default function POSPage() {
     </AppLayout>
   );
 }
-    
-    
-    
-
-    

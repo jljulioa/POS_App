@@ -1,4 +1,3 @@
-
 "use client";
 
 import AppLayout from '@/components/layout/AppLayout';
@@ -7,8 +6,8 @@ import type { Sale, SaleItem } from '@/lib/mockData'; // Keep type
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { FileDown, Eye, Loader2, AlertTriangle, ShoppingCart, Calendar as CalendarIcon, FilterX, CornerDownLeft } from 'lucide-react';
-import React, { useState, useMemo, useEffect } from 'react';
+import { FileDown, Eye, Loader2, AlertTriangle, ShoppingCart, Calendar as CalendarIcon, FilterX, CornerDownLeft, Printer } from 'lucide-react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { format, parseISO } from 'date-fns';
 import { Badge } from '@/components/ui/badge';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -78,6 +77,65 @@ const processReturnAPI = async (returnData: z.infer<typeof ProcessReturnSchema>)
   return response.json();
 };
 
+// Helper function to generate HTML for the sales receipt
+const generateSaleReceiptHtml = (
+  sale: Sale
+): string => {
+  if (!sale || !sale.items || sale.items.length === 0) {
+    return `<div style="width: 280px; padding: 10px; font-family: 'Courier New', Courier, monospace; border: 1px solid #ccc;"><p>No items in receipt.</p></div>`;
+  }
+
+  const itemsHtml = sale.items.map(item => `
+    <tr>
+      <td style="padding-right: 5px; vertical-align: top; font-size: 10px; border-bottom: 1px solid #eee; word-break: break-word;">
+        ${item.quantity} x ${item.productName || 'N/A Product'}
+      </td>
+      <td style="text-align: right; vertical-align: top; font-size: 10px; border-bottom: 1px solid #eee;">${Number(item.unitPrice).toFixed(2)}</td>
+      <td style="text-align: right; vertical-align: top; font-size: 10px; border-bottom: 1px solid #eee;">${Number(item.totalPrice).toFixed(2)}</td>
+    </tr>
+  `).join('');
+
+  const html = `
+    <div style="width: 280px; font-family: 'Courier New', Courier, monospace; color: black; background-color: white; padding: 10px; border: 1px solid #eee; box-shadow: 0 0 5px rgba(0,0,0,0.1);">
+      <div style="text-align: center; margin-bottom: 8px;">
+        <h2 style="font-size: 16px; font-weight: bold; margin: 0 0 2px 0;">MotoFox POS</h2>
+        <p style="font-size: 9px; margin:0;">Your Motorcycle Parts Specialist</p>
+      </div>
+      <hr style="border: none; border-top: 1px dashed #000; margin: 5px 0;" />
+      <div style="font-size: 9px;">
+        <p style="margin: 0;">Receipt No: ${sale.id}</p>
+        <p style="margin: 0;">Date: ${format(new Date(sale.date), 'dd/MM/yyyy HH:mm:ss')}</p>
+        ${sale.cashierId ? `<p style="margin: 0;">Cashier: ${sale.cashierId}</p>` : ''}
+        ${sale.customerName ? `<p style="margin: 0;">Customer: ${sale.customerName}</p>` : ''}
+      </div>
+      <hr style="border: none; border-top: 1px dashed #000; margin: 5px 0;" />
+      <table style="width: 100%; border-collapse: collapse; margin-bottom: 5px;">
+        <thead>
+          <tr>
+            <th style="text-align: left; padding: 2px 5px 2px 0; border-bottom: 1px solid #ccc; font-size: 10px;">Item</th>
+            <th style="text-align: right; padding: 2px 0; border-bottom: 1px solid #ccc; font-size: 10px;">Price</th>
+            <th style="text-align: right; padding: 2px 0 2px 5px; border-bottom: 1px solid #ccc; font-size: 10px;">Total</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${itemsHtml}
+        </tbody>
+      </table>
+      <hr style="border: none; border-top: 1px dashed #000; margin: 5px 0;" />
+      <div style="text-align: right; margin-top: 8px;">
+        <div style="font-size: 14px; font-weight: bold;">TOTAL: $${Number(sale.totalAmount).toFixed(2)}</div>
+      </div>
+      ${sale.paymentMethod ? `<div style="font-size: 10px; text-align: right; margin-top: 3px;">Payment: ${sale.paymentMethod}</div>` : ''}
+      <hr style="border: none; border-top: 1px solid #000; margin: 8px 0;" />
+      <div style="text-align: center; margin-top: 10px; font-size: 10px;">
+        Thank you for your purchase!
+        <br>MotoFox POS - We keep you riding!
+      </div>
+    </div>
+  `;
+  return html;
+};
+
 
 export default function SalesPage() {
   const [searchTerm, setSearchTerm] = useState('');
@@ -88,6 +146,9 @@ export default function SalesPage() {
   const [isViewModalOpen, setIsViewModalOpen] = useState(false);
   const [isReturnModalOpen, setIsReturnModalOpen] = useState(false);
   const [returnItems, setReturnItems] = useState<ReturnItemFormValues>({});
+  
+  const [isPrintingReceipt, setIsPrintingReceipt] = useState(false);
+  const receiptHtmlRef = useRef<HTMLDivElement>(null);
 
   const [startDate, setStartDate] = useState<Date | undefined>(undefined);
   const [endDate, setEndDate] = useState<Date | undefined>(undefined);
@@ -171,6 +232,7 @@ export default function SalesPage() {
       queryClient.invalidateQueries({ queryKey: ['products'] });
       queryClient.invalidateQueries({ queryKey: ['sales', startDate, endDate] }); 
       queryClient.invalidateQueries({ queryKey: ['todaysSales']});
+      queryClient.invalidateQueries({ queryKey: ['inventoryTransactions']});
       setIsReturnModalOpen(false);
       setSelectedSale(null);
     },
@@ -218,6 +280,71 @@ export default function SalesPage() {
     setEndDate(undefined);
   };
   
+  const handlePrintSaleReceipt = async (saleToPrint: Sale | null) => {
+    if (!saleToPrint || isPrintingReceipt) {
+      toast({ variant: 'destructive', title: 'Print Error', description: 'No sale selected or print already in progress.' });
+      return;
+    }
+    if (!receiptHtmlRef.current) {
+        toast({ variant: 'destructive', title: 'Print Error', description: 'Cannot find printable area. Please try again.'});
+        return;
+    }
+
+    setIsPrintingReceipt(true);
+    const htmlContent = generateSaleReceiptHtml(saleToPrint);
+    receiptHtmlRef.current.innerHTML = htmlContent;
+
+    // Allow time for DOM to update with the new HTML
+    await new Promise(resolve => setTimeout(resolve, 300));
+
+    try {
+      const elementToPrint = receiptHtmlRef.current.firstChild as HTMLElement; // The div generated by generateSaleReceiptHtml
+      if (!elementToPrint || !elementToPrint.hasChildNodes() || elementToPrint.innerHTML.trim() === "") {
+        console.error("Printable element is empty or not found after timeout. Sale data for render:", JSON.stringify(saleToPrint));
+        toast({
+          variant: 'destructive',
+          title: 'Print Error',
+          description: 'Failed to prepare receipt content for printing. Please try again.',
+        });
+        setIsPrintingReceipt(false);
+        return;
+      }
+
+      const html2pdf = (await import('html2pdf.js')).default;
+      const options = {
+        margin: [2, 2, 2, 2],
+        filename: `receipt_${saleToPrint.id}.pdf`,
+        image: { type: 'jpeg', quality: 0.98 },
+        html2canvas: {
+          scale: 3,
+          logging: true, // Enable for debugging if needed
+          useCORS: true,
+          width: elementToPrint.offsetWidth || 280, // Use actual width or fallback
+          windowWidth: elementToPrint.offsetWidth || 280,
+        },
+        jsPDF: {
+          unit: 'mm',
+          format: [76, 'auto'], // Approx 3-inch width receipt
+          orientation: 'portrait',
+        },
+      };
+      await html2pdf().from(elementToPrint).set(options).save();
+    } catch (error) {
+      console.error('Error generating PDF:', error);
+      toast({
+        variant: 'destructive',
+        title: 'Print Error',
+        description: (error as Error).message || "Unknown error during PDF generation.",
+      });
+    } finally {
+      setIsPrintingReceipt(false);
+      if (receiptHtmlRef.current) {
+        receiptHtmlRef.current.innerHTML = ''; // Clear the div
+      }
+    }
+  };
+
+
   useEffect(() => {
   }, [startDate, endDate, refetch]);
 
@@ -394,9 +521,20 @@ export default function SalesPage() {
               
               <div className="flex justify-between items-center mt-2">
                 <h3 className="font-semibold text-sm md:text-md">Items Sold:</h3>
-                <Button variant="outline" size="sm" onClick={() => handleOpenReturnModal(selectedSale)}>
-                  <CornerDownLeft className="mr-2 h-3 w-3 md:h-4 md:w-4" /> Return Items
-                </Button>
+                <div className="flex gap-2">
+                  <Button variant="outline" size="sm" onClick={() => handleOpenReturnModal(selectedSale)}>
+                    <CornerDownLeft className="mr-2 h-3 w-3 md:h-4 md:w-4" /> Return Items
+                  </Button>
+                   <Button 
+                    variant="outline" 
+                    size="sm" 
+                    onClick={() => handlePrintSaleReceipt(selectedSale)}
+                    disabled={isPrintingReceipt}
+                  >
+                    {isPrintingReceipt ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Printer className="mr-2 h-4 w-4" />}
+                    Print Receipt
+                  </Button>
+                </div>
               </div>
 
               {selectedSale.items && selectedSale.items.length > 0 ? (
@@ -442,7 +580,8 @@ export default function SalesPage() {
         <Dialog open={isReturnModalOpen} onOpenChange={(open) => {
             if (!open) {
                 setIsReturnModalOpen(false);
-                setSelectedSale(null); 
+                // Keep selectedSale for now, so the ViewModal can reopen with its data if needed
+                // Or clear it: setSelectedSale(null); 
             }
         }}>
           <DialogContent className="sm:max-w-md md:max-w-lg">
@@ -478,7 +617,7 @@ export default function SalesPage() {
               </div>
             </div>
             <DialogFooter>
-              <Button variant="outline" onClick={() => {setIsReturnModalOpen(false); setSelectedSale(null);}}>Cancel</Button>
+              <Button variant="outline" onClick={() => {setIsReturnModalOpen(false); /* Don't clear selectedSale here if you want to return to view modal */ }}>Cancel</Button>
               <Button 
                 onClick={handleSubmitReturn} 
                 disabled={processReturnMutation.isPending || totalReturnAmount === 0}
@@ -490,6 +629,8 @@ export default function SalesPage() {
           </DialogContent>
         </Dialog>
       )}
+      {/* Hidden div for printing receipts */}
+      <div ref={receiptHtmlRef} style={{ position: 'absolute', left: '-9999px', top: '-9999px', zIndex: -100 }} />
     </AppLayout>
   );
 }
