@@ -23,6 +23,7 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
+  AlertDialogTrigger, // Added AlertDialogTrigger here
 } from "@/components/ui/alert-dialog";
 
 // API fetch function for purchase invoices
