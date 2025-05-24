@@ -12,7 +12,7 @@ import React, { useState, useMemo } from 'react';
 import { format } from 'date-fns';
 import { Badge } from '@/components/ui/badge';
 import Link from 'next/link';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient, type UseMutationResult } from '@tanstack/react-query';
 import { useToast } from '@/hooks/use-toast';
 import {
   AlertDialog,
@@ -46,12 +46,75 @@ const deletePurchaseInvoiceAPI = async (invoiceId: string): Promise<{ message: s
   return res.json();
 };
 
+interface InvoiceRowActionsProps {
+  invoice: PurchaseInvoice;
+  deleteMutation: UseMutationResult<{ message: string }, Error, string, unknown>;
+}
+
+function InvoiceRowActions({ invoice, deleteMutation }: InvoiceRowActionsProps) {
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+
+  const handleDeleteConfirm = () => {
+    deleteMutation.mutate(invoice.id, {
+      onSuccess: () => {
+        setIsDeleteDialogOpen(false);
+      },
+      onError: () => {
+        setIsDeleteDialogOpen(false);
+      }
+    });
+  };
+
+  return (
+    <div className="flex items-center justify-center space-x-1">
+      {!invoice.processed ? (
+        <Button variant="ghost" size="icon" className="hover:text-accent" asChild>
+          <Link href={`/purchase-invoices/${invoice.id}/process`}>
+            <Settings2 className="h-4 w-4" />
+          </Link>
+        </Button>
+      ) : (
+          <Button variant="ghost" size="icon" disabled>
+            <Settings2 className="h-4 w-4 opacity-50" />
+          </Button>
+      )}
+      <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+        <AlertDialogTrigger asChild>
+          <Button variant="ghost" size="icon" className="hover:text-destructive">
+            <Trash2 className="h-4 w-4" />
+          </Button>
+        </AlertDialogTrigger>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This action cannot be undone. This will permanently delete the purchase invoice
+              <span className="font-semibold"> {invoice.invoiceNumber}</span>.
+              This action does NOT revert any stock changes if the invoice was already processed.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDeleteConfirm}
+              disabled={deleteMutation.isPending && deleteMutation.variables === invoice.id}
+              className="bg-destructive hover:bg-destructive/90 text-destructive-foreground"
+            >
+              {(deleteMutation.isPending && deleteMutation.variables === invoice.id) ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
+  );
+}
+
 
 export default function PurchaseInvoicesPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const [invoiceToDelete, setInvoiceToDelete] = useState<PurchaseInvoice | null>(null);
 
   const { data: invoices = [], isLoading, error, isError } = useQuery<PurchaseInvoice[], Error>({
     queryKey: ['purchaseInvoices'],
@@ -63,11 +126,9 @@ export default function PurchaseInvoicesPage() {
     onSuccess: (data) => {
       toast({ title: "Purchase Invoice Deleted", description: data.message });
       queryClient.invalidateQueries({ queryKey: ['purchaseInvoices'] });
-      setInvoiceToDelete(null); // Close dialog on success
     },
     onError: (error) => {
       toast({ variant: "destructive", title: "Failed to Delete Invoice", description: error.message });
-      setInvoiceToDelete(null); // Close dialog on error
     },
   });
 
@@ -79,15 +140,6 @@ export default function PurchaseInvoicesPage() {
     );
   }, [searchTerm, invoices]);
 
-  const handleDeleteClick = (invoice: PurchaseInvoice) => {
-    setInvoiceToDelete(invoice);
-  };
-
-  const confirmDelete = () => {
-    if (invoiceToDelete) {
-      deleteMutation.mutate(invoiceToDelete.id);
-    }
-  };
 
   if (isLoading) {
     return (
@@ -164,23 +216,8 @@ export default function PurchaseInvoicesPage() {
                     {invoice.processed ? 'Processed' : 'Not Processed'}
                   </Badge>
                 </TableCell>
-                <TableCell className="text-center space-x-1">
-                  {!invoice.processed ? (
-                    <Button variant="ghost" size="icon" className="hover:text-accent" asChild>
-                      <Link href={`/purchase-invoices/${invoice.id}/process`}>
-                        <Settings2 className="h-4 w-4" />
-                      </Link>
-                    </Button>
-                  ) : (
-                     <Button variant="ghost" size="icon" disabled>
-                        <Settings2 className="h-4 w-4 opacity-50" />
-                      </Button>
-                  )}
-                  <AlertDialogTrigger asChild>
-                     <Button variant="ghost" size="icon" className="hover:text-destructive" onClick={() => handleDeleteClick(invoice)}>
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                  </AlertDialogTrigger>
+                <TableCell className="text-center">
+                  <InvoiceRowActions invoice={invoice} deleteMutation={deleteMutation} />
                 </TableCell>
               </TableRow>
             ))}
@@ -194,30 +231,6 @@ export default function PurchaseInvoicesPage() {
           </TableBody>
         </Table>
       </div>
-
-      <AlertDialog open={!!invoiceToDelete} onOpenChange={(open) => !open && setInvoiceToDelete(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This action cannot be undone. This will permanently delete the purchase invoice 
-              <span className="font-semibold"> {invoiceToDelete?.invoiceNumber}</span>. 
-              This action does NOT revert any stock changes if the invoice was already processed.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel onClick={() => setInvoiceToDelete(null)}>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={confirmDelete}
-              disabled={deleteMutation.isPending}
-              className="bg-destructive hover:bg-destructive/90 text-destructive-foreground"
-            >
-              {deleteMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-              Delete
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </AppLayout>
   );
 }
