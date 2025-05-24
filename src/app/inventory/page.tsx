@@ -147,8 +147,8 @@ export default function InventoryPage() {
     },
   });
 
-  const uniqueBrands = useMemo(() => ['all', ...new Set(products.map(p => p.brand).filter(Boolean).sort())], [products]);
-  const uniqueCategories = useMemo(() => ['all', ...new Set(products.map(p => p.category).filter(Boolean).sort())], [products]);
+  const uniqueBrands = useMemo(() => ['all', ...new Set(products.map(p => p.brand).filter(Boolean).sort((a, b) => a.localeCompare(b)))], [products]);
+  const uniqueCategories = useMemo(() => ['all', ...new Set(products.map(p => p.category).filter(Boolean).sort((a, b) => a.localeCompare(b)))], [products]);
 
   const filteredProducts = useMemo(() => {
     return products.filter(product => {
@@ -249,7 +249,9 @@ export default function InventoryPage() {
               <TableHead>Brand</TableHead>
               <TableHead>Category</TableHead>
               <TableHead className="text-right">Stock</TableHead>
+              <TableHead className="text-right">Cost</TableHead>
               <TableHead className="text-right">Price</TableHead>
+              <TableHead className="text-right">Profit</TableHead>
               <TableHead className="text-center">Status</TableHead>
               <TableHead className="text-center w-[120px]">Actions</TableHead>
             </TableRow>
@@ -266,7 +268,9 @@ export default function InventoryPage() {
                 <TableCell>{product.brand}</TableCell>
                 <TableCell>{product.category}</TableCell>
                 <TableCell className="text-right">{product.stock}</TableCell>
+                <TableCell className="text-right">${Number(product.cost).toFixed(2)}</TableCell>
                 <TableCell className="text-right">${Number(product.price).toFixed(2)}</TableCell>
+                <TableCell className="text-right font-semibold text-green-600">${(Number(product.price) - Number(product.cost)).toFixed(2)}</TableCell>
                 <TableCell className="text-center">
                   {product.stock === 0 ? <Badge variant="destructive">Out of Stock</Badge> :
                    product.stock < product.minStock ? <Badge variant="outline" className="border-yellow-500 text-yellow-600">Low Stock</Badge> :
@@ -279,7 +283,7 @@ export default function InventoryPage() {
             ))}
              {filteredProducts.length === 0 && (
               <TableRow>
-                <TableCell colSpan={10} className="h-24 text-center">
+                <TableCell colSpan={12} className="h-24 text-center">
                   No products found.
                 </TableCell>
               </TableRow>
