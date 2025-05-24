@@ -79,6 +79,40 @@ export interface SalesTicket {
   lastUpdatedAt: string; // ISO date string
 }
 
+// New interface for Daily Expenses
+export type ExpenseCategoryEnum = 
+    | 'Rent' 
+    | 'Utilities' 
+    | 'Supplies' 
+    | 'Salaries' 
+    | 'Marketing' 
+    | 'Maintenance' 
+    | 'Office' 
+    | 'Travel' 
+    | 'Taxes'
+    | 'Insurance'
+    | 'Bank Fees'
+    | 'Shipping'
+    | 'Meals & Entertainment'
+    | 'Other';
+
+export const expenseCategories: ExpenseCategoryEnum[] = [
+    'Rent', 'Utilities', 'Supplies', 'Salaries', 'Marketing', 'Maintenance', 
+    'Office', 'Travel', 'Taxes', 'Insurance', 'Bank Fees', 'Shipping', 'Meals & Entertainment', 'Other'
+];
+
+
+export interface DailyExpense {
+  id: number; // Assuming SERIAL PRIMARY KEY from DB
+  expenseDate: string; // ISO date string, e.g., "2024-07-28"
+  description: string;
+  category: ExpenseCategoryEnum;
+  amount: number;
+  notes?: string | null;
+  createdAt: string; // ISO timestamp string
+  updatedAt: string; // ISO timestamp string
+}
+
 
 export const mockProducts: Product[] = [
   { id: 'P001', name: 'Spark Plug NGK CR9E', code: 'SPK-NGK-CR9E', reference: 'REF-SPK-001', barcode: '1234567890123', stock: 150, category: 'Engine Parts', brand: 'NGK', minStock: 20, maxStock: 200, cost: 2.50, price: 5.00, imageUrl: 'https://placehold.co/100x100.png', dataAiHint: 'spark plug' },
