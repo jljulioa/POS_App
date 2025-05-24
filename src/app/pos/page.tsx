@@ -9,22 +9,12 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import type { Product as ProductType, Sale } from '@/lib/mockData';
-import type { SalesTicketDB, SaleItemForTicket as TicketItemBackend } from '@/app/api/sales-tickets/route'; // Renamed to avoid conflict
+import type { SalesTicketDB, SaleItemForTicket as TicketItemBackend } from '@/app/api/sales-tickets/route';
 import Image from 'next/image';
 import { Search, X, Plus, Minus, Save, ShoppingCart, CreditCard, DollarSign, PlusSquare, ListFilter, Loader2, AlertTriangle, Ticket, Printer } from 'lucide-react';
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { Badge } from '@/components/ui/badge';
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -37,6 +27,7 @@ import { cn } from '@/lib/utils';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/hooks/useAuth';
 import { format } from 'date-fns';
+// html2pdf.js will be imported dynamically
 
 // API fetch function for products
 const fetchProducts = async (): Promise<ProductType[]> => {
@@ -108,22 +99,21 @@ interface PrintableTicketProps {
   ticketName: string;
   items: TicketItemBackend[];
   totalAmount: number;
-  currentDate: string;
+  currentDate?: string;
 }
 
 const PrintableTicket: React.FC<PrintableTicketProps> = (props) => {
   const { ticketName, items, totalAmount, currentDate } = props;
-  if (!items) return null; // or some placeholder
+  if (!items) return null; 
 
   return (
     <div className="p-2 font-mono text-xs" style={{ width: '300px', color: 'black', backgroundColor: 'white', border: '1px solid #ccc' }}>
       <div className="text-center mb-1">
         <h2 className="font-bold text-sm">MotoFox POS</h2>
-        <p>Current Ticket</p>
       </div>
       <Separator className="my-0.5 bg-black" />
       <p>Ticket: {ticketName}</p>
-      <p>Date: {currentDate}</p>
+      {currentDate && <p>Date: {currentDate}</p>}
       <Separator className="my-0.5 bg-black" />
       <h3 className="font-bold my-0.5 text-xs">Items:</h3>
       <table className="w-full text-left text-xs">
@@ -168,7 +158,6 @@ export default function POSPage() {
   const printableTicketRef = useRef<HTMLDivElement>(null);
   const finalizedTicketIdRef = useRef<string | null>(null);
 
-
   const { data: products = [], isLoading: isLoadingProducts, error: productsError, isError: isProductsError } = useQuery<ProductType[], Error>({
     queryKey: ['products'],
     queryFn: fetchProducts,
@@ -198,7 +187,7 @@ export default function POSPage() {
     const currentTickets = queryClient.getQueryData<SalesTicketDB[]>(['salesTickets']) || [];
     const nextTicketNumber = currentTickets.length > 0
         ? Math.max(0, ...currentTickets.map(t => {
-            const nameMatch = t.name.match(/Ticket (\d+)/);
+            const nameMatch = t.name.match(/Ticket (\d+)/i); // Case-insensitive match
             return nameMatch ? parseInt(nameMatch[1], 10) : 0;
           })) + 1
         : 1;
@@ -217,7 +206,7 @@ export default function POSPage() {
     if (!isLoadingSalesTickets && salesTickets) {
       if (salesTickets.length === 0) {
         if (!createTicketMutation.isPending && !activeTicketId) { 
-            handleCreateNewTicket(true);
+            setTimeout(() => handleCreateNewTicket(true), 50); // Small delay
         }
       } else if (!activeTicketId || !salesTickets.find(t => t.id === activeTicketId)) {
         const sortedTickets = [...salesTickets].sort((a, b) => new Date(b.last_updated_at).getTime() - new Date(a.last_updated_at).getTime());
@@ -259,10 +248,12 @@ export default function POSPage() {
                 const sortedTickets = [...currentTickets].sort((a, b) => new Date(b.last_updated_at).getTime() - new Date(a.last_updated_at).getTime());
                 setActiveTicketId(sortedTickets[0].id);
             } else {
-                setTimeout(() => handleCreateNewTicket(true), 200); 
+                 // Delay slightly to allow state to settle from invalidateQueries
+                setTimeout(() => handleCreateNewTicket(true), 100); 
             }
         } else if (currentTickets.length === 0) {
-            setTimeout(() => handleCreateNewTicket(true), 200); 
+             // Delay slightly
+            setTimeout(() => handleCreateNewTicket(true), 100);
         }
       });
       setSearchTerm(''); 
@@ -290,9 +281,9 @@ export default function POSPage() {
     return salesTickets?.find(ticket => ticket.id === activeTicketId);
   }, [salesTickets, activeTicketId]);
 
-  const addToCart = useCallback((product: ProductType) => {
+  const addToCart = useCallback((productToAdd: ProductType) => {
     if (!activeTicket) return;
-    const productInCatalog = products.find(p => p.id === product.id);
+    const productInCatalog = products.find(p => p.id === productToAdd.id);
     if (!productInCatalog) {
         toast({ variant: "destructive", title: "Product Not Found", description: "This product is no longer available." });
         return;
@@ -303,7 +294,7 @@ export default function POSPage() {
         toast({
         variant: "destructive",
         title: "Product Data Error",
-        description: `The cost for "${productInCatalog.name}" is invalid (${productInCatalog.cost}). Please check product data.`
+        description: `The cost for "${productInCatalog.name}" is invalid. Please check product data.`
         });
         return;
     }
@@ -334,10 +325,10 @@ export default function POSPage() {
         productId: productInCatalog.id,
         productName: productInCatalog.name,
         quantity: 1,
-        originalUnitPrice: productInCatalog.price, // Store original price
-        unitPrice: productInCatalog.price, // Effective unit price
+        originalUnitPrice: productInCatalog.price,
+        unitPrice: productInCatalog.price,
         costPrice: itemCostPrice,
-        discountPercentage: 0, // Initialize discount
+        discountPercentage: 0,
         totalPrice: productInCatalog.price,
       }];
     }
@@ -514,35 +505,80 @@ export default function POSPage() {
   };
 
   const handlePrintCurrentTicket = useCallback(async () => {
-    if (!activeTicket || !printableTicketRef.current ) {
-        toast({ variant: "destructive", title: "Print Error", description: "No active ticket data available to print."});
-        return;
+    console.log("handlePrintCurrentTicket called. Active ticket:", activeTicket);
+    const currentTicketDataForPrint = activeTicket; // Capture current active ticket
+
+    if (!currentTicketDataForPrint || currentTicketDataForPrint.cart_items.length === 0 || !printableTicketRef.current) {
+      toast({
+        variant: 'destructive',
+        title: 'Print Error',
+        description: 'No active ticket or items to print.',
+      });
+      return;
     }
     setIsPrintingPdf(true);
+    console.log("isPrintingPdf set to true");
 
-    setTimeout(async () => { 
-        try {
-            const html2pdf = (await import('html2pdf.js')).default;
-            const element = printableTicketRef.current;
-            if (!element) {
-                throw new Error("Printable element not found in DOM after timeout.");
-            }
-            const options = {
-                margin: 0.1,
-                filename: `ticket_${activeTicket.name.replace(/\s+/g, '_')}_${format(new Date(), 'yyyyMMdd_HHmmss')}.pdf`,
-                image: { type: 'jpeg', quality: 0.98 },
-                html2canvas: { scale: 3, logging: false, useCORS: true, width: 300 },
-                jsPDF: { unit: 'in', format: [3.15, 8], orientation: 'portrait' }
-            };
-            await html2pdf().from(element).set(options).save();
-        } catch (error) {
-            console.error("Error generating PDF:", error);
-            toast({ variant: "destructive", title: "Print Error", description: (error as Error).message });
-        } finally {
-            setIsPrintingPdf(false);
+    // Log the data that *should* be rendered in PrintableTicket
+    console.log("Data for PrintableTicket:", {
+        name: currentTicketDataForPrint.name,
+        items: currentTicketDataForPrint.cart_items,
+        total: cartTotal, // cartTotal is derived from activeTicket, so it should be in sync
+    });
+
+    setTimeout(async () => {
+      try {
+        const html2pdf = (await import('html2pdf.js')).default;
+        const elementToPrint = printableTicketRef.current;
+
+        console.log("Inside setTimeout. Element to print:", elementToPrint);
+        if (elementToPrint) {
+            console.log("Element innerHTML before print:", elementToPrint.innerHTML);
         }
-    }, 150); 
-  }, [activeTicket, toast]);
+
+
+        if (!elementToPrint || !elementToPrint.hasChildNodes() || elementToPrint.innerHTML.trim() === "") {
+           console.error("Printable element is empty or not found after timeout. Ticket data used for render:", currentTicketDataForPrint);
+          toast({
+            variant: 'destructive',
+            title: 'Print Error',
+            description: 'Failed to prepare ticket content for printing. Please try again.',
+          });
+          setIsPrintingPdf(false);
+          return;
+        }
+        
+        const options = {
+          margin: 0.1, // inches
+          filename: `ticket_${currentTicketDataForPrint.name.replace(/\s+/g, '_')}_${format(new Date(), 'yyyyMMdd_HHmmss')}.pdf`,
+          image: { type: 'jpeg', quality: 0.98 },
+          html2canvas: {
+            scale: 3, 
+            logging: false,
+            useCORS: true,
+            width: 300, 
+          },
+          jsPDF: {
+            unit: 'in',
+            format: [3.15, 8], 
+            orientation: 'portrait',
+          },
+        };
+        await html2pdf().from(elementToPrint).set(options).save();
+        console.log("PDF generation attempted.");
+      } catch (error) {
+        console.error('Error generating PDF:', error);
+        toast({
+          variant: 'destructive',
+          title: 'Print Error',
+          description: (error as Error).message,
+        });
+      } finally {
+        setIsPrintingPdf(false);
+        console.log("isPrintingPdf set to false");
+      }
+    }, 250); // Increased delay slightly
+  }, [activeTicket, cartTotal, toast]);
 
 
   const getTicketBadgeVariant = (status: SalesTicketDB['status']): "default" | "outline" | "secondary" | "destructive" | null | undefined => {
@@ -649,7 +685,7 @@ export default function POSPage() {
       </Card>
 
       {activeTicket ? (
-        <div className="flex flex-col md:flex-row gap-4 sm:gap-6 h-[calc(100vh-4rem-3rem-10rem)]"> {/* Adjusted height */}
+        <div className="flex flex-col md:flex-row gap-4 sm:gap-6 h-[calc(100vh-4rem-3rem-10rem)]">
           <Card className="w-full md:w-2/5 flex flex-col shadow-lg">
             <CardHeader className="p-4 sm:p-6">
               <CardTitle className="text-base sm:text-lg">Product Search</CardTitle>
@@ -812,7 +848,7 @@ export default function POSPage() {
               <Button 
                 variant="outline" 
                 onClick={handlePrintCurrentTicket} 
-                disabled={!activeTicket || activeTicket.cart_items.length === 0 || isPrintingPdf}
+                disabled={!activeTicket || activeTicket.cart_items.length === 0 || isPrintingPdf || isProcessingAnyTicketAction || isProcessingSale}
                 className="w-full mt-2 text-xs sm:text-base py-3 sm:py-6"
               >
                 {isPrintingPdf ? <Loader2 className="mr-2 h-4 w-4 sm:h-5 sm:w-5 animate-spin" /> : <Printer className="mr-2 h-4 w-4 sm:h-5 sm:w-5" />}
@@ -822,7 +858,7 @@ export default function POSPage() {
           </Card>
         </div>
       ) : (
-        <div className="flex items-center justify-center h-[calc(100vh-4rem-3rem-10rem)]"> {/* Adjusted height */}
+        <div className="flex items-center justify-center h-[calc(100vh-4rem-3rem-10rem)]"> 
           {isLoadingSalesTickets || createTicketMutation.isPending ? (
             <Loader2 className="h-10 w-10 animate-spin text-primary" />
           ) : (
