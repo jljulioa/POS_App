@@ -99,14 +99,14 @@ const generateTicketHtml = (ticketName: string, items: SaleItemForTicket[], tota
   console.log("generateTicketHtml called with items:", JSON.stringify(items));
   if (!items || items.length === 0) {
     console.log("generateTicketHtml: No items in ticket.");
-    return "<p>No items in ticket.</p>";
+    return `<div style="width: 280px; padding: 10px; font-family: 'Courier New', Courier, monospace; border: 1px solid #ccc;"><p>No items in ticket.</p></div>`;
   }
 
   const itemsHtml = items.map(item => `
     <tr>
       <td style="padding-right: 5px; vertical-align: top; font-size: 10px; border-bottom: 1px solid #eee;">
         ${item.productName || 'N/A Product'}
-        ${item.discountPercentage && item.discountPercentage > 0 ? `<br><span style="font-size: 9px;">(Disc: ${Number(item.discountPercentage).toFixed(0)}%)</span>` : ''}
+        ${item.discountPercentage && Number(item.discountPercentage) > 0 ? `<br><span style="font-size: 9px;">(Disc: ${Number(item.discountPercentage).toFixed(0)}%)</span>` : ''}
       </td>
       <td style="text-align: center; vertical-align: top; font-size: 10px; border-bottom: 1px solid #eee;">${item.quantity || 0}</td>
       <td style="text-align: right; vertical-align: top; font-size: 10px; border-bottom: 1px solid #eee;">${Number(item.unitPrice).toFixed(2)}</td>
@@ -187,7 +187,7 @@ export default function POSPage() {
       toast({ variant: 'destructive', title: 'Error Creating Ticket', description: error.message });
     },
   });
-  
+
   const handleCreateNewTicket = useCallback((forceCreate: boolean = false) => {
     if (createTicketMutation.isPending && !forceCreate) return;
 
@@ -511,10 +511,15 @@ export default function POSPage() {
   };
   
   const handlePrintCurrentTicket = useCallback(async () => {
-    if (!activeTicket || activeTicket.cart_items.length === 0) {
-      toast({ variant: 'destructive', title: 'Print Error', description: 'No active ticket or items to print.' });
+    if (!activeTicket || isPrintingPdf) {
+      toast({ variant: 'destructive', title: 'Print Error', description: 'No active ticket or print already in progress.' });
       return;
     }
+    if (activeTicket.cart_items.length === 0) {
+        toast({ variant: 'destructive', title: 'Print Error', description: 'Cannot print an empty ticket.' });
+        return;
+    }
+
     setIsPrintingPdf(true);
     console.log("Printing ticket data:", activeTicket);
 
@@ -524,56 +529,50 @@ export default function POSPage() {
       cartTotal,
       format(new Date(), 'dd/MM/yyyy HH:mm:ss')
     );
-    console.log("Generated HTML for PDF:", htmlTicketContent.substring(0, 500) + "...");
-
+    
     const printDiv = document.createElement('div');
     printDiv.style.position = 'absolute';
     printDiv.style.left = '-9999px';
     printDiv.style.top = '-9999px';
-    // printDiv.style.border = '1px solid green'; // For visual debugging
-    // printDiv.style.zIndex = '10001'; // For visual debugging
-    // printDiv.style.backgroundColor = 'lightyellow'; // For visual debugging
+    // printDiv.style.border = '1px solid green'; 
+    // printDiv.style.zIndex = '10001'; 
+    // printDiv.style.backgroundColor = 'lightyellow'; 
     printDiv.innerHTML = htmlTicketContent;
     document.body.appendChild(printDiv);
     
+    // Give the browser a moment to render the div and its content
     setTimeout(async () => {
       try {
-        console.log("Element to print (outerHTML):", printDiv.outerHTML.substring(0, 500) + "...");
-        console.log("Element to print innerHTML (before html2pdf):", printDiv.innerHTML.substring(0, 500) + "...");
-        console.log("PrintDiv first child:", printDiv.firstChild);
-        
-        let canvasWidth = 280; // Default
-        if (printDiv.firstChild && (printDiv.firstChild as HTMLElement).offsetWidth && (printDiv.firstChild as HTMLElement).offsetWidth > 0) {
-           canvasWidth = (printDiv.firstChild as HTMLElement).offsetWidth;
-        } else {
-            console.warn("Calculated canvasWidth is invalid, defaulting to 280px.");
-        }
-        console.log("Using canvasWidth for html2canvas:", canvasWidth);
-
-
-        if (!printDiv || !printDiv.hasChildNodes() || printDiv.innerHTML.trim() === "" || !printDiv.firstChild) {
+        if (!printDiv || !printDiv.hasChildNodes() || printDiv.innerHTML.trim() === "" ) {
           console.error("Printable element is empty or not found after timeout. Ticket data used for render:", JSON.stringify(activeTicket));
           toast({
             variant: 'destructive',
             title: 'Print Error',
             description: 'Failed to prepare ticket content for printing. Please try again.',
           });
-          setIsPrintingPdf(false);
           if (document.body.contains(printDiv)) {
             document.body.removeChild(printDiv);
           }
+          setIsPrintingPdf(false);
           return;
         }
         
+        console.log("Element to print (outerHTML):", printDiv.outerHTML.substring(0, 500) + "...");
+        console.log("Element to print innerHTML (before html2pdf):", printDiv.innerHTML.substring(0, 500) + "...");
+        
         const html2pdf = (await import('html2pdf.js')).default;
         
+        // Forcing a fixed width for html2canvas
+        const canvasWidth = 280; // Corresponds to width: 280px in generateTicketHtml
+        console.log("Using fixed canvasWidth for html2canvas:", canvasWidth);
+
         const options = {
           margin: [2, 2, 2, 2], 
           filename: `ticket_${activeTicket.name.replace(/\s+/g, '_')}_${format(new Date(), 'yyyyMMdd_HHmmss')}.pdf`,
           image: { type: 'jpeg', quality: 0.95 },
           html2canvas: {
             scale: 3, 
-            logging: false, 
+            logging: true, // Enable html2canvas logging
             useCORS: true,
             width: canvasWidth, 
             windowWidth: canvasWidth, 
@@ -584,7 +583,18 @@ export default function POSPage() {
             orientation: 'portrait',
           },
         };
-        await html2pdf().from(printDiv).set(options).save();
+        
+        try {
+          await html2pdf().from(printDiv).set(options).save();
+        } catch (pdfError) {
+            console.error('Error during html2pdf().save():', pdfError);
+            toast({
+                variant: 'destructive',
+                title: 'PDF Generation Error',
+                description: (pdfError as Error).message || "Unknown error during PDF saving.",
+            });
+        }
+
       } catch (error) {
         console.error('Error generating PDF:', error);
         toast({
@@ -599,7 +609,7 @@ export default function POSPage() {
         }
       }
     }, 350); 
-  }, [activeTicket, cartTotal, toast]);
+  }, [activeTicket, cartTotal, toast, isPrintingPdf]);
 
 
   const getTicketBadgeVariant = (status: SalesTicketDB['status']): "default" | "outline" | "secondary" | "destructive" | null | undefined => {
@@ -891,7 +901,8 @@ export default function POSPage() {
     </AppLayout>
   );
 }
-
+    
+    
     
 
     
