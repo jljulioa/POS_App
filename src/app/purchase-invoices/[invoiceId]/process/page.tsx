@@ -66,8 +66,8 @@ export default function ProcessPurchaseInvoicePage() {
   const [productSearchTerm, setProductSearchTerm] = useState<string>("");
   const [selectedProductDetails, setSelectedProductDetails] = useState<Product | null>(null);
   const [quantity, setQuantity] = useState<number | string>(1);
-  const [costPrice, setCostPrice] = useState<number | string>(""); // Use string to allow empty input initially
-  const [newSellingPriceInput, setNewSellingPriceInput] = useState<number | string>(""); // Use string
+  const [costPrice, setCostPrice] = useState<number | string>(""); 
+  const [newSellingPriceInput, setNewSellingPriceInput] = useState<number | string>(""); 
 
   const { data: invoice, isLoading: isLoadingInvoice, error: invoiceError } = useQuery<PurchaseInvoice, Error>({
     queryKey: ['purchaseInvoice', invoiceId],
@@ -102,14 +102,15 @@ export default function ProcessPurchaseInvoicePage() {
       p.name.toLowerCase().includes(termLower) ||
       p.code.toLowerCase().includes(termLower) ||
       p.reference.toLowerCase().includes(termLower)
-    ).slice(0, 5); // Limit to 5 results for dropdown
+    ).slice(0, 5); 
   }, [productSearchTerm, products]);
 
   const handleProductSelect = (product: Product) => {
     setSelectedProductDetails(product);
-    setCostPrice(product.cost); // Pre-fill with current cost
-    setNewSellingPriceInput(product.price); // Pre-fill with current selling price
-    setProductSearchTerm(""); // Clear search
+    setCostPrice(product.cost); 
+    setNewSellingPriceInput(product.price); 
+    setProductSearchTerm(""); 
+    setQuantity(1); 
   };
 
   const handleAddItemToProcess = () => {
@@ -127,7 +128,23 @@ export default function ProcessPurchaseInvoicePage() {
       newSellingPrice: newSellingPriceInput !== "" && Number(newSellingPriceInput) !== selectedProductDetails.price ? Number(newSellingPriceInput) : undefined,
     };
 
-    setItemsToProcess(prev => [...prev, newItem]);
+    setItemsToProcess(prev => {
+      const existingItemIndex = prev.findIndex(item => item.productId === newItem.productId);
+      if (existingItemIndex > -1) {
+        const updatedItems = [...prev];
+        const existingItem = updatedItems[existingItemIndex];
+        existingItem.quantity += newItem.quantity;
+        existingItem.costPrice = newItem.costPrice; // Update cost price to latest entry for this product
+        existingItem.totalCost = existingItem.quantity * existingItem.costPrice;
+        if (newItem.newSellingPrice !== undefined) { // Update selling price if new one is provided
+            existingItem.newSellingPrice = newItem.newSellingPrice;
+        }
+        return updatedItems;
+      } else {
+        return [...prev, newItem];
+      }
+    });
+
     setSelectedProductDetails(null);
     setQuantity(1);
     setCostPrice("");
@@ -148,7 +165,7 @@ export default function ProcessPurchaseInvoicePage() {
         productId: item.productId,
         quantity: item.quantity,
         costPrice: item.costPrice,
-        newSellingPrice: item.newSellingPrice, // Will be undefined if not set
+        newSellingPrice: item.newSellingPrice,
     }));
     processMutation.mutate({ invoiceId: invoice.id, data: { processed: true, items: itemsForAPI } });
   };
@@ -192,6 +209,33 @@ export default function ProcessPurchaseInvoicePage() {
               The items for invoice <span className="font-semibold">{invoice.invoiceNumber}</span> from supplier <span className="font-semibold">{invoice.supplierName}</span> have already been added to inventory.
             </CardDescription>
           </CardHeader>
+           <CardContent>
+            <h4 className="font-semibold mb-2">Processed Items:</h4>
+            {invoice.items && invoice.items.length > 0 ? (
+              <div className="rounded-md border">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Product Name</TableHead>
+                      <TableHead className="text-center">Qty</TableHead>
+                      <TableHead className="text-right">Cost/Unit</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {invoice.items.map(item => (
+                      <TableRow key={item.productId}>
+                        <TableCell>{item.productName}</TableCell>
+                        <TableCell className="text-center">{item.quantity}</TableCell>
+                        <TableCell className="text-right">${item.costPrice.toFixed(2)}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            ) : (
+              <p className="text-muted-foreground">No items were recorded for this processed invoice.</p>
+            )}
+          </CardContent>
           <CardFooter>
             <Button onClick={() => router.push('/purchase-invoices')}>
               <ArrowLeft className="mr-2 h-4 w-4" /> Back to Purchase Invoices
@@ -216,13 +260,11 @@ export default function ProcessPurchaseInvoicePage() {
       </PageHeader>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Product Selection and Item Entry Card */}
         <Card className="lg:col-span-1 shadow-lg">
           <CardHeader>
             <CardTitle className="flex items-center"><PlusCircle className="mr-2 h-5 w-5"/>Add Item to Invoice</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            {/* Product Search */}
             <div className="relative">
               <label htmlFor="product-search" className="block text-sm font-medium text-foreground mb-1">Search Product (Code, Name, Ref) *</label>
               <div className="relative">
@@ -243,33 +285,35 @@ export default function ProcessPurchaseInvoicePage() {
                     <div 
                       key={p.id} 
                       onClick={() => handleProductSelect(p)}
-                      className="p-2 hover:bg-accent cursor-pointer text-sm"
+                      className="p-2 hover:bg-accent hover:text-accent-foreground cursor-pointer text-sm"
                     >
-                      {p.name} ({p.code})
+                      {p.name} ({p.code}) - Stock: {p.stock}
                     </div>
                   ))}
                 </ScrollArea>
               )}
             </div>
 
-            {/* Selected Product Details */}
             {selectedProductDetails && (
               <Card className="bg-muted/50 p-3 space-y-1">
-                <p className="text-sm font-semibold">{selectedProductDetails.name}</p>
-                <p className="text-xs text-muted-foreground">Code: {selectedProductDetails.code} | Ref: {selectedProductDetails.reference}</p>
+                <div className="flex justify-between items-start">
+                    <div>
+                        <p className="text-sm font-semibold">{selectedProductDetails.name}</p>
+                        <p className="text-xs text-muted-foreground">Code: {selectedProductDetails.code} | Ref: {selectedProductDetails.reference}</p>
+                    </div>
+                    <Button variant="link" size="sm" className="p-0 h-auto text-xs text-destructive" onClick={() => {setSelectedProductDetails(null); setCostPrice(""); setNewSellingPriceInput(""); setQuantity(1); }}>Clear</Button>
+                </div>
                 <p className="text-xs text-muted-foreground">Current Stock: {selectedProductDetails.stock}</p>
                 <p className="text-xs text-muted-foreground">Current Cost: ${selectedProductDetails.cost.toFixed(2)}</p>
                 <p className="text-xs text-muted-foreground">Current Price: ${selectedProductDetails.price.toFixed(2)}</p>
-                <Button variant="link" size="sm" className="p-0 h-auto text-xs" onClick={() => setSelectedProductDetails(null)}>Clear Selection</Button>
               </Card>
             )}
 
-            {/* Item Details Inputs */}
             {selectedProductDetails && (
               <>
                 <div>
                   <label htmlFor="quantity" className="block text-sm font-medium text-foreground mb-1">Quantity Received *</label>
-                  <Input id="quantity" type="number" value={quantity} onChange={e => setQuantity(Number(e.target.value))} placeholder="e.g., 10" min="1"/>
+                  <Input id="quantity" type="number" value={quantity} onChange={e => setQuantity(e.target.value === '' ? '' : Number(e.target.value))} placeholder="e.g., 10" min="1"/>
                 </div>
                 <div>
                   <label htmlFor="costPrice" className="block text-sm font-medium text-foreground mb-1">Cost Price (per unit on Invoice) *</label>
@@ -287,7 +331,6 @@ export default function ProcessPurchaseInvoicePage() {
           </CardContent>
         </Card>
 
-        {/* Items to Process Card */}
         <Card className="lg:col-span-2 shadow-lg">
           <CardHeader>
             <CardTitle>Items to Process for this Invoice</CardTitle>
@@ -312,7 +355,7 @@ export default function ProcessPurchaseInvoicePage() {
                   </TableHeader>
                   <TableBody>
                     {itemsToProcess.map((item, index) => (
-                      <TableRow key={item.productId + index}> {/* Ensure key is unique if same product added multiple times */}
+                      <TableRow key={item.productId + index}>
                         <TableCell className="font-medium text-sm">{item.productName}</TableCell>
                         <TableCell className="text-center">{item.quantity}</TableCell>
                         <TableCell className="text-right">${item.costPrice.toFixed(2)}</TableCell>
