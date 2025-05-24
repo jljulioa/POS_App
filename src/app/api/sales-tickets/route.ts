@@ -10,9 +10,11 @@ interface SaleItemForTicket {
   productId: string;
   productName: string;
   quantity: number;
-  unitPrice: number;
+  unitPrice: number; // This will be the effective/discounted unit price
+  originalUnitPrice: number; // The price before any discount
   costPrice: number;
-  totalPrice: number;
+  discountPercentage: number; // Discount applied to this item
+  totalPrice: number; // Effective total price (quantity * unitPrice)
 }
 
 // Zod schema for SaleItem (consistent with POS page and sales API)
@@ -20,8 +22,10 @@ const SaleItemSchema = z.object({
   productId: z.string(),
   productName: z.string(),
   quantity: z.number().int().min(1, "Quantity must be at least 1"),
-  unitPrice: z.number().min(0),
+  unitPrice: z.number().min(0), 
+  originalUnitPrice: z.number().min(0),
   costPrice: z.number().min(0), 
+  discountPercentage: z.number().min(0).max(100).default(0),
   totalPrice: z.number().min(0),
 });
 
@@ -48,21 +52,26 @@ const parseSalesTicketFromDB = (dbTicket: any): SalesTicketDB => {
     const quantity = parseInt(String(item.quantity || '0'), 10);
     const productId = String(item.productId || '');
 
-    // Basic validation: ensure productId exists and quantity is at least 1
     if (!productId || quantity < 1) {
-      // console.warn("Filtering out invalid cart item during parsing:", item);
-      return null; // This item will be filtered out
+      return null; 
     }
+
+    const originalUnitPrice = parseFloat(String(item.originalUnitPrice || item.unitPrice || '0')) || 0; // Fallback to unitPrice if original is missing
+    const discountPercentage = parseFloat(String(item.discountPercentage || '0')) || 0;
+    const unitPrice = parseFloat(String(item.unitPrice || '0')) || (originalUnitPrice * (1 - discountPercentage / 100));
+
 
     return {
       productId: productId,
       productName: String(item.productName || 'Unknown Product'),
       quantity: quantity,
-      unitPrice: parseFloat(String(item.unitPrice || '0')) || 0,
+      unitPrice: unitPrice,
+      originalUnitPrice: originalUnitPrice,
       costPrice: parseFloat(String(item.costPrice || '0')) || 0,
-      totalPrice: parseFloat(String(item.totalPrice || '0')) || 0,
+      discountPercentage: discountPercentage,
+      totalPrice: parseFloat(String(item.totalPrice || '0')) || (unitPrice * quantity),
     };
-  }).filter((item): item is SaleItemForTicket => item !== null); // Remove nulls (invalid items)
+  }).filter((item): item is SaleItemForTicket => item !== null); 
 
   return {
     id: String(dbTicket.id),
@@ -98,7 +107,6 @@ export async function POST(request: NextRequest) {
     }
 
     const { name, cart_items, status } = validation.data;
-    // Generate a unique ID for the ticket
     const id = `T${Date.now()}${Math.random().toString(36).substring(2, 7)}`; 
 
     const sql = `

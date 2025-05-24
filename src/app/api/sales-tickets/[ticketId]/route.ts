@@ -3,53 +3,71 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { query } from '@/lib/db';
 import { z } from 'zod';
-import type { SalesTicketDB as ImportedSalesTicketDB, SaleItemForTicket } from '@/app/api/sales-tickets/route'; // Import the type
 
-// Re-define SalesTicketDB or ensure it's correctly typed if SaleItemForTicket is defined locally
-export interface SalesTicketDB extends ImportedSalesTicketDB {}
+// Import or redefine SaleItemForTicket to match the main route's definition
+interface SaleItemForTicket {
+  productId: string;
+  productName: string;
+  quantity: number;
+  unitPrice: number;
+  originalUnitPrice: number;
+  costPrice: number;
+  discountPercentage: number;
+  totalPrice: number;
+}
 
+export interface SalesTicketDB {
+  id: string;
+  name: string;
+  cart_items: SaleItemForTicket[];
+  status: 'Active' | 'On Hold' | 'Pending Payment';
+  created_at: string;
+  last_updated_at: string;
+}
 
-// Zod schema for SaleItem (consistent with POS page and sales API)
 const SaleItemSchema = z.object({
   productId: z.string(),
   productName: z.string(),
   quantity: z.number().int().min(1, "Quantity must be at least 1"),
   unitPrice: z.number().min(0),
+  originalUnitPrice: z.number().min(0),
   costPrice: z.number().min(0),
+  discountPercentage: z.number().min(0).max(100).default(0),
   totalPrice: z.number().min(0),
 });
 
-// Zod schema for SalesTicket update
 const SalesTicketUpdateSchema = z.object({
   name: z.string().min(1, { message: "Ticket name cannot be empty." }).optional(),
   cart_items: z.array(SaleItemSchema).optional(), 
   status: z.enum(['Active', 'On Hold', 'Pending Payment']).optional(),
 });
 
-// Helper function to parse SalesTicket from DB (can be shared or re-defined)
-// with robust cart_item parsing
 const parseSalesTicketFromDB = (dbTicket: any): SalesTicketDB => {
-  if (!dbTicket) return null as any; // Should not happen if query is correct
+  if (!dbTicket) return null as any;
 
   const parsedCartItems = (dbTicket.cart_items || []).map((item: any): SaleItemForTicket | null => {
     const quantity = parseInt(String(item.quantity || '0'), 10);
     const productId = String(item.productId || '');
     
     if (!productId || quantity < 1) {
-      // console.warn("Filtering out invalid cart item during single ticket parsing:", item);
       return null;
     }
+    
+    const originalUnitPrice = parseFloat(String(item.originalUnitPrice || item.unitPrice || '0')) || 0;
+    const discountPercentage = parseFloat(String(item.discountPercentage || '0')) || 0;
+    const unitPrice = parseFloat(String(item.unitPrice || '0')) || (originalUnitPrice * (1 - discountPercentage / 100));
 
     return {
       productId: productId,
       productName: String(item.productName || 'Unknown Product'),
       quantity: quantity,
-      unitPrice: parseFloat(String(item.unitPrice || '0')) || 0,
+      unitPrice: unitPrice,
+      originalUnitPrice: originalUnitPrice,
       costPrice: parseFloat(String(item.costPrice || '0')) || 0,
-      totalPrice: parseFloat(String(item.totalPrice || '0')) || 0,
+      discountPercentage: discountPercentage,
+      totalPrice: parseFloat(String(item.totalPrice || '0')) || (unitPrice * quantity),
     };
   }).filter((item): item is SaleItemForTicket => item !== null);
-
 
   return {
     id: String(dbTicket.id),
@@ -89,7 +107,6 @@ export async function PUT(request: NextRequest, { params }: { params: { ticketId
       return NextResponse.json({ message: 'Invalid sales ticket data for update', errors: validation.error.format() }, { status: 400 });
     }
 
-    // Fetch current ticket to only update provided fields
     const currentTicketResult = await query('SELECT * FROM SalesTickets WHERE id = $1', [ticketId]);
     if (currentTicketResult.length === 0) {
       return NextResponse.json({ message: 'Sales ticket not found for update' }, { status: 404 });
@@ -99,8 +116,6 @@ export async function PUT(request: NextRequest, { params }: { params: { ticketId
     const { name, cart_items, status } = validation.data;
 
     const updatedName = name ?? currentTicket.name;
-    // If cart_items is provided in the body, use it (it's already validated by SaleItemSchema array)
-    // otherwise, use current ticket's cart_items.
     const updatedCartItems = cart_items ?? currentTicket.cart_items; 
     const updatedStatus = status ?? currentTicket.status;
     
@@ -110,7 +125,17 @@ export async function PUT(request: NextRequest, { params }: { params: { ticketId
       WHERE id = $4
       RETURNING *
     `;
-    const queryParams = [updatedName, JSON.stringify(updatedCartItems), updatedStatus, ticketId];
+    // Ensure cart_items are stringified correctly, including all new fields
+    const queryParams = [updatedName, JSON.stringify(updatedCartItems.map(item => ({
+        productId: item.productId,
+        productName: item.productName,
+        quantity: item.quantity,
+        unitPrice: item.unitPrice,
+        originalUnitPrice: item.originalUnitPrice,
+        costPrice: item.costPrice,
+        discountPercentage: item.discountPercentage,
+        totalPrice: item.totalPrice,
+    }))), updatedStatus, ticketId];
 
     const result = await query(sql, queryParams);
     if (result.length === 0) {
