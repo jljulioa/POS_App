@@ -9,7 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import type { Product as ProductType, Sale } from '@/lib/mockData';
-import type { SalesTicketDB } from '@/app/api/sales-tickets/route';
+import type { SalesTicketDB, SaleItemForTicket } from '@/app/api/sales-tickets/route'; // Use SaleItemForTicket
 import Image from 'next/image';
 import { Search, X, Plus, Minus, Save, ShoppingCart, CreditCard, DollarSign, PlusSquare, ListFilter, Loader2, AlertTriangle, Ticket, Printer, Percent } from 'lucide-react';
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
@@ -37,18 +37,6 @@ import { cn } from '@/lib/utils';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/hooks/useAuth';
 import { format } from 'date-fns';
-
-// Local SaleItem type for POS, including discount fields
-interface SaleItem {
-  productId: string;
-  productName: string;
-  quantity: number;
-  unitPrice: number; // Effective/discounted unit price
-  originalUnitPrice: number; // Price before any discount
-  costPrice: number;
-  discountPercentage: number;
-  totalPrice: number; // Effective total price
-}
 
 
 // API fetch function for products
@@ -175,11 +163,12 @@ export default function POSPage() {
   const queryClient = useQueryClient();
   const { userRole } = useAuth();
   const [activeTicketId, setActiveTicketId] = useState<string | null>(null);
-  const finalizedTicketIdRef = useRef<string | null>(null); // To store ID of ticket being processed
-
+  
   const [saleToPrint, setSaleToPrint] = useState<Sale | null>(null);
   const [isPrintConfirmOpen, setIsPrintConfirmOpen] = useState(false);
+  const [isPrintingPdf, setIsPrintingPdf] = useState(false);
   const printableTicketRef = useRef<HTMLDivElement>(null);
+  const finalizedTicketIdRef = useRef<string | null>(null);
 
 
   const { data: products = [], isLoading: isLoadingProducts, error: productsError, isError: isProductsError } = useQuery<ProductType[], Error>({
@@ -211,7 +200,7 @@ export default function POSPage() {
 
     const currentTickets = queryClient.getQueryData<SalesTicketDB[]>(['salesTickets']) || [];
     const nextTicketNumber = currentTickets.length > 0
-        ? Math.max(0, ...currentTickets.map(t => { // Ensure Math.max gets at least 0 if no tickets
+        ? Math.max(0, ...currentTickets.map(t => {
             const nameMatch = t.name.match(/Ticket (\d+)/);
             return nameMatch ? parseInt(nameMatch[1], 10) : 0;
           })) + 1
@@ -251,7 +240,7 @@ export default function POSPage() {
     },
     onError: (error) => {
       toast({ variant: 'destructive', title: 'Error Updating Ticket', description: error.message });
-      refetchSalesTickets(); // Refetch to get the consistent server state
+      refetchSalesTickets();
     },
   });
 
@@ -272,12 +261,13 @@ export default function POSPage() {
                 const sortedTickets = [...currentTickets].sort((a, b) => new Date(b.last_updated_at).getTime() - new Date(a.last_updated_at).getTime());
                 setActiveTicketId(sortedTickets[0].id);
             } else {
-                setTimeout(() => handleCreateNewTicket(true), 50); // Slight delay
+                setTimeout(() => handleCreateNewTicket(true), 100); 
             }
         } else if (currentTickets.length === 0) {
-            setTimeout(() => handleCreateNewTicket(true), 50); // Slight delay
+            setTimeout(() => handleCreateNewTicket(true), 100); 
         }
       });
+      setSearchTerm(''); 
     },
     onError: (error, variables_ticketIdAttempted) => {
       toast({ variant: 'destructive', title: 'Error Closing Ticket', description: error.message });
@@ -326,7 +316,7 @@ export default function POSPage() {
     }
 
     const existingItem = activeTicket.cart_items.find(item => item.productId === productInCatalog.id);
-    let newCartItemsClient: SaleItem[];
+    let newCartItemsClient: SaleItemForTicket[];
 
     if (existingItem) {
       if (existingItem.quantity < productInCatalog.stock) {
@@ -334,7 +324,7 @@ export default function POSPage() {
           item.productId === productInCatalog.id ? { 
             ...item, 
             quantity: item.quantity + 1, 
-            totalPrice: (item.quantity + 1) * item.unitPrice 
+            totalPrice: parseFloat(((item.quantity + 1) * item.unitPrice).toFixed(2))
           } : item
         );
       } else {
@@ -354,17 +344,7 @@ export default function POSPage() {
       }];
     }
     
-    const cartItemsForAPI = newCartItemsClient.map(item => ({
-        productId: item.productId,
-        productName: item.productName,
-        quantity: item.quantity,
-        unitPrice: Number(item.unitPrice) || 0,
-        originalUnitPrice: Number(item.originalUnitPrice) || 0,
-        costPrice: Number(item.costPrice) || 0,
-        discountPercentage: Number(item.discountPercentage) || 0,
-        totalPrice: Number(item.totalPrice) || 0,
-    }));
-    updateTicketMutation.mutate({ ticketId: activeTicket.id, data: { cart_items: cartItemsForAPI } });
+    updateTicketMutation.mutate({ ticketId: activeTicket.id, data: { cart_items: newCartItemsClient } });
     setSearchTerm('');
   }, [activeTicket, products, toast, updateTicketMutation]);
 
@@ -376,30 +356,20 @@ export default function POSPage() {
         return;
     }
 
-    let newCartItemsClient: SaleItem[];
+    let newCartItemsClient: SaleItemForTicket[];
     if (newQuantity <= 0) {
       newCartItemsClient = activeTicket.cart_items.filter(item => item.productId !== productId);
     } else if (newQuantity > productInCatalog.stock) {
       toast({ variant: "destructive", title: "Stock Limit Exceeded", description: `Only ${productInCatalog.stock} units of ${productInCatalog.name} available.`});
       newCartItemsClient = activeTicket.cart_items.map(item =>
-        item.productId === productId ? { ...item, quantity: productInCatalog.stock, totalPrice: productInCatalog.stock * item.unitPrice } : item
+        item.productId === productId ? { ...item, quantity: productInCatalog.stock, totalPrice: parseFloat((productInCatalog.stock * item.unitPrice).toFixed(2)) } : item
       );
     } else {
       newCartItemsClient = activeTicket.cart_items.map(item =>
-        item.productId === productId ? { ...item, quantity: newQuantity, totalPrice: newQuantity * item.unitPrice } : item
+        item.productId === productId ? { ...item, quantity: newQuantity, totalPrice: parseFloat((newQuantity * item.unitPrice).toFixed(2)) } : item
       );
     }
-    const cartItemsForAPI = newCartItemsClient.map(item => ({
-        productId: item.productId,
-        productName: item.productName,
-        quantity: item.quantity,
-        unitPrice: Number(item.unitPrice) || 0,
-        originalUnitPrice: Number(item.originalUnitPrice) || 0,
-        costPrice: Number(item.costPrice) || 0,
-        discountPercentage: Number(item.discountPercentage) || 0,
-        totalPrice: Number(item.totalPrice) || 0,
-    }));
-    updateTicketMutation.mutate({ ticketId: activeTicket.id, data: { cart_items: cartItemsForAPI } });
+    updateTicketMutation.mutate({ ticketId: activeTicket.id, data: { cart_items: newCartItemsClient } });
   }, [activeTicket, products, toast, updateTicketMutation]);
 
   const handleDiscountChange = useCallback((productId: string, discountStr: string) => {
@@ -420,34 +390,14 @@ export default function POSPage() {
       }
       return item;
     });
-    const cartItemsForAPI = newCartItemsClient.map(item => ({
-        productId: item.productId,
-        productName: item.productName,
-        quantity: item.quantity,
-        unitPrice: Number(item.unitPrice) || 0,
-        originalUnitPrice: Number(item.originalUnitPrice) || 0,
-        costPrice: Number(item.costPrice) || 0,
-        discountPercentage: Number(item.discountPercentage) || 0,
-        totalPrice: Number(item.totalPrice) || 0,
-    }));
-    updateTicketMutation.mutate({ ticketId: activeTicket.id, data: { cart_items: cartItemsForAPI } });
+    updateTicketMutation.mutate({ ticketId: activeTicket.id, data: { cart_items: newCartItemsClient } });
   }, [activeTicket, updateTicketMutation]);
 
 
   const removeFromCart = (productId: string) => {
     if (!activeTicket) return;
     const newCartItemsClient = activeTicket.cart_items.filter(item => item.productId !== productId);
-    const cartItemsForAPI = newCartItemsClient.map(item => ({
-        productId: item.productId,
-        productName: item.productName,
-        quantity: item.quantity,
-        unitPrice: Number(item.unitPrice) || 0,
-        originalUnitPrice: Number(item.originalUnitPrice) || 0,
-        costPrice: Number(item.costPrice) || 0,
-        discountPercentage: Number(item.discountPercentage) || 0,
-        totalPrice: Number(item.totalPrice) || 0,
-    }));
-    updateTicketMutation.mutate({ ticketId: activeTicket.id, data: { cart_items: cartItemsForAPI } });
+    updateTicketMutation.mutate({ ticketId: activeTicket.id, data: { cart_items: newCartItemsClient } });
   };
 
   const cartTotal = useMemo(() => {
@@ -476,8 +426,8 @@ export default function POSPage() {
   const saleApiMutation = useMutation<Sale, Error, Omit<Sale, 'id' | 'date'>>({
     mutationFn: createSaleAPI,
     onSuccess: (completedSale) => {
+      finalizedTicketIdRef.current = activeTicket?.id || null;
       setSaleToPrint(completedSale);
-      // finalizedTicketIdRef.current is already set by handleProcessSale
       setIsPrintConfirmOpen(true); 
     },
     onError: (error) => {
@@ -486,16 +436,69 @@ export default function POSPage() {
         title: "Failed to Process Sale",
         description: error.message || "An unexpected error occurred.",
       });
-      finalizedTicketIdRef.current = null; // Clear if sale failed
+      finalizedTicketIdRef.current = null; 
     },
   });
+  
+  const finalizeSaleAndClearTicket = useCallback(() => {
+    if (saleToPrint) {
+        toast({
+            title: "Sale Processed Successfully",
+            description: `Sale ID: ${saleToPrint.id} completed. Total: $${saleToPrint.totalAmount.toFixed(2)}.`,
+        });
+    }
+    queryClient.invalidateQueries({ queryKey: ['products'] });
+    queryClient.invalidateQueries({ queryKey: ['sales'] });
+    queryClient.invalidateQueries({ queryKey: ['todaysSales']});
+    
+    const ticketIdToDelete = finalizedTicketIdRef.current;
+    if (ticketIdToDelete) {
+        deleteTicketMutation.mutate(ticketIdToDelete);
+    }
+    
+    setIsPrintConfirmOpen(false);
+    setSaleToPrint(null);
+    setIsPrintingPdf(false);
+  }, [queryClient, deleteTicketMutation, toast, saleToPrint]);
+
+
+  const handlePrintConfirmed = useCallback(async () => {
+    if (!printableTicketRef.current || !saleToPrint) {
+        toast({ variant: "destructive", title: "Print Error", description: "Internal error: Missing data for printing."});
+        finalizeSaleAndClearTicket();
+        return;
+    }
+    setIsPrintingPdf(true);
+
+    setTimeout(async () => {
+        try {
+            const html2pdf = (await import('html2pdf.js')).default;
+            const element = printableTicketRef.current;
+            if (!element) {
+                throw new Error("Printable element not found in DOM after timeout.");
+            }
+            const options = {
+                margin: 0.1,
+                filename: `receipt_${saleToPrint.id}.pdf`,
+                image: { type: 'jpeg', quality: 0.98 },
+                html2canvas: { scale: 3, logging: false, useCORS: true, width: 300 },
+                jsPDF: { unit: 'in', format: [3.15, 8], orientation: 'portrait' }
+            };
+            await html2pdf().from(element).set(options).save();
+        } catch (error) {
+            console.error("Error generating PDF:", error);
+            toast({ variant: "destructive", title: "Print Error", description: (error as Error).message });
+        } finally {
+            finalizeSaleAndClearTicket();
+        }
+    }, 150); 
+  }, [saleToPrint, toast, finalizeSaleAndClearTicket]);
 
   const handleProcessSale = (paymentMethod: 'Cash' | 'Card' | 'Transfer' | 'Combined') => {
     if (!activeTicket || activeTicket.cart_items.length === 0) {
       toast({ variant: "destructive", title: "Empty Cart", description: "Please add items to the cart before processing." });
       return;
     }
-    finalizedTicketIdRef.current = activeTicket.id; // Capture ID for deletion later
 
     const saleData = {
       items: activeTicket.cart_items.map(item => ({
@@ -511,59 +514,6 @@ export default function POSPage() {
       cashierId: userRole || 'system', 
     };
     saleApiMutation.mutate(saleData);
-  };
-
-  const handlePrintTicket = async () => {
-    if (!printableTicketRef.current || !saleToPrint) {
-        toast({ variant: "destructive", title: "Print Error", description: "No sale data to print or print element not ready."});
-        handleClosePrintDialog();
-        return;
-    }
-
-    setTimeout(async () => {
-        try {
-            const html2pdf = (await import('html2pdf.js')).default;
-            const element = printableTicketRef.current;
-            if (!element) {
-                throw new Error("Element to print not found in DOM.");
-            }
-            const options = {
-                margin: 0.1,
-                filename: `receipt_${saleToPrint.id}.pdf`,
-                image: { type: 'jpeg', quality: 0.98 },
-                html2canvas: { scale: 3, logging: false, useCORS: true, width: 300 },
-                jsPDF: { unit: 'in', format: [3.15, 8], orientation: 'portrait' }
-            };
-            html2pdf().from(element).set(options).save();
-        } catch (error) {
-            console.error("Error generating PDF:", error);
-            toast({ variant: "destructive", title: "Print Error", description: (error as Error).message });
-        } finally {
-            handleClosePrintDialog();
-        }
-    }, 100); 
-  };
-
-  const handleClosePrintDialog = () => {
-    if (saleToPrint) {
-        toast({
-            title: "Sale Processed Successfully",
-            description: `Sale ID: ${saleToPrint.id} completed. Total: $${saleToPrint.totalAmount.toFixed(2)}.`,
-        });
-    }
-    queryClient.invalidateQueries({ queryKey: ['products'] });
-    queryClient.invalidateQueries({ queryKey: ['sales'] });
-    queryClient.invalidateQueries({ queryKey: ['todaysSales']});
-    
-    const ticketIdToDelete = finalizedTicketIdRef.current;
-    if (ticketIdToDelete) {
-      deleteTicketMutation.mutate(ticketIdToDelete);
-      // finalizedTicketIdRef.current will be cleared by the mutation's onSuccess/onError
-    }
-    
-    setIsPrintConfirmOpen(false);
-    setSaleToPrint(null);
-    setSearchTerm('');
   };
 
   const getTicketBadgeVariant = (status: SalesTicketDB['status']): "default" | "outline" | "secondary" | "destructive" | null | undefined => {
@@ -670,7 +620,7 @@ export default function POSPage() {
       </Card>
 
       {activeTicket ? (
-        <div className="flex flex-col md:flex-row gap-4 sm:gap-6 h-[calc(100vh-4rem-3rem-10rem)]">
+        <div className="flex flex-col md:flex-row gap-4 sm:gap-6 h-[calc(100vh-4rem-3rem-10rem)]"> {/* Adjusted height */}
           <Card className="w-full md:w-2/5 flex flex-col shadow-lg">
             <CardHeader className="p-4 sm:p-6">
               <CardTitle className="text-base sm:text-lg">Product Search</CardTitle>
@@ -834,7 +784,7 @@ export default function POSPage() {
           </Card>
         </div>
       ) : (
-        <div className="flex items-center justify-center h-[calc(100vh-4rem-3rem-10rem)]">
+        <div className="flex items-center justify-center h-[calc(100vh-4rem-3rem-10rem)]"> {/* Adjusted height */}
           {isLoadingSalesTickets || createTicketMutation.isPending ? (
             <Loader2 className="h-10 w-10 animate-spin text-primary" />
           ) : (
@@ -843,18 +793,24 @@ export default function POSPage() {
         </div>
       )}
 
-      <AlertDialog open={isPrintConfirmOpen} onOpenChange={(open) => {if (!open) handleClosePrintDialog()}}>
+      <AlertDialog open={isPrintConfirmOpen} onOpenChange={(open) => {
+        setIsPrintConfirmOpen(open);
+        if (!open && saleToPrint && !isPrintingPdf) { 
+            finalizeSaleAndClearTicket();
+        }
+      }}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Print Receipt?</AlertDialogTitle>
             <AlertDialogDescription>
-              The sale has been processed. Would you like to print a receipt for this sale?
+              The sale has been processed. Would you like to print a receipt?
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel onClick={handleClosePrintDialog}>No, Thanks</AlertDialogCancel>
-            <AlertDialogAction onClick={handlePrintTicket}>
-              <Printer className="mr-2 h-4 w-4"/> Yes, Print
+            <AlertDialogCancel onClick={finalizeSaleAndClearTicket} disabled={isPrintingPdf}>No, Thanks</AlertDialogCancel>
+            <AlertDialogAction onClick={handlePrintConfirmed} disabled={isPrintingPdf}>
+              {isPrintingPdf ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Printer className="mr-2 h-4 w-4"/>}
+              {isPrintingPdf ? 'Printing...' : 'Yes, Print'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -868,3 +824,4 @@ export default function POSPage() {
   );
 }
 
+    
