@@ -4,7 +4,7 @@
 import AppLayout from '@/components/layout/AppLayout';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Barcode, Package, ShoppingCart, Users, ArrowRight, Loader2, AlertTriangle } from 'lucide-react';
+import { Barcode, Package, ShoppingCart, Users, ArrowRight, Loader2, AlertTriangle, FileText, Landmark, Bot } from 'lucide-react';
 import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
 
@@ -34,9 +34,9 @@ function StatCard({ title, value, icon: Icon, description, ctaLink, ctaText, col
             <AlertTriangle className="h-4 w-4 mr-1" /> Error
           </div>
         ) : isLoading ? (
-          <div className="text-3xl font-bold text-muted-foreground">...</div>
+          <div className="text-2xl sm:text-3xl font-bold text-muted-foreground">...</div>
         ) : (
-          <div className="text-3xl font-bold">{value}</div>
+          <div className="text-2xl sm:text-3xl font-bold">{value}</div>
         )}
         {description && !isError && <p className="text-xs text-muted-foreground pt-1">{description}</p>}
         {errorMessage && isError && <p className="text-xs text-destructive pt-1">{errorMessage.substring(0,50)}...</p>}
@@ -90,9 +90,9 @@ export default function DashboardPage() {
   return (
     <AppLayout>
       <div className="space-y-6">
-        <h1 className="text-3xl font-bold tracking-tight text-foreground">Dashboard Overview</h1>
+        <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground">Dashboard Overview</h1>
         
-        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-4 sm:gap-6 md:grid-cols-2 lg:grid-cols-3">
           <StatCard 
             title="Start New Sale" 
             value="POS" 
@@ -119,7 +119,7 @@ export default function DashboardPage() {
             value={`$${(salesStats?.totalSalesAmount ?? 0).toFixed(2)}`}
             icon={ShoppingCart}
             description={`${salesStats?.totalSalesCount ?? 0} transactions today`}
-            ctaLink="/sales/reports" // Updated link
+            ctaLink="/sales/reports"
             ctaText="View Today's Report"
             colorClass="text-purple-500"
             isLoading={isLoadingSalesStats}
@@ -145,25 +145,25 @@ export default function DashboardPage() {
             <CardTitle>Quick Actions</CardTitle>
             <CardDescription>Access common tasks quickly.</CardDescription>
           </CardHeader>
-          <CardContent className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <Button asChild variant="outline" className="py-6 text-base">
+          <CardContent className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+            <Button asChild variant="outline" className="py-4 sm:py-6 text-sm sm:text-base">
               <Link href="/inventory/add">
-                <Package className="mr-2 h-5 w-5" /> Add Product
+                <Package className="mr-2 h-4 w-4 sm:h-5 sm:w-5" /> Add Product
               </Link>
             </Button>
-            <Button asChild variant="outline" className="py-6 text-base">
+            <Button asChild variant="outline" className="py-4 sm:py-6 text-sm sm:text-base">
               <Link href="/reordering">
-                <Users className="mr-2 h-5 w-5" /> Smart Reorder
+                <Bot className="mr-2 h-4 w-4 sm:h-5 sm:w-5" /> Smart Reorder
               </Link>
             </Button>
-             <Button asChild variant="outline" className="py-6 text-base">
+             <Button asChild variant="outline" className="py-4 sm:py-6 text-sm sm:text-base">
               <Link href="/sales/reports">
-                <ShoppingCart className="mr-2 h-5 w-5" /> Sales Report
+                <FileText className="mr-2 h-4 w-4 sm:h-5 sm:w-5" /> Sales Report
               </Link>
             </Button>
-             <Button asChild variant="outline" className="py-6 text-base">
+             <Button asChild variant="outline" className="py-4 sm:py-6 text-sm sm:text-base">
               <Link href="/customers/add">
-                <Users className="mr-2 h-5 w-5" /> Add Customer
+                <Users className="mr-2 h-4 w-4 sm:h-5 sm:w-5" /> Add Customer
               </Link>
             </Button>
           </CardContent>

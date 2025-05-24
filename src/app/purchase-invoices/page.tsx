@@ -23,7 +23,6 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 
 // API fetch function for purchase invoices
@@ -68,19 +67,19 @@ function InvoiceRowActions({ invoice, deleteMutation }: InvoiceRowActionsProps) 
   return (
     <div className="flex items-center justify-center space-x-1">
       {!invoice.processed ? (
-        <Button variant="ghost" size="icon" className="hover:text-accent" asChild>
+        <Button variant="ghost" size="icon" className="hover:text-accent h-8 w-8 sm:h-auto sm:w-auto" asChild>
           <Link href={`/purchase-invoices/${invoice.id}/process`}>
             <Settings2 className="h-4 w-4" />
           </Link>
         </Button>
       ) : (
-          <Button variant="ghost" size="icon" disabled>
+          <Button variant="ghost" size="icon" disabled className="h-8 w-8 sm:h-auto sm:w-auto">
             <Settings2 className="h-4 w-4 opacity-50" />
           </Button>
       )}
       <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
         <AlertDialogTrigger asChild>
-          <Button variant="ghost" size="icon" className="hover:text-destructive">
+          <Button variant="ghost" size="icon" className="hover:text-destructive h-8 w-8 sm:h-auto sm:w-auto">
             <Trash2 className="h-4 w-4" />
           </Button>
         </AlertDialogTrigger>
@@ -169,7 +168,7 @@ export default function PurchaseInvoicesPage() {
       <PageHeader title="Purchase Invoices" description="Manage incoming supplier invoices.">
         <Button asChild>
           <Link href="/purchase-invoices/add">
-            <PlusCircle className="mr-2 h-4 w-4" /> Add Purchase Invoice
+            <PlusCircle className="mr-2 h-4 w-4" /> Add Invoice
           </Link>
         </Button>
         <Button variant="outline">
@@ -182,7 +181,7 @@ export default function PurchaseInvoicesPage() {
           placeholder="Search by Invoice #, Supplier..." 
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
-          className="max-w-sm"
+          className="w-full sm:max-w-sm"
         />
       </div>
 
@@ -191,10 +190,10 @@ export default function PurchaseInvoicesPage() {
           <TableHeader>
             <TableRow>
               <TableHead>Invoice #</TableHead>
-              <TableHead>Invoice Date</TableHead>
+              <TableHead className="hidden sm:table-cell">Date</TableHead>
               <TableHead>Supplier</TableHead>
-              <TableHead className="text-right">Total Amount</TableHead>
-              <TableHead>Payment Terms</TableHead>
+              <TableHead className="text-right hidden md:table-cell">Total</TableHead>
+              <TableHead className="hidden md:table-cell">Terms</TableHead>
               <TableHead className="text-center">Status</TableHead>
               <TableHead className="text-center">Actions</TableHead>
             </TableRow>
@@ -202,18 +201,18 @@ export default function PurchaseInvoicesPage() {
           <TableBody>
             {filteredInvoices.map((invoice) => (
               <TableRow key={invoice.id}>
-                <TableCell className="font-medium">{invoice.invoiceNumber}</TableCell>
-                <TableCell>{format(new Date(invoice.invoiceDate), 'MMM d, yyyy')}</TableCell>
-                <TableCell>{invoice.supplierName}</TableCell>
-                <TableCell className="text-right">${invoice.totalAmount.toFixed(2)}</TableCell>
-                <TableCell>
+                <TableCell className="font-medium text-xs sm:text-sm">{invoice.invoiceNumber}</TableCell>
+                <TableCell className="hidden sm:table-cell text-xs sm:text-sm">{format(new Date(invoice.invoiceDate), 'MMM d, yyyy')}</TableCell>
+                <TableCell className="text-xs sm:text-sm">{invoice.supplierName}</TableCell>
+                <TableCell className="text-right hidden md:table-cell">${invoice.totalAmount.toFixed(2)}</TableCell>
+                <TableCell className="hidden md:table-cell">
                   <Badge variant={invoice.paymentTerms === 'Credit' ? 'outline' : 'secondary'}>
                     {invoice.paymentTerms}
                   </Badge>
                 </TableCell>
                 <TableCell className="text-center">
                   <Badge variant={invoice.processed ? 'default' : 'destructive'} className={invoice.processed ? "bg-green-500 hover:bg-green-600" : "hover:bg-destructive/90"}>
-                    {invoice.processed ? 'Processed' : 'Not Processed'}
+                    {invoice.processed ? 'Processed' : 'Pending'}
                   </Badge>
                 </TableCell>
                 <TableCell className="text-center">

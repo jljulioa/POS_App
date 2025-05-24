@@ -9,7 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { FileDown, Eye, Loader2, AlertTriangle, ShoppingCart, Calendar as CalendarIcon, FilterX, CornerDownLeft } from 'lucide-react';
 import React, { useState, useMemo, useEffect } from 'react';
-import { format } from 'date-fns';
+import { format, parseISO } from 'date-fns';
 import { Badge } from '@/components/ui/badge';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useToast } from '@/hooks/use-toast';
@@ -59,8 +59,8 @@ const ProcessReturnSchema = z.object({
 type ReturnItemFormValues = {
   [productId: string]: {
     quantity: number;
-    unitPrice: number; // Keep unitPrice for refund calculation
-    maxQuantity: number; // To validate against in the form
+    unitPrice: number; 
+    maxQuantity: number; 
   };
 };
 
@@ -93,9 +93,9 @@ export default function SalesPage() {
   const [endDate, setEndDate] = useState<Date | undefined>(undefined);
 
   const { data: sales = [], isLoading, error, isError, refetch } = useQuery<Sale[], Error>({
-    queryKey: ['sales', startDate, endDate], // Add dates to queryKey to trigger refetch
+    queryKey: ['sales', startDate, endDate], 
     queryFn: () => fetchSales(startDate, endDate),
-    enabled: true, // Fetch on mount and when dates change (due to queryKey)
+    enabled: true, 
     onError: (err) => {
       toast({
         variant: "destructive",
@@ -125,7 +125,7 @@ export default function SalesPage() {
       initialReturnItems[item.productId] = { quantity: 0, unitPrice: item.unitPrice, maxQuantity: item.quantity };
     });
     setReturnItems(initialReturnItems);
-    setIsViewModalOpen(false); // Close details modal
+    setIsViewModalOpen(false); 
     setIsReturnModalOpen(true);
   };
 
@@ -169,7 +169,8 @@ export default function SalesPage() {
         description: `${data.message}. Total Refund: $${data.totalRefundAmount.toFixed(2)}`,
       });
       queryClient.invalidateQueries({ queryKey: ['products'] });
-      queryClient.invalidateQueries({ queryKey: ['sales'] }); // Could also invalidate specific sale if needed
+      queryClient.invalidateQueries({ queryKey: ['sales', startDate, endDate] }); 
+      queryClient.invalidateQueries({ queryKey: ['todaysSales']});
       setIsReturnModalOpen(false);
       setSelectedSale(null);
     },
@@ -190,7 +191,7 @@ export default function SalesPage() {
       .map(([productId, itemDetails]) => ({
         productId,
         quantity: itemDetails.quantity,
-        unitPrice: itemDetails.unitPrice, // Pass unitPrice for backend validation/calculation
+        unitPrice: itemDetails.unitPrice, 
       }));
 
     if (itemsToSubmit.length === 0) {
@@ -215,16 +216,13 @@ export default function SalesPage() {
   const handleClearFilters = () => {
     setStartDate(undefined);
     setEndDate(undefined);
-    // refetch will be triggered by queryKey change
   };
   
-  // Effect to refetch when dates change
   useEffect(() => {
-    // refetch(); // This is handled by React Query when queryKey changes
   }, [startDate, endDate, refetch]);
 
 
-  if (isLoading && !sales.length) { // Show loading only if no data is present yet
+  if (isLoading && !sales.length) { 
     return (
       <AppLayout>
         <PageHeader title="Sales Records" description="Loading sales history..." />
@@ -262,20 +260,20 @@ export default function SalesPage() {
         </Button>
       </PageHeader>
 
-      <div className="mb-6 flex flex-col sm:flex-row gap-4 items-center">
+      <div className="mb-6 flex flex-col sm:flex-row flex-wrap gap-2 sm:gap-4 items-center">
         <Input
           placeholder="Search by Sale ID, Customer, Product..."
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
-          className="max-w-sm"
+          className="w-full sm:max-w-xs md:max-w-sm"
         />
-        <div className="flex gap-2">
+        <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
             <Popover>
               <PopoverTrigger asChild>
                 <Button
                   variant={"outline"}
                   className={cn(
-                    "w-[150px] justify-start text-left font-normal",
+                    "w-full sm:w-[180px] justify-start text-left font-normal",
                     !startDate && "text-muted-foreground"
                   )}
                 >
@@ -297,7 +295,7 @@ export default function SalesPage() {
                 <Button
                   variant={"outline"}
                   className={cn(
-                    "w-[150px] justify-start text-left font-normal",
+                    "w-full sm:w-[180px] justify-start text-left font-normal",
                     !endDate && "text-muted-foreground"
                   )}
                 >
@@ -331,30 +329,30 @@ export default function SalesPage() {
             <TableHeader>
               <TableRow>
                 <TableHead>Sale ID</TableHead>
-                <TableHead>Date</TableHead>
+                <TableHead className="hidden sm:table-cell">Date</TableHead>
                 <TableHead>Customer</TableHead>
-                <TableHead className="text-center">Items</TableHead>
-                <TableHead className="text-right">Total Amount</TableHead>
-                <TableHead>Payment Method</TableHead>
+                <TableHead className="text-center hidden md:table-cell">Items</TableHead>
+                <TableHead className="text-right">Total</TableHead>
+                <TableHead className="hidden md:table-cell">Payment</TableHead>
                 <TableHead className="text-center">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {filteredSales.map((sale) => (
                 <TableRow key={sale.id}>
-                  <TableCell className="font-medium">{sale.id}</TableCell>
-                  <TableCell>{format(new Date(sale.date), 'PPpp')}</TableCell>
-                  <TableCell>{sale.customerName || 'N/A'}</TableCell>
-                  <TableCell className="text-center">{sale.items.length}</TableCell>
-                  <TableCell className="text-right">${Number(sale.totalAmount).toFixed(2)}</TableCell>
-                  <TableCell>
+                  <TableCell className="font-medium text-xs sm:text-sm">{sale.id}</TableCell>
+                  <TableCell className="hidden sm:table-cell text-xs sm:text-sm">{format(new Date(sale.date), 'PPpp')}</TableCell>
+                  <TableCell className="text-xs sm:text-sm">{sale.customerName || 'N/A'}</TableCell>
+                  <TableCell className="text-center hidden md:table-cell">{sale.items.length}</TableCell>
+                  <TableCell className="text-right text-xs sm:text-sm">${Number(sale.totalAmount).toFixed(2)}</TableCell>
+                  <TableCell className="hidden md:table-cell">
                     <Badge variant={
                       sale.paymentMethod === 'Card' ? 'default' :
                       sale.paymentMethod === 'Cash' ? 'secondary' : 'outline'
                     }>{sale.paymentMethod}</Badge>
                   </TableCell>
                   <TableCell className="text-center">
-                    <Button variant="ghost" size="icon" className="hover:text-primary" onClick={() => handleViewSale(sale)}>
+                    <Button variant="ghost" size="icon" className="hover:text-primary h-8 w-8 sm:h-auto sm:w-auto" onClick={() => handleViewSale(sale)}>
                       <Eye className="h-4 w-4" />
                     </Button>
                   </TableCell>
@@ -375,57 +373,57 @@ export default function SalesPage() {
       {/* Sale Details Modal */}
       {selectedSale && (
         <Dialog open={isViewModalOpen} onOpenChange={setIsViewModalOpen}>
-          <DialogContent className="sm:max-w-2xl">
+          <DialogContent className="sm:max-w-md md:max-w-2xl">
             <DialogHeader>
-              <DialogTitle className="flex items-center">
-                <ShoppingCart className="mr-2 h-6 w-6 text-primary" />
+              <DialogTitle className="flex items-center text-lg md:text-xl">
+                <ShoppingCart className="mr-2 h-5 w-5 md:h-6 md:w-6 text-primary" />
                 Sale Details: {selectedSale.id}
               </DialogTitle>
-              <DialogDescription>
+              <DialogDescription className="text-xs md:text-sm">
                 Date: {format(new Date(selectedSale.date), 'PPpp')}
               </DialogDescription>
             </DialogHeader>
             
-            <div className="grid gap-4 py-4">
-              <div className="grid grid-cols-2 gap-2 text-sm">
+            <div className="grid gap-3 md:gap-4 py-3 md:py-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs md:text-sm">
                 <div><span className="font-semibold">Customer:</span> {selectedSale.customerName || 'N/A'}</div>
                 <div><span className="font-semibold">Payment Method:</span> {selectedSale.paymentMethod}</div>
                 <div><span className="font-semibold">Cashier:</span> {selectedSale.cashierId}</div>
-                <div className="text-lg font-bold"><span className="font-semibold">Total:</span> ${Number(selectedSale.totalAmount).toFixed(2)}</div>
+                <div className="text-md md:text-lg font-bold"><span className="font-semibold">Total:</span> ${Number(selectedSale.totalAmount).toFixed(2)}</div>
               </div>
               
               <div className="flex justify-between items-center mt-2">
-                <h3 className="font-semibold text-md">Items Sold:</h3>
+                <h3 className="font-semibold text-sm md:text-md">Items Sold:</h3>
                 <Button variant="outline" size="sm" onClick={() => handleOpenReturnModal(selectedSale)}>
-                  <CornerDownLeft className="mr-2 h-4 w-4" /> Return Items
+                  <CornerDownLeft className="mr-2 h-3 w-3 md:h-4 md:w-4" /> Return Items
                 </Button>
               </div>
 
               {selectedSale.items && selectedSale.items.length > 0 ? (
-                <div className="rounded-md border max-h-60 overflow-y-auto">
+                <div className="rounded-md border max-h-48 sm:max-h-60 overflow-y-auto">
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead>Product Name</TableHead>
-                        <TableHead className="text-center">Quantity</TableHead>
-                        <TableHead className="text-right">Unit Price</TableHead>
-                        <TableHead className="text-right">Total Price</TableHead>
+                        <TableHead className="text-xs md:text-sm">Product Name</TableHead>
+                        <TableHead className="text-center text-xs md:text-sm">Quantity</TableHead>
+                        <TableHead className="text-right text-xs md:text-sm">Unit Price</TableHead>
+                        <TableHead className="text-right text-xs md:text-sm">Total Price</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {selectedSale.items.map((item: SaleItem, index: number) => (
                         <TableRow key={item.productId + index}>
-                          <TableCell>{item.productName}</TableCell>
-                          <TableCell className="text-center">{item.quantity}</TableCell>
-                          <TableCell className="text-right">${Number(item.unitPrice).toFixed(2)}</TableCell>
-                          <TableCell className="text-right font-medium">${Number(item.totalPrice).toFixed(2)}</TableCell>
+                          <TableCell className="text-xs md:text-sm">{item.productName}</TableCell>
+                          <TableCell className="text-center text-xs md:text-sm">{item.quantity}</TableCell>
+                          <TableCell className="text-right text-xs md:text-sm">${Number(item.unitPrice).toFixed(2)}</TableCell>
+                          <TableCell className="text-right font-medium text-xs md:text-sm">${Number(item.totalPrice).toFixed(2)}</TableCell>
                         </TableRow>
                       ))}
                     </TableBody>
                   </Table>
                 </div>
               ) : (
-                <p className="text-muted-foreground">No items found for this sale.</p>
+                <p className="text-muted-foreground text-xs md:text-sm">No items found for this sale.</p>
               )}
             </div>
             <DialogFooter>
@@ -444,24 +442,24 @@ export default function SalesPage() {
         <Dialog open={isReturnModalOpen} onOpenChange={(open) => {
             if (!open) {
                 setIsReturnModalOpen(false);
-                setSelectedSale(null); // Clear selectedSale if return modal is closed
+                setSelectedSale(null); 
             }
         }}>
-          <DialogContent className="sm:max-w-lg">
+          <DialogContent className="sm:max-w-md md:max-w-lg">
             <DialogHeader>
-              <DialogTitle className="flex items-center">
-                <CornerDownLeft className="mr-2 h-6 w-6 text-primary" />
+              <DialogTitle className="flex items-center text-lg md:text-xl">
+                <CornerDownLeft className="mr-2 h-5 w-5 md:h-6 md:w-6 text-primary" />
                 Return Items from Sale: {selectedSale.id}
               </DialogTitle>
-              <DialogDescription>
+              <DialogDescription className="text-xs md:text-sm">
                 Specify quantities to return. Max quantity is what was originally purchased.
               </DialogDescription>
             </DialogHeader>
-            <div className="py-4 space-y-3">
+            <div className="py-3 md:py-4 space-y-3">
               {selectedSale.items.map(item => (
-                <div key={item.productId} className="grid grid-cols-3 items-center gap-3 p-2 border rounded-md">
+                <div key={item.productId} className="grid grid-cols-3 items-center gap-2 md:gap-3 p-2 border rounded-md">
                   <div className="col-span-2">
-                    <p className="font-medium text-sm">{item.productName}</p>
+                    <p className="font-medium text-xs md:text-sm">{item.productName}</p>
                     <p className="text-xs text-muted-foreground">Purchased: {item.quantity} @ ${item.unitPrice.toFixed(2)}</p>
                   </div>
                   <Input
@@ -470,17 +468,17 @@ export default function SalesPage() {
                     max={item.quantity}
                     value={returnItems[item.productId]?.quantity || 0}
                     onChange={(e) => handleReturnQuantityChange(item.productId, e.target.value)}
-                    className="h-9 text-center"
+                    className="h-8 md:h-9 text-center text-xs md:text-sm"
                     placeholder="Qty"
                   />
                 </div>
               ))}
-              <div className="text-right font-semibold text-lg pt-3">
+              <div className="text-right font-semibold text-md md:text-lg pt-3">
                 Total Refund Amount: ${totalReturnAmount.toFixed(2)}
               </div>
             </div>
             <DialogFooter>
-              <Button variant="outline" onClick={() => {setIsReturnModalOpen(false); setSelectedSale(null)}}>Cancel</Button>
+              <Button variant="outline" onClick={() => {setIsReturnModalOpen(false); setSelectedSale(null);}}>Cancel</Button>
               <Button 
                 onClick={handleSubmitReturn} 
                 disabled={processReturnMutation.isPending || totalReturnAmount === 0}

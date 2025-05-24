@@ -15,7 +15,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import Link from 'next/link';
 import { useQuery, useQueryClient, useMutation, type UseMutationResult } from '@tanstack/react-query';
 import { useToast } from '@/hooks/use-toast';
-import { useSearchParams } from 'next/navigation';
+import { useSearchParams, useRouter } from 'next/navigation';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -25,7 +25,6 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 
 // API fetch function
@@ -111,6 +110,7 @@ function ProductRowActions({ product, deleteMutation }: ProductRowActionsProps) 
 export default function InventoryPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const searchParams = useSearchParams();
+  const router = useRouter();
   const urlCategoryFilter = searchParams.get('category');
   
   const [filterBrand, setFilterBrand] = useState('all');
@@ -207,7 +207,7 @@ export default function InventoryPage() {
           placeholder="Search by name, code, reference, barcode..."
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
-          className="max-w-sm"
+          className="w-full sm:max-w-xs md:max-w-sm"
         />
         <Select value={filterBrand} onValueChange={setFilterBrand}>
           <SelectTrigger className="w-full sm:w-[180px]">
@@ -221,11 +221,13 @@ export default function InventoryPage() {
         </Select>
         <Select value={filterCategory} onValueChange={(value) => {
           setFilterCategory(value);
-          // Optional: If you want the URL to update when dropdown changes, you can use router.push here
-          // const newQuery = new URLSearchParams(searchParams);
-          // if (value === 'all') newQuery.delete('category');
-          // else newQuery.set('category', value);
-          // router.push(`/inventory?${newQuery.toString()}`, { scroll: false });
+          const newQuery = new URLSearchParams(searchParams.toString());
+          if (value === 'all') {
+            newQuery.delete('category');
+          } else {
+            newQuery.set('category', value);
+          }
+          router.push(`/inventory?${newQuery.toString()}`, { scroll: false });
         }}>
           <SelectTrigger className="w-full sm:w-[180px]">
             <SelectValue placeholder="Filter by category" />
@@ -242,18 +244,18 @@ export default function InventoryPage() {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead className="w-[80px]">Image</TableHead>
+              <TableHead className="w-[60px] sm:w-[80px]">Image</TableHead>
               <TableHead>Name</TableHead>
-              <TableHead>Code</TableHead>
-              <TableHead>Reference</TableHead>
-              <TableHead>Brand</TableHead>
+              <TableHead className="hidden md:table-cell">Code</TableHead>
+              <TableHead className="hidden lg:table-cell">Reference</TableHead>
+              <TableHead className="hidden md:table-cell">Brand</TableHead>
               <TableHead>Category</TableHead>
               <TableHead className="text-right">Stock</TableHead>
-              <TableHead className="text-right">Cost</TableHead>
+              <TableHead className="text-right hidden sm:table-cell">Cost</TableHead>
               <TableHead className="text-right">Price</TableHead>
-              <TableHead className="text-right">Profit</TableHead>
-              <TableHead className="text-center">Status</TableHead>
-              <TableHead className="text-center w-[120px]">Actions</TableHead>
+              <TableHead className="text-right hidden sm:table-cell">Profit</TableHead>
+              <TableHead className="text-center hidden sm:table-cell">Status</TableHead>
+              <TableHead className="text-center w-[100px] sm:w-[120px]">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -263,15 +265,15 @@ export default function InventoryPage() {
                   <Image src={product.imageUrl || `https://placehold.co/50x50.png?text=${product.name.substring(0,2)}`} alt={product.name} width={50} height={50} className="rounded-md object-cover" data-ai-hint={product.dataAiHint || "motorcycle part"} />
                 </TableCell>
                 <TableCell className="font-medium">{product.name}</TableCell>
-                <TableCell>{product.code}</TableCell>
-                <TableCell>{product.reference}</TableCell>
-                <TableCell>{product.brand}</TableCell>
+                <TableCell className="hidden md:table-cell">{product.code}</TableCell>
+                <TableCell className="hidden lg:table-cell">{product.reference}</TableCell>
+                <TableCell className="hidden md:table-cell">{product.brand}</TableCell>
                 <TableCell>{product.category}</TableCell>
                 <TableCell className="text-right">{product.stock}</TableCell>
-                <TableCell className="text-right">${Number(product.cost).toFixed(2)}</TableCell>
+                <TableCell className="text-right hidden sm:table-cell">${Number(product.cost).toFixed(2)}</TableCell>
                 <TableCell className="text-right">${Number(product.price).toFixed(2)}</TableCell>
-                <TableCell className="text-right font-semibold text-green-600">${(Number(product.price) - Number(product.cost)).toFixed(2)}</TableCell>
-                <TableCell className="text-center">
+                <TableCell className="text-right font-semibold text-green-600 hidden sm:table-cell">${(Number(product.price) - Number(product.cost)).toFixed(2)}</TableCell>
+                <TableCell className="text-center hidden sm:table-cell">
                   {product.stock === 0 ? <Badge variant="destructive">Out of Stock</Badge> :
                    product.stock < product.minStock ? <Badge variant="outline" className="border-yellow-500 text-yellow-600">Low Stock</Badge> :
                    <Badge variant="secondary" className="border-green-500 text-green-600 bg-green-100">In Stock</Badge>}

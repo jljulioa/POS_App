@@ -50,17 +50,17 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         </SidebarFooter>
       </Sidebar>
       <div className="flex flex-col flex-1 min-h-screen">
-        <header className="sticky top-0 z-10 flex h-16 items-center justify-between border-b bg-card px-6 shadow-sm">
-          <div className="flex items-center gap-4">
+        <header className="sticky top-0 z-10 flex h-16 items-center justify-between border-b bg-card px-4 sm:px-6 shadow-sm">
+          <div className="flex items-center gap-2 sm:gap-4">
              <SidebarTrigger className="md:hidden" /> {/* Only show on mobile */}
-             <h1 className="text-xl font-semibold capitalize">{pathname.substring(1) || 'Dashboard'}</h1>
+             <h1 className="text-lg sm:text-xl font-semibold capitalize">{pathname.substring(1) || 'Dashboard'}</h1>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 sm:gap-3">
             <ThemeToggle />
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" className="relative h-10 w-10 rounded-full">
-                  <Avatar className="h-9 w-9">
+                <Button variant="ghost" className="relative h-9 w-9 sm:h-10 sm:w-10 rounded-full">
+                  <Avatar className="h-8 w-8 sm:h-9 sm:w-9">
                     <AvatarImage src="https://placehold.co/40x40.png" alt="@motofoxuser" data-ai-hint="profile avatar" />
                     <AvatarFallback>MF</AvatarFallback>
                   </Avatar>
@@ -71,7 +71,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                   <div className="flex flex-col space-y-1">
                     <p className="text-sm font-medium leading-none">MotoFox User</p>
                     <p className="text-xs leading-none text-muted-foreground">
-                      {userRole || 'user'}@example.com
+                      {userRole || 'user'}@motofox.com
                     </p>
                   </div>
                 </DropdownMenuLabel>
@@ -84,7 +84,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             </DropdownMenu>
           </div>
         </header>
-        <main className="flex-1 overflow-y-auto p-6 bg-background">
+        <main className="flex-1 overflow-y-auto p-4 sm:p-6 bg-background">
           {children}
         </main>
       </div>

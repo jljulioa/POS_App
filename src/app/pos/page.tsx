@@ -37,6 +37,8 @@ import { cn } from '@/lib/utils';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/hooks/useAuth';
 import { format } from 'date-fns';
+import html2pdf from 'html2pdf.js';
+
 
 // API fetch function for products
 const fetchProducts = async (): Promise<ProductType[]> => {
@@ -110,15 +112,6 @@ interface PrintableTicketProps {
 
 const PrintableTicket: React.FC<PrintableTicketProps> = ({ sale }) => {
   if (!sale) return null;
-
-  // Debug: Log if sale or items are missing for printing
-  // useEffect(() => {
-  //   console.log("PrintableTicket received sale:", sale);
-  //   if (sale && sale.items) {
-  //     console.log("PrintableTicket items:", sale.items);
-  //   }
-  // }, [sale]);
-
 
   return (
     <div className="p-2 font-mono text-xs" style={{ width: '300px', color: 'black', backgroundColor: 'white', border: '1px solid #ccc' }}>
@@ -211,7 +204,7 @@ export default function POSPage() {
     },
     onError: (error) => {
       toast({ variant: 'destructive', title: 'Error al Actualizar Ticket', description: error.message });
-      refetchSalesTickets();
+      refetchSalesTickets(); // Refetch to ensure consistency if update fails partially
     },
   });
 
@@ -221,41 +214,37 @@ export default function POSPage() {
       queryClient.setQueryData(['salesTickets'], (oldData: SalesTicketDB[] | undefined) =>
         oldData ? oldData.filter(t => t.id !== deletedTicketId) : []
       );
-      // Re-evaluate active ticket AFTER data is updated
-      queryClient.getQueryData<SalesTicketDB[]>(['salesTickets'])?.then((currentTickets: SalesTicketDB[] | undefined) => {
-        const liveTickets = currentTickets || [];
+       // Re-evaluate active ticket AFTER data is updated
+      const currentTickets = queryClient.getQueryData<SalesTicketDB[]>(['salesTickets']) || [];
         if (activeTicketId === deletedTicketId) {
-            if (liveTickets.length > 0) {
-                const sortedTickets = [...liveTickets].sort((a, b) => new Date(b.last_updated_at).getTime() - new Date(a.last_updated_at).getTime());
+            if (currentTickets.length > 0) {
+                const sortedTickets = [...currentTickets].sort((a, b) => new Date(b.last_updated_at).getTime() - new Date(a.last_updated_at).getTime());
                 setActiveTicketId(sortedTickets[0].id);
             } else {
-                handleCreateNewTicket(true);
+                 // Delay to allow delete mutation to settle before creating new one
+                setTimeout(() => handleCreateNewTicket(true), 0);
             }
-        } else if (liveTickets.length === 0) {
-            handleCreateNewTicket(true);
+        } else if (currentTickets.length === 0) {
+            setTimeout(() => handleCreateNewTicket(true), 0);
         }
-      });
     },
     onError: (error) => {
       toast({ variant: 'destructive', title: 'Error al Cerrar Ticket', description: error.message });
     },
   });
 
-  const activeTicket = useMemo(() => salesTickets?.find(t => t.id === activeTicketId), [salesTickets, activeTicketId]);
-
  useEffect(() => {
     if (!isLoadingSalesTickets && salesTickets) {
       if (salesTickets.length === 0) {
         if (!createTicketMutation.isPending && !activeTicketId) {
-            handleCreateNewTicket(true); // Force create if DB is empty
+            handleCreateNewTicket(true); 
         }
       } else if (!activeTicketId || !salesTickets.find(t => t.id === activeTicketId)) {
-        // If no active ticket or current active is gone, set to most recent
         const sortedTickets = [...salesTickets].sort((a, b) => new Date(b.last_updated_at).getTime() - new Date(a.last_updated_at).getTime());
         setActiveTicketId(sortedTickets[0].id);
       }
     }
-  }, [salesTickets, isLoadingSalesTickets, activeTicketId, createTicketMutation.isPending]);
+  }, [salesTickets, isLoadingSalesTickets, activeTicketId, createTicketMutation.isPending, handleCreateNewTicket]);
 
 
   const searchResults = useMemo(() => {
@@ -278,7 +267,7 @@ export default function POSPage() {
         return;
     }
 
-    const itemCostPrice = productInCatalog.cost;
+    const itemCostPrice = Number(productInCatalog.cost); // Ensure cost is a number
     if (typeof itemCostPrice !== 'number' || isNaN(itemCostPrice)) {
         toast({
         variant: "destructive",
@@ -289,13 +278,14 @@ export default function POSPage() {
         return; 
     }
 
+
     if (productInCatalog.stock === 0) {
       toast({ variant: "destructive", title: "Agotado", description: `${productInCatalog.name} está actualmente agotado.` });
       return;
     }
 
     const existingItem = activeTicket.cart_items.find(item => item.productId === productInCatalog.id);
-    let newCartItemsClient: SaleItem[]; // This is the type for client-side manipulation
+    let newCartItemsClient: SaleItem[]; 
 
     if (existingItem) {
       if (existingItem.quantity < productInCatalog.stock) {
@@ -312,20 +302,19 @@ export default function POSPage() {
         productName: productInCatalog.name,
         quantity: 1,
         unitPrice: productInCatalog.price,
-        costPrice: itemCostPrice, // Use validated itemCostPrice
-        totalPrice: productInCatalog.price
+        costPrice: itemCostPrice, 
+        totalPrice: productInCatalog.price,
+        // No category here as it's not part of SalesTicket item schema
       }];
     }
-
-    // Prepare items for API: ensure only fields expected by SaleItemSchema in ticket API are sent
+    
     const cartItemsForAPI = newCartItemsClient.map(item => ({
         productId: item.productId,
         productName: item.productName,
         quantity: item.quantity,
-        unitPrice: item.unitPrice,
-        costPrice: item.costPrice, // costPrice is now required
-        totalPrice: item.totalPrice,
-        // Ensure 'category' or other fields not in SaleItemSchema of ticket API are excluded
+        unitPrice: Number(item.unitPrice) || 0,
+        costPrice: Number(item.costPrice) || 0, 
+        totalPrice: Number(item.totalPrice) || 0,
     }));
 
     updateTicketMutation.mutate({ ticketId: activeTicket.id, data: { cart_items: cartItemsForAPI } });
@@ -358,9 +347,9 @@ export default function POSPage() {
         productId: item.productId,
         productName: item.productName,
         quantity: item.quantity,
-        unitPrice: item.unitPrice,
-        costPrice: item.costPrice,
-        totalPrice: item.totalPrice,
+        unitPrice: Number(item.unitPrice) || 0,
+        costPrice: Number(item.costPrice) || 0,
+        totalPrice: Number(item.totalPrice) || 0,
     }));
     updateTicketMutation.mutate({ ticketId: activeTicket.id, data: { cart_items: cartItemsForAPI } });
   }, [activeTicket, products, toast, updateTicketMutation]);
@@ -372,9 +361,9 @@ export default function POSPage() {
         productId: item.productId,
         productName: item.productName,
         quantity: item.quantity,
-        unitPrice: item.unitPrice,
-        costPrice: item.costPrice,
-        totalPrice: item.totalPrice,
+        unitPrice: Number(item.unitPrice) || 0,
+        costPrice: Number(item.costPrice) || 0,
+        totalPrice: Number(item.totalPrice) || 0,
     }));
     updateTicketMutation.mutate({ ticketId: activeTicket.id, data: { cart_items: cartItemsForAPI } });
   };
@@ -385,9 +374,11 @@ export default function POSPage() {
 
  const handleCreateNewTicket = useCallback((forceCreate: boolean = false) => {
     if (createTicketMutation.isPending && !forceCreate) return;
-    // Fetch current tickets from queryClient to get the latest count for naming
+    
     const currentTickets = queryClient.getQueryData<SalesTicketDB[]>(['salesTickets']) || [];
-    const nextTicketNumber = currentTickets.length + 1;
+    const nextTicketNumber = currentTickets.length > 0 
+        ? Math.max(...currentTickets.map(t => parseInt(t.name.replace('Ticket ', '')) || 0)) + 1
+        : 1;
     const newTicketName = `Ticket ${nextTicketNumber}`;
 
     createTicketMutation.mutate({
@@ -424,9 +415,8 @@ export default function POSPage() {
   const saleApiMutation = useMutation<Sale, Error, Omit<Sale, 'id' | 'date'>>({
     mutationFn: createSaleAPI,
     onSuccess: (data) => {
-      setSaleToPrint(data); // data here is the successfully created Sale object from backend
+      setSaleToPrint(data); 
       setIsPrintConfirmOpen(true);
-      // Toast and ticket closing moved to handleClosePrintDialog
     },
     onError: (error) => {
       toast({
@@ -448,14 +438,13 @@ export default function POSPage() {
           productId: item.productId,
           productName: item.productName,
           quantity: item.quantity,
-          unitPrice: item.unitPrice,
-          costPrice: item.costPrice, // Make sure this is included from the ticket item
-          totalPrice: item.totalPrice,
-          // category: item.category // If needed by Sale schema, but ticket items might not have it.
+          unitPrice: Number(item.unitPrice) || 0,
+          costPrice: Number(item.costPrice) || 0,
+          totalPrice: Number(item.totalPrice) || 0,
       })),
       totalAmount: cartTotal,
       paymentMethod: paymentMethod,
-      cashierId: userRole || 'system', // Adjust as needed
+      cashierId: userRole || 'system', 
     };
     saleApiMutation.mutate(saleData);
   };
@@ -463,13 +452,13 @@ export default function POSPage() {
   const handlePrintTicket = async () => {
     if (!printableTicketRef.current || !saleToPrint) {
         toast({ variant: "destructive", title: "Error de Impresión", description: "No hay datos de venta para imprimir o el elemento de impresión no está listo."});
-        handleClosePrintDialog(); // Ensure dialog closes even if print fails early
+        handleClosePrintDialog(); 
         return;
     }
-    // Ensure content is rendered
+    
     setTimeout(async () => {
         try {
-            const html2pdf = (await import('html2pdf.js')).default;
+            const pdfWorker = (await import('html2pdf.js/dist/html2pdf.worker.js?url')).default; // For Vite/Rollup
             const element = printableTicketRef.current;
             if (!element) {
                 throw new Error("Elemento para imprimir no encontrado en el DOM.");
@@ -478,8 +467,8 @@ export default function POSPage() {
                 margin: 0.1,
                 filename: `recibo_${saleToPrint.id}.pdf`,
                 image: { type: 'jpeg', quality: 0.98 },
-                html2canvas: { scale: 3, logging: false, useCORS: true, width: 300 }, // Set explicit width for html2canvas
-                jsPDF: { unit: 'in', format: [3.15, 8], orientation: 'portrait' } // Approx 80mm width, adjust height as needed
+                html2canvas: { scale: 3, logging: false, useCORS: true, width: 300 },
+                jsPDF: { unit: 'in', format: [3.15, 8], orientation: 'portrait' } 
             };
             html2pdf().from(element).set(options).save();
         } catch (error) {
@@ -488,11 +477,11 @@ export default function POSPage() {
         } finally {
             handleClosePrintDialog();
         }
-    }, 100); // Small delay to help ensure DOM is ready with saleToPrint data
+    }, 100); 
   };
 
   const handleClosePrintDialog = () => {
-    if (saleToPrint) { // Only show toast if a sale was actually processed
+    if (saleToPrint) { 
         toast({
             title: "Venta Procesada Exitosamente",
             description: `Venta ID: ${saleToPrint.id} completada. Total: $${saleToPrint.totalAmount.toFixed(2)}.`,
@@ -502,7 +491,7 @@ export default function POSPage() {
     queryClient.invalidateQueries({ queryKey: ['sales'] });
     queryClient.invalidateQueries({ queryKey: ['todaysSales'] });
 
-    if (activeTicket && saleToPrint) { // Only delete if a sale was made
+    if (activeTicket && saleToPrint) { 
       deleteTicketMutation.mutate(activeTicket.id);
     }
     setIsPrintConfirmOpen(false);
@@ -539,7 +528,7 @@ export default function POSPage() {
     <AppLayout>
       <Card className="mb-4 shadow-md">
         <CardHeader className="p-3">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-2">
             <CardTitle className="text-lg flex items-center"><Ticket className="mr-2 h-5 w-5 text-primary"/>Tickets de Venta Activos</CardTitle>
             <Button size="sm" onClick={() => handleCreateNewTicket()} disabled={isProcessingAnyTicketAction || isProcessingSale}>
               <PlusSquare className="mr-2 h-4 w-4" /> Nuevo Ticket
@@ -555,7 +544,7 @@ export default function POSPage() {
                   className={cn(
                     "flex items-center justify-between rounded-md group text-sm min-h-[2.5rem] border transition-all",
                     ticket.id === activeTicketId
-                      ? "bg-primary text-primary-foreground px-3 py-2 shadow-md"
+                      ? "bg-primary text-primary-foreground px-3 py-2 shadow-md" 
                       : "bg-card hover:bg-muted text-card-foreground px-[calc(0.75rem-1px)] py-[calc(0.5rem-1px)] hover:shadow-sm"
                   )}
                 >
@@ -614,32 +603,32 @@ export default function POSPage() {
       </Card>
 
       {activeTicket ? (
-        <div className="flex flex-col md:flex-row gap-6 h-[calc(100vh-4rem-3rem-10rem)]">
+        <div className="flex flex-col md:flex-row gap-4 sm:gap-6 h-[calc(100vh-4rem-3rem-10rem)]"> {/* Adjusted gap */}
           <Card className="w-full md:w-2/5 flex flex-col shadow-lg">
-            <CardHeader>
-              <CardTitle>Búsqueda de Producto</CardTitle>
-              <div className="relative">
+            <CardHeader className="p-4 sm:p-6"> {/* Adjusted padding */}
+              <CardTitle className="text-base sm:text-lg">Búsqueda de Producto</CardTitle> {/* Adjusted font size */}
+              <div className="relative mt-2">
                 <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
                   type="text"
-                  placeholder="Buscar por nombre, código, referencia, código de barras..."
+                  placeholder="Buscar por nombre, código, referencia..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-8 py-3 text-base"
+                  className="pl-8 py-2 text-sm sm:text-base" /* Adjusted padding and font */
                   disabled={isLoadingProducts || isProcessingAnyTicketAction || isProcessingSale}
                 />
               </div>
             </CardHeader>
-            <CardContent className="flex-grow overflow-hidden">
-              <ScrollArea className="h-full pr-3">
+            <CardContent className="flex-grow overflow-hidden p-2 sm:p-3"> {/* Adjusted padding */}
+              <ScrollArea className="h-full pr-2 sm:pr-3"> {/* Adjusted padding */}
                 {isLoadingProducts && (
                   <div className="flex justify-center items-center h-full">
                     <Loader2 className="h-8 w-8 animate-spin text-primary" />
-                    <p className="ml-2 text-muted-foreground">Cargando productos...</p>
+                    <p className="ml-2 text-muted-foreground text-sm">Cargando productos...</p>
                   </div>
                 )}
                 {isProductsError && (
-                  <div className="text-destructive p-4 border border-destructive rounded-md">
+                  <div className="text-destructive p-3 border border-destructive rounded-md text-sm">
                     <AlertTriangle className="mr-2 h-5 w-5 inline-block" />
                     Error al cargar productos: {productsError?.message}
                   </div>
@@ -647,34 +636,34 @@ export default function POSPage() {
                 {!isLoadingProducts && !isProductsError && searchResults.length > 0 && (
                   <ul className="space-y-2">
                     {searchResults.map(product => (
-                      <li key={product.id} className="flex items-center justify-between p-3 rounded-md border bg-card hover:bg-muted transition-colors">
-                        <div className="flex items-center gap-3">
+                      <li key={product.id} className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-2 sm:p-3 rounded-md border bg-card hover:bg-muted transition-colors">
+                        <div className="flex items-center gap-2 sm:gap-3 flex-grow mb-2 sm:mb-0">
                           <Image src={product.imageUrl || `https://placehold.co/40x40.png?text=${product.name.substring(0,2)}`} alt={product.name} width={40} height={40} className="rounded-sm object-cover" data-ai-hint={product.dataAiHint || "motorcycle part"}/>
-                          <div>
-                            <p className="font-medium text-sm">{product.name}</p>
-                            <p className="text-xs text-muted-foreground">Ref: {product.reference} | Código: {product.code} | Stock: {product.stock}</p>
+                          <div className="flex-grow">
+                            <p className="font-medium text-xs sm:text-sm line-clamp-1">{product.name}</p>
+                            <p className="text-xs text-muted-foreground">Stock: {product.stock}</p>
                           </div>
                         </div>
-                        <Button size="sm" onClick={() => addToCart(product)} disabled={product.stock === 0 || isProcessingAnyTicketAction || isProcessingSale}>
-                          <Plus className="h-4 w-4 mr-1" /> Añadir
+                        <Button size="sm" onClick={() => addToCart(product)} disabled={product.stock === 0 || isProcessingAnyTicketAction || isProcessingSale} className="w-full sm:w-auto text-xs sm:text-sm">
+                          <Plus className="h-3 w-3 sm:h-4 sm:w-4 mr-1" /> Añadir
                         </Button>
                       </li>
                     ))}
                   </ul>
                 )}
                 {!isLoadingProducts && !isProductsError && searchTerm && searchResults.length === 0 && (
-                  <p className="text-center text-muted-foreground py-4">No se encontraron productos para "{searchTerm}".</p>
+                  <p className="text-center text-muted-foreground py-4 text-sm">No se encontraron productos para "{searchTerm}".</p>
                 )}
                 {!isLoadingProducts && !isProductsError && !searchTerm && (
-                  <p className="text-center text-muted-foreground py-4">Empieza a escribir para buscar productos.</p>
+                  <p className="text-center text-muted-foreground py-4 text-sm">Empieza a escribir para buscar productos.</p>
                 )}
               </ScrollArea>
             </CardContent>
           </Card>
 
           <Card className="w-full md:w-3/5 flex flex-col shadow-lg">
-            <CardHeader>
-              <CardTitle className="flex items-center justify-between">
+            <CardHeader className="p-4 sm:p-6"> {/* Adjusted padding */}
+              <CardTitle className="flex items-center justify-between text-base sm:text-lg"> {/* Adjusted font size */}
                 <span>Venta Actual: {activeTicket.name}
                   <Badge
                     variant={activeTicketId === activeTicket.id ? 'outline' : getTicketBadgeVariant(activeTicket.status)}
@@ -687,75 +676,75 @@ export default function POSPage() {
                     {activeTicket.status}
                   </Badge>
                 </span>
-                <ShoppingCart className="h-6 w-6 text-primary" />
+                <ShoppingCart className="h-5 w-5 sm:h-6 sm:w-6 text-primary" />
               </CardTitle>
             </CardHeader>
-            <CardContent className="flex-grow overflow-hidden">
-              <ScrollArea className="h-full pr-3">
+            <CardContent className="flex-grow overflow-hidden p-0 sm:p-3"> {/* Adjusted padding */}
+              <ScrollArea className="h-full pr-0 sm:pr-3"> {/* Adjusted padding */}
                 {activeTicket.cart_items.length > 0 ? (
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead>Producto</TableHead>
-                        <TableHead className="w-[120px] text-center">Cantidad</TableHead>
-                        <TableHead className="text-right">Precio</TableHead>
-                        <TableHead className="text-right">Total</TableHead>
-                        <TableHead className="w-[50px]"></TableHead>
+                        <TableHead className="text-xs sm:text-sm">Producto</TableHead>
+                        <TableHead className="w-[100px] sm:w-[120px] text-center text-xs sm:text-sm">Cantidad</TableHead>
+                        <TableHead className="text-right text-xs sm:text-sm">Precio</TableHead>
+                        <TableHead className="text-right text-xs sm:text-sm">Total</TableHead>
+                        <TableHead className="w-[40px] sm:w-[50px]"></TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {activeTicket.cart_items.map(item => (
                         <TableRow key={item.productId}>
-                          <TableCell className="font-medium text-sm">{item.productName}</TableCell>
+                          <TableCell className="font-medium text-xs sm:text-sm line-clamp-1">{item.productName}</TableCell>
                           <TableCell className="text-center">
                             <div className="flex items-center justify-center gap-1">
-                              <Button variant="outline" size="icon" className="h-7 w-7" onClick={() => updateQuantity(item.productId, item.quantity - 1)} disabled={isProcessingAnyTicketAction || isProcessingSale}><Minus className="h-3 w-3"/></Button>
+                              <Button variant="outline" size="icon" className="h-6 w-6 sm:h-7 sm:w-7" onClick={() => updateQuantity(item.productId, item.quantity - 1)} disabled={isProcessingAnyTicketAction || isProcessingSale}><Minus className="h-3 w-3"/></Button>
                               <Input type="number" value={item.quantity}
                                 onChange={(e) => {
                                   const val = parseInt(e.target.value);
                                   if (!isNaN(val)) updateQuantity(item.productId, val);
                                 }}
-                                className="h-7 w-12 text-center px-1"
+                                className="h-6 w-10 sm:h-7 sm:w-12 text-center px-1 text-xs sm:text-sm"
                                 disabled={isProcessingAnyTicketAction || isProcessingSale}/>
-                              <Button variant="outline" size="icon" className="h-7 w-7" onClick={() => updateQuantity(item.productId, item.quantity + 1)} disabled={isProcessingAnyTicketAction || isProcessingSale}><Plus className="h-3 w-3"/></Button>
+                              <Button variant="outline" size="icon" className="h-6 w-6 sm:h-7 sm:w-7" onClick={() => updateQuantity(item.productId, item.quantity + 1)} disabled={isProcessingAnyTicketAction || isProcessingSale}><Plus className="h-3 w-3"/></Button>
                             </div>
                           </TableCell>
-                          <TableCell className="text-right text-sm">${Number(item.unitPrice).toFixed(2)}</TableCell>
-                          <TableCell className="text-right font-semibold text-sm">${Number(item.totalPrice).toFixed(2)}</TableCell>
+                          <TableCell className="text-right text-xs sm:text-sm">${Number(item.unitPrice).toFixed(2)}</TableCell>
+                          <TableCell className="text-right font-semibold text-xs sm:text-sm">${Number(item.totalPrice).toFixed(2)}</TableCell>
                           <TableCell>
-                            <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive" onClick={() => removeFromCart(item.productId)} disabled={isProcessingAnyTicketAction || isProcessingSale}><X className="h-4 w-4"/></Button>
+                            <Button variant="ghost" size="icon" className="h-6 w-6 sm:h-7 sm:w-7 text-destructive hover:text-destructive" onClick={() => removeFromCart(item.productId)} disabled={isProcessingAnyTicketAction || isProcessingSale}><X className="h-3 w-3 sm:h-4 sm:w-4"/></Button>
                           </TableCell>
                         </TableRow>
                       ))}
                     </TableBody>
                   </Table>
                 ) : (
-                  <p className="text-center text-muted-foreground py-10">Carrito vacío. Añade productos desde la izquierda.</p>
+                  <p className="text-center text-muted-foreground py-10 text-sm">Carrito vacío. Añade productos desde la izquierda.</p>
                 )}
               </ScrollArea>
             </CardContent>
             <Separator />
-            <CardFooter className="flex flex-col gap-4 pt-6">
-              <div className="flex justify-between items-center w-full text-xl font-bold">
+            <CardFooter className="flex flex-col gap-3 sm:gap-4 pt-4 sm:pt-6 p-3 sm:p-6"> {/* Adjusted padding and gap */}
+              <div className="flex justify-between items-center w-full text-lg sm:text-xl font-bold">
                 <span>Total:</span>
                 <span>${cartTotal.toFixed(2)}</span>
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 w-full">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-3 w-full">
                  <Button
                     size="lg"
                     variant="outline"
-                    className="text-base py-6"
+                    className="text-xs sm:text-base py-3 sm:py-6"
                     onClick={() => handleUpdateTicketStatus(activeTicket.id, 'On Hold')}
                     disabled={activeTicket.status === 'On Hold' || activeTicket.cart_items.length === 0 || isProcessingAnyTicketAction || isProcessingSale}
                   >
-                  <Save className="mr-2 h-5 w-5" /> Guardar Ticket
+                  <Save className="mr-2 h-4 w-4 sm:h-5 sm:w-5" /> Guardar Ticket
                 </Button>
-                <Button size="lg" className="bg-green-600 hover:bg-green-700 text-base py-6 col-span-1 sm:col-span-1" onClick={() => handleProcessSale('Cash')}  disabled={activeTicket.cart_items.length === 0 || isProcessingAnyTicketAction || isProcessingSale}>
-                  {isProcessingSale && saleApiMutation.variables?.paymentMethod === 'Cash' ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <DollarSign className="mr-2 h-5 w-5" />}
+                <Button size="lg" className="bg-green-600 hover:bg-green-700 text-xs sm:text-base py-3 sm:py-6 col-span-1 sm:col-span-1" onClick={() => handleProcessSale('Cash')}  disabled={activeTicket.cart_items.length === 0 || isProcessingAnyTicketAction || isProcessingSale}>
+                  {isProcessingSale && saleApiMutation.variables?.paymentMethod === 'Cash' ? <Loader2 className="mr-2 h-4 w-4 sm:h-5 sm:w-5 animate-spin" /> : <DollarSign className="mr-2 h-4 w-4 sm:h-5 sm:w-5" />}
                   {isProcessingSale && saleApiMutation.variables?.paymentMethod === 'Cash' ? 'Procesando...' : 'Efectivo'}
                 </Button>
-                <Button size="lg" className="text-base py-6 col-span-1 sm:col-span-1" onClick={() => handleProcessSale('Card')}  disabled={activeTicket.cart_items.length === 0 || isProcessingAnyTicketAction || isProcessingSale}>
-                  {isProcessingSale && saleApiMutation.variables?.paymentMethod === 'Card' ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <CreditCard className="mr-2 h-5 w-5" />}
+                <Button size="lg" className="text-xs sm:text-base py-3 sm:py-6 col-span-1 sm:col-span-1" onClick={() => handleProcessSale('Card')}  disabled={activeTicket.cart_items.length === 0 || isProcessingAnyTicketAction || isProcessingSale}>
+                  {isProcessingSale && saleApiMutation.variables?.paymentMethod === 'Card' ? <Loader2 className="mr-2 h-4 w-4 sm:h-5 sm:w-5 animate-spin" /> : <CreditCard className="mr-2 h-4 w-4 sm:h-5 sm:w-5" />}
                   {isProcessingSale && saleApiMutation.variables?.paymentMethod === 'Card' ? 'Procesando...' : 'Tarjeta'}
                 </Button>
               </div>
@@ -767,7 +756,7 @@ export default function POSPage() {
           {isLoadingSalesTickets || createTicketMutation.isPending ? (
             <Loader2 className="h-10 w-10 animate-spin text-primary" />
           ) : (
-            <p className="text-xl text-muted-foreground">No hay ticket activo seleccionado. Por favor, cree o seleccione un ticket.</p>
+            <p className="text-lg sm:text-xl text-muted-foreground">No hay ticket activo seleccionado. Por favor, cree o seleccione un ticket.</p>
           )}
         </div>
       )}
