@@ -7,7 +7,7 @@ export interface Product {
   barcode?: string;
   stock: number;
   category: string; // This will be the category NAME fetched via JOIN
-  categoryId?: number; // This is the foreign key, primarily for forms
+  categoryId?: number; // This is the foreign key, primarily for forms and API storage
   brand: string;
   minStock: number;
   maxStock: number;
@@ -15,8 +15,8 @@ export interface Product {
   price: number;
   imageUrl: string;
   dataAiHint?: string;
-  createdAt?: string; 
-  updatedAt?: string; 
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface SaleItem {
@@ -24,9 +24,9 @@ export interface SaleItem {
   productName: string;
   quantity: number;
   unitPrice: number;
-  costPrice: number; 
+  costPrice: number;
   totalPrice: number;
-  category?: string; 
+  category?: string;
 }
 
 export interface Sale {
@@ -58,9 +58,9 @@ export interface Customer {
 
 export interface PurchaseInvoiceItem {
   productId: string;
-  productName: string; 
+  productName: string;
   quantity: number;
-  costPrice: number; 
+  costPrice: number;
   totalCost: number;
   newSellingPrice?: number; // Used during processing
 }
@@ -68,25 +68,25 @@ export interface PurchaseInvoiceItem {
 export interface PurchaseInvoice {
   id: string;
   invoiceNumber: string;
-  invoiceDate: string; 
+  invoiceDate: string;
   supplierName: string;
-  totalAmount: number; 
+  totalAmount: number;
   paymentTerms: 'Credit' | 'Cash';
-  processed: boolean; 
-  items?: PurchaseInvoiceItem[]; 
-  createdAt?: string; 
-  updatedAt?: string; 
+  processed: boolean;
+  items?: PurchaseInvoiceItem[];
+  createdAt?: string;
+  updatedAt?: string;
 }
 
-export type ExpenseCategoryEnum = 
-    | 'Rent' 
-    | 'Utilities' 
-    | 'Supplies' 
-    | 'Salaries' 
-    | 'Marketing' 
-    | 'Maintenance' 
-    | 'Office' 
-    | 'Travel' 
+export type ExpenseCategoryEnum =
+    | 'Rent'
+    | 'Utilities'
+    | 'Supplies'
+    | 'Salaries'
+    | 'Marketing'
+    | 'Maintenance'
+    | 'Office'
+    | 'Travel'
     | 'Taxes'
     | 'Insurance'
     | 'Bank Fees'
@@ -95,20 +95,20 @@ export type ExpenseCategoryEnum =
     | 'Other';
 
 export const expenseCategories: ExpenseCategoryEnum[] = [
-    'Rent', 'Utilities', 'Supplies', 'Salaries', 'Marketing', 'Maintenance', 
+    'Rent', 'Utilities', 'Supplies', 'Salaries', 'Marketing', 'Maintenance',
     'Office', 'Travel', 'Taxes', 'Insurance', 'Bank Fees', 'Shipping', 'Meals & Entertainment', 'Other'
 ];
 
 
 export interface DailyExpense {
-  id: number; 
-  expenseDate: string; 
+  id: number;
+  expenseDate: string;
   description: string;
   category: ExpenseCategoryEnum;
   amount: number;
   notes?: string | null;
-  createdAt: string; 
-  updatedAt: string; 
+  createdAt: string;
+  updatedAt: string;
 }
 
 
@@ -130,3 +130,4 @@ export const mockCustomers: Customer[] = [
 export const mockPurchaseInvoices: PurchaseInvoice[] = [
   // ... existing mock purchase invoices ...
 ];
+
