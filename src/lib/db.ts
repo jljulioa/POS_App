@@ -9,36 +9,35 @@ async function initializePool(): Promise<Pool> {
   const connectionString = process.env.POSTGRES_URL;
 
   console.log("Attempting to initialize PostgreSQL pool.");
-  // Avoid logging the full string with password in production logs if possible,
-  // but for local debugging, seeing part of it can be helpful.
-  console.log("Raw POSTGRES_URL from env (first 20 chars):", connectionString?.substring(0, 20) || "UNDEFINED or EMPTY");
 
   if (!connectionString) {
-    const err = new Error("POSTGRES_URL environment variable is not set or is empty.");
+    const err = new Error("POSTGRES_URL environment variable is not set or is empty. Please check your .env.local file.");
     console.error(err.message);
     poolInitializationError = err;
     throw err;
   }
 
+  // Mask password for logging connection string
+  const maskedConnectionString = connectionString.replace(/:([^:@]*)(?=@)/, ':********');
+  console.log("Using POSTGRES_URL (password masked):", maskedConnectionString);
+
+
   const config: PoolConfig = {
     connectionString: connectionString,
   };
 
-  // Explicitly configure SSL if sslmode=require is detected or implied by cloud providers like Neon/Supabase.
-  // Supabase/Neon connection strings usually include ?sslmode=require or similar.
+  // Explicitly configure SSL for providers like Supabase/Neon
+  // The connection string from Supabase/Neon usually includes ?sslmode=require or similar.
   if (connectionString.includes('sslmode=require') || connectionString.includes('supabase.com') || connectionString.includes('neon.tech')) {
-    console.log("SSL requirement detected or implied. Applying explicit SSL configuration.");
+    console.log("SSL requirement detected or implied. Applying explicit SSL configuration: { rejectUnauthorized: false } for development/diagnostic purposes.");
     config.ssl = {
-      rejectUnauthorized: false, // IMPORTANT: Insecure for production. For debugging SSL issues only.
-                                 // If this fixes it, the issue is SSL cert validation.
-                                 // For production, you'd need to properly configure CA certs or ensure Node's trust store is correct.
+      rejectUnauthorized: false, // IMPORTANT: For development/diagnostics ONLY. Not recommended for production without proper CA setup.
     };
   } else {
-    console.log("No explicit SSL requirement detected in connection string for custom SSL config. Relying on default pg behavior.");
+    console.log("No explicit SSL requirement detected for Supabase/Neon in connection string for custom SSL config. Relying on default pg behavior. If connection fails, ensure your POSTGRES_URL includes ?sslmode=require for these providers.");
   }
 
-
-  console.log("Creating PostgreSQL pool with derived config. Connection string masked. SSL config:", config.ssl ? 'Explicitly set' : 'Default');
+  console.log("Creating PostgreSQL pool with derived config. SSL config:", config.ssl ? 'Explicitly set as above' : 'Default/None');
 
   const newPool = new Pool(config);
 
@@ -49,10 +48,10 @@ async function initializePool(): Promise<Pool> {
     poolInitializationError = null; // Clear any previous init error on success
     return newPool;
   } catch (err) {
-    const connectionError = new Error(`Failed to connect to PostgreSQL database: ${(err as Error).message}`);
-    console.error("Error during pool.connect():", connectionError.message);
+    const connectionError = new Error(`Failed to connect to PostgreSQL database during pool initialization: ${(err as Error).message}`);
+    console.error("Error during newPool.connect():", connectionError.message);
     console.error("Original error stack:", (err as Error).stack);
-    console.error("Review your POSTGRES_URL and network/firewall settings. If using SSL, ensure certificates are trusted or try diagnostic SSL options.");
+    console.error("Please verify your POSTGRES_URL, network/firewall settings, and database server status (e.g., on Supabase/Neon dashboard).");
     poolInitializationError = connectionError;
     try {
       await newPool.end(); // Attempt to clean up the partially initialized pool
@@ -65,19 +64,17 @@ async function initializePool(): Promise<Pool> {
 
 export async function getPool(): Promise<Pool> {
   if (poolInitializationError) {
-    // If a persistent initialization error occurred, throw it to prevent retries.
     console.error("Persistent pool initialization error encountered. Throwing stored error:", poolInitializationError.message);
     throw poolInitializationError;
   }
   if (!pool) {
+    console.log("Pool does not exist or was reset. Attempting to initialize a new pool.");
     try {
       pool = await initializePool();
-      // Attach an error handler for idle clients in the pool
       pool.on('error', (err, client) => {
         console.error('Unexpected error on idle PostgreSQL client. Pool will be reset.', err);
-        // Consider strategies like attempting to re-initialize the pool or marking it as unhealthy.
-        poolInitializationError = err; // Mark that an error occurred
-        pool = null; // Reset pool so it tries to re-initialize on next call (or fails due to poolInitializationError)
+        poolInitializationError = err;
+        pool = null; // Reset pool so it tries to re-initialize on next call or fails due to poolInitializationError
       });
     } catch (err) {
       // initializePool already logs the error and sets poolInitializationError.
@@ -91,20 +88,18 @@ export async function getPool(): Promise<Pool> {
 export async function query(sql: string, params?: any[]) {
   let currentPool: Pool;
   try {
-    currentPool = await getPool(); // getPool is now async
+    currentPool = await getPool();
   } catch (error) {
-    // Error is already logged by getPool/initializePool
-    // console.error("Failed to get database pool for query:", (error as Error).message); // Redundant
     throw new Error(`Failed to acquire database pool: ${(error as Error).message}`);
   }
   
   try {
-    // console.log(`Executing query: ${sql} with params: ${params ? JSON.stringify(params) : '[]'}`); // For debugging SQL
+    // console.log(`Executing query: ${sql} with params: ${params ? JSON.stringify(params) : '[]'}`); // Uncomment for debugging SQL queries
     const results = await currentPool.query(sql, params);
     return results.rows;
   } catch (error) {
-    console.error("Database query error:", (error as Error).message, "\nSQL:", sql, "\nParams:", params);
-    console.error("Original query error stack:", (error as Error).stack);
+    console.error("Database query error:", (error as Error).message, "\nSQL:", sql, "\nParams:", params ? JSON.stringify(params) : "[]");
+    // console.error("Original query error stack:", (error as Error).stack); // Uncomment for more detailed stack trace
     throw new Error(`Database query execution failed: ${(error as Error).message}`);
   }
 }
@@ -118,21 +113,21 @@ export async function closePool() {
       console.error("Error closing database pool:", err);
     } finally {
       pool = null;
-      poolInitializationError = null; // Clear any stored initialization error
+      poolInitializationError = null;
     }
   }
 }
 
-// Optional: A function to be called at application startup if you want to pre-warm the pool
-// or check DB connection early. This can help surface connection issues sooner.
 export async function ensureDbConnected() {
   try {
     console.log("ensureDbConnected: Attempting to get pool...");
     await getPool(); 
     console.log("ensureDbConnected: Database connection health check successful.");
   } catch (error) {
-    // Error is already logged by getPool/initializePool
-    console.error("ensureDbConnected: Initial database connection health check failed.");
-    // Depending on your application's needs, you might want to rethrow or handle this.
+    console.error("ensureDbConnected: Initial database connection health check failed. Error:", (error as Error).message);
   }
 }
+
+// Optional: Call ensureDbConnected at module load if you want to check connection eagerly on server start.
+// Note: This might not be ideal for all Next.js edge/serverless environments.
+// ensureDbConnected();
