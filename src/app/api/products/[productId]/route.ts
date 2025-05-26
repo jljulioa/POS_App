@@ -9,9 +9,9 @@ const ProductUpdateSchema = z.object({
   name: z.string().min(3),
   code: z.string().min(3),
   reference: z.string().min(3),
-  barcode: z.string().optional(),
+  barcode: z.string().optional().or(z.literal('')),
   stock: z.coerce.number().int().min(0),
-  category: z.string().min(2),
+  categoryId: z.coerce.number().int().positive({ message: "Category is required." }), // Changed from category: string
   brand: z.string().min(2),
   minStock: z.coerce.number().int().min(0),
   maxStock: z.coerce.number().int().min(0).optional(),
@@ -21,7 +21,6 @@ const ProductUpdateSchema = z.object({
   dataAiHint: z.string().max(50).optional(),
 });
 
-// Re-use or ensure consistency with the parseProductFromDB in the main products route
 const parseProductFromDB = (dbProduct: any): Product => {
   if (!dbProduct) return null as any;
   const stock = parseInt(dbProduct.stock, 10);
@@ -38,7 +37,8 @@ const parseProductFromDB = (dbProduct: any): Product => {
     reference: dbProduct.reference,
     barcode: dbProduct.barcode,
     stock: !isNaN(stock) ? stock : 0,
-    category: dbProduct.category,
+    category: dbProduct.category_name || dbProduct.category || 'N/A', // Use joined category_name
+    categoryId: dbProduct.category_id ? parseInt(dbProduct.category_id, 10) : undefined,
     brand: dbProduct.brand,
     minStock: !isNaN(minStock) ? minStock : 0,
     maxStock: !isNaN(maxStock) ? maxStock : 0,
@@ -56,7 +56,17 @@ const parseProductFromDB = (dbProduct: any): Product => {
 export async function GET(request: NextRequest, { params }: { params: { productId: string } }) {
   const { productId } = params;
   try {
-    const dbProducts = await query('SELECT id, name, code, reference, barcode, stock, category, brand, minstock, maxstock, cost, price, imageurl, dataaihint, createdat, updatedat FROM Products WHERE id = $1', [productId]);
+    const sql = `
+      SELECT 
+        p.id, p.name, p.code, p.reference, p.barcode, p.stock, 
+        p.category_id, pc.name AS category_name, -- Get category_id and category_name
+        p.brand, p.minstock, p.maxstock, p.cost, p.price, 
+        p.imageurl, p.dataaihint, p.createdat, p.updatedat
+      FROM Products p
+      LEFT JOIN ProductCategories pc ON p.category_id = pc.id
+      WHERE p.id = $1
+    `;
+    const dbProducts = await query(sql, [productId]);
     if (dbProducts.length === 0) {
       return NextResponse.json({ message: 'Product not found' }, { status: 404 });
     }
@@ -80,38 +90,53 @@ export async function PUT(request: NextRequest, { params }: { params: { productI
     }
 
     const {
-        name, code, reference, barcode, stock, category, brand,
+        name, code, reference, barcode, stock, categoryId, brand, // Use categoryId
         minStock, maxStock, cost, price, imageUrl, dataAiHint
     } = validation.data;
 
     const finalImageUrl = imageUrl || `https://placehold.co/100x100.png?text=${name.substring(0,3)}`;
     const finalDataAiHint = dataAiHint || (name.split(' ').slice(0,2).join(' ') || "product");
 
-    // 'updatedat' will be handled by the database trigger.
-    const sql = `
+    const sqlUpdate = `
       UPDATE products
-      SET name = $1, code = $2, reference = $3, barcode = $4, stock = $5, category = $6, brand = $7,
+      SET name = $1, code = $2, reference = $3, barcode = $4, stock = $5, category_id = $6, brand = $7,
           minstock = $8, maxstock = $9, cost = $10, price = $11, imageurl = $12, dataaihint = $13
       WHERE id = $14
       RETURNING *
     `;
     const queryParams = [
-        name, code, reference, barcode ?? null, stock, category, brand,
+        name, code, reference, barcode ?? null, stock, categoryId, brand, // Use categoryId
         minStock, maxStock ?? null, cost, price,
         finalImageUrl, finalDataAiHint, productId
     ];
 
-    const result = await query(sql, queryParams);
+    const result = await query(sqlUpdate, queryParams);
     if (result.length === 0) {
         return NextResponse.json({ message: 'Product not found or update failed' }, { status: 404 });
     }
-    const updatedProduct: Product = parseProductFromDB(result[0]);
+    
+    // Fetch the updated product with its category name
+    const updatedProductWithCategorySql = `
+      SELECT 
+        p.id, p.name, p.code, p.reference, p.barcode, p.stock, 
+        p.category_id, pc.name AS category_name,
+        p.brand, p.minstock, p.maxstock, p.cost, p.price, 
+        p.imageurl, p.dataaihint, p.createdat, p.updatedat
+      FROM Products p
+      LEFT JOIN ProductCategories pc ON p.category_id = pc.id
+      WHERE p.id = $1
+    `;
+    const updatedProductData = await query(updatedProductWithCategorySql, [result[0].id]);
+    if (updatedProductData.length === 0) {
+      throw new Error("Failed to fetch updated product with category details.");
+    }
+    const updatedProduct: Product = parseProductFromDB(updatedProductData[0]);
 
     return NextResponse.json(updatedProduct, { status: 200 });
 
   } catch (error) {
     console.error(`Failed to update product ${productId}:`, error);
-    if (error instanceof Error && (error as any).code === '23505') { // PostgreSQL unique_violation for 'code'
+    if (error instanceof Error && (error as any).code === '23505') { 
         return NextResponse.json({ message: 'Failed to update product: Product code might already exist for another product.', error: (error as Error).message }, { status: 409 });
     }
     return NextResponse.json({ message: 'Failed to update product', error: (error as Error).message }, { status: 500 });

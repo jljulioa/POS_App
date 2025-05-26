@@ -25,7 +25,7 @@ const ProductFormSchema = z.object({
   reference: z.string().min(3, { message: "Reference must be at least 3 characters." }),
   barcode: z.string().optional().or(z.literal('')),
   stock: z.coerce.number().int().min(0, { message: "Stock must be a non-negative integer." }),
-  category: z.string().min(1, { message: "Category is required." }), // Will be category name
+  categoryId: z.coerce.number().int().positive({ message: "Category is required." }), // Changed from category: string
   brand: z.string().min(2, { message: "Brand is required." }),
   minStock: z.coerce.number().int().min(0, { message: "Min. stock must be a non-negative integer." }),
   maxStock: z.coerce.number().int().min(0, { message: "Max. stock must be a non-negative integer." }).optional(),
@@ -38,7 +38,7 @@ const ProductFormSchema = z.object({
 type ProductFormValues = z.infer<typeof ProductFormSchema>;
 
 // API mutation function
-const addProduct = async (newProduct: ProductFormValues): Promise<Product> => {
+const addProductAPI = async (newProduct: ProductFormValues): Promise<Product> => {
   const response = await fetch('/api/products', {
     method: 'POST',
     headers: {
@@ -81,7 +81,7 @@ export default function AddProductPage() {
       reference: '',
       barcode: '',
       stock: 0,
-      category: '', // Initial value for category
+      categoryId: undefined, // Initial value for categoryId
       brand: '',
       minStock: 0,
       maxStock: undefined,
@@ -93,7 +93,7 @@ export default function AddProductPage() {
   });
 
   const mutation = useMutation<Product, Error, ProductFormValues>({
-    mutationFn: addProduct,
+    mutationFn: addProductAPI,
     onSuccess: (data) => {
       toast({
         title: "Product Added Successfully",
@@ -190,11 +190,15 @@ export default function AddProductPage() {
               />
               <FormField
                 control={form.control}
-                name="category"
+                name="categoryId"
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Category *</FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value} disabled={isLoadingCategories}>
+                    <Select 
+                      onValueChange={(value) => field.onChange(Number(value))} // Convert string value from Select to number
+                      value={field.value?.toString()} // Convert number to string for Select value
+                      disabled={isLoadingCategories}
+                    >
                       <FormControl>
                         <SelectTrigger>
                           <SelectValue placeholder={isLoadingCategories ? "Loading categories..." : "Select a category"} />
@@ -207,7 +211,7 @@ export default function AddProductPage() {
                             <SelectItem value="no-categories" disabled>No categories found. Add one first.</SelectItem>
                         ) : (
                           categories.map((category) => (
-                            <SelectItem key={category.id} value={category.name}>
+                            <SelectItem key={category.id} value={category.id.toString()}> {/* Use category.id as value */}
                               {category.name}
                             </SelectItem>
                           ))

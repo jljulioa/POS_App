@@ -26,7 +26,7 @@ const ProductFormSchema = z.object({
   reference: z.string().min(3, { message: "Reference must be at least 3 characters." }),
   barcode: z.string().optional().or(z.literal('')),
   stock: z.coerce.number().int().min(0, { message: "Stock must be a non-negative integer." }),
-  category: z.string().min(1, { message: "Category is required." }), // Will be category name
+  categoryId: z.coerce.number().int().positive({ message: "Category is required." }), // Changed from category: string
   brand: z.string().min(2, { message: "Brand is required." }),
   minStock: z.coerce.number().int().min(0, { message: "Min. stock must be a non-negative integer." }),
   maxStock: z.coerce.number().int().min(0, { message: "Max. stock must be a non-negative integer." }).optional(),
@@ -49,7 +49,7 @@ const fetchProduct = async (productId: string): Promise<Product> => {
 };
 
 // API mutation function for updating a product
-const updateProduct = async ({ productId, data }: { productId: string; data: ProductFormValues }): Promise<Product> => {
+const updateProductAPI = async ({ productId, data }: { productId: string; data: ProductFormValues }): Promise<Product> => {
   const response = await fetch(`/api/products/${productId}`, {
     method: 'PUT',
     headers: {
@@ -99,7 +99,7 @@ export default function EditProductPage() {
       reference: '',
       barcode: '',
       stock: 0,
-      category: '',
+      categoryId: undefined, // Default for categoryId
       brand: '',
       minStock: 0,
       maxStock: undefined,
@@ -118,7 +118,7 @@ export default function EditProductPage() {
         reference: product.reference,
         barcode: product.barcode || '',
         stock: product.stock,
-        category: product.category || '', // Ensure category has a default string value
+        categoryId: product.categoryId, // Use product.categoryId
         brand: product.brand,
         minStock: product.minStock,
         maxStock: product.maxStock || undefined,
@@ -131,7 +131,7 @@ export default function EditProductPage() {
   }, [product, form]);
 
   const mutation = useMutation<Product, Error, ProductFormValues>({
-    mutationFn: (data) => updateProduct({ productId, data }),
+    mutationFn: (data) => updateProductAPI({ productId, data }),
     onSuccess: (data) => {
       toast({
         title: "Product Updated Successfully",
@@ -266,11 +266,15 @@ export default function EditProductPage() {
               />
               <FormField
                 control={form.control}
-                name="category"
+                name="categoryId"
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Category *</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value} disabled={isLoadingCategories}>
+                    <Select 
+                      onValueChange={(value) => field.onChange(Number(value))} 
+                      value={field.value?.toString()}
+                      disabled={isLoadingCategories}
+                    >
                       <FormControl>
                         <SelectTrigger>
                           <SelectValue placeholder={isLoadingCategories ? "Loading categories..." : "Select a category"} />
@@ -283,7 +287,7 @@ export default function EditProductPage() {
                             <SelectItem value="no-categories" disabled>No categories found. Add one first.</SelectItem>
                         ) : (
                           categories.map((category) => (
-                            <SelectItem key={category.id} value={category.name}>
+                            <SelectItem key={category.id} value={category.id.toString()}>
                               {category.name}
                             </SelectItem>
                           ))

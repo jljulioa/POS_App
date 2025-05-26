@@ -25,8 +25,10 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogTrigger, // Added AlertDialogTrigger here
+  AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import type { ProductCategory } from '@/app/api/categories/route';
+
 
 // API fetch function
 const fetchProducts = async (): Promise<Product[]> => {
@@ -39,7 +41,7 @@ const fetchProducts = async (): Promise<Product[]> => {
 };
 
 // API delete function
-const deleteProduct = async (productId: string): Promise<{ message: string }> => {
+const deleteProductAPI = async (productId: string): Promise<{ message: string }> => {
   const res = await fetch(`/api/products/${productId}`, {
     method: 'DELETE',
   });
@@ -49,6 +51,16 @@ const deleteProduct = async (productId: string): Promise<{ message: string }> =>
   }
   return res.json();
 };
+
+// API fetch function for categories (for filter dropdown)
+const fetchCategories = async (): Promise<ProductCategory[]> => {
+  const res = await fetch('/api/categories');
+  if (!res.ok) {
+    throw new Error('Failed to fetch categories for filter');
+  }
+  return res.json();
+};
+
 
 interface ProductRowActionsProps {
   product: Product;
@@ -112,26 +124,31 @@ export default function InventoryPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const searchParams = useSearchParams();
   const router = useRouter();
-  const urlCategoryFilter = searchParams.get('category');
+  const urlCategoryFilter = searchParams.get('category'); // This will be category name
   
   const [filterBrand, setFilterBrand] = useState('all');
-  const [filterCategory, setFilterCategory] = useState(urlCategoryFilter || 'all');
+  const [filterCategoryName, setFilterCategoryName] = useState(urlCategoryFilter || 'all'); // Store category name
 
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  const { data: products = [], isLoading, error, isError } = useQuery<Product[], Error>({
+  const { data: products = [], isLoading: isLoadingProducts, error: productsError, isError: isProductsError } = useQuery<Product[], Error>({
     queryKey: ['products'],
     queryFn: fetchProducts,
   });
 
+  const { data: categories = [], isLoading: isLoadingCategories } = useQuery<ProductCategory[], Error>({
+    queryKey: ['categories'],
+    queryFn: fetchCategories,
+  });
+
   useEffect(() => {
-    const newUrlCategory = searchParams.get('category');
-    setFilterCategory(newUrlCategory || 'all');
+    const newUrlCategoryName = searchParams.get('category');
+    setFilterCategoryName(newUrlCategoryName || 'all');
   }, [searchParams]);
 
   const deleteMutation = useMutation< { message: string }, Error, string>({
-    mutationFn: deleteProduct,
+    mutationFn: deleteProductAPI,
     onSuccess: (data, productId) => { 
       toast({
         title: "Product Deleted",
@@ -149,7 +166,13 @@ export default function InventoryPage() {
   });
 
   const uniqueBrands = useMemo(() => ['all', ...new Set(products.map(p => p.brand).filter(Boolean).sort((a, b) => a.localeCompare(b)))], [products]);
-  const uniqueCategories = useMemo(() => ['all', ...new Set(products.map(p => p.category).filter(Boolean).sort((a, b) => a.localeCompare(b)))], [products]);
+  
+  // For category filter dropdown, use fetched categories
+  const categoryOptionsForFilter = useMemo(() => {
+    if (isLoadingCategories || !categories) return [{ id: 'all', name: 'All Categories' }];
+    return [{ id: 'all', name: 'All Categories' }, ...categories.map(cat => ({ id: cat.name, name: cat.name })).sort((a,b) => a.name.localeCompare(b.name))];
+  }, [categories, isLoadingCategories]);
+
 
   const filteredProducts = useMemo(() => {
     return products.filter(product => {
@@ -159,12 +182,12 @@ export default function InventoryPage() {
                             product.reference.toLowerCase().includes(searchTermLower) ||
                             (product.barcode && product.barcode.toLowerCase().includes(searchTermLower));
       const matchesBrand = filterBrand === 'all' || product.brand === filterBrand;
-      const matchesCategory = filterCategory === 'all' || product.category === filterCategory;
+      const matchesCategory = filterCategoryName === 'all' || product.category === filterCategoryName; // Filter by category name
       return matchesSearch && matchesBrand && matchesCategory;
     });
-  }, [searchTerm, filterBrand, filterCategory, products]);
+  }, [searchTerm, filterBrand, filterCategoryName, products]);
 
-  if (isLoading) {
+  if (isLoadingProducts || isLoadingCategories) {
     return (
       <AppLayout>
         <PageHeader title="Inventory Management" description="Loading product stock..." />
@@ -175,7 +198,7 @@ export default function InventoryPage() {
     );
   }
 
-  if (isError) {
+  if (isProductsError) {
     return (
       <AppLayout>
         <PageHeader title="Inventory Management" description="Error loading products." />
@@ -184,7 +207,7 @@ export default function InventoryPage() {
             <AlertTriangle className="mr-2 h-6 w-6" />
             <h3 className="font-semibold">Failed to Load Products</h3>
           </div>
-          <p>{error?.message || "An unknown error occurred."}</p>
+          <p>{productsError?.message || "An unknown error occurred."}</p>
         </div>
       </AppLayout>
     );
@@ -220,22 +243,26 @@ export default function InventoryPage() {
             ))}
           </SelectContent>
         </Select>
-        <Select value={filterCategory} onValueChange={(value) => {
-          setFilterCategory(value);
-          const newQuery = new URLSearchParams(searchParams.toString());
-          if (value === 'all') {
-            newQuery.delete('category');
-          } else {
-            newQuery.set('category', value);
-          }
-          router.push(`/inventory?${newQuery.toString()}`, { scroll: false });
-        }}>
+        <Select 
+          value={filterCategoryName} 
+          onValueChange={(value) => {
+            setFilterCategoryName(value);
+            const newQuery = new URLSearchParams(searchParams.toString());
+            if (value === 'all') {
+              newQuery.delete('category');
+            } else {
+              newQuery.set('category', value); // URL param remains category name
+            }
+            router.push(`/inventory?${newQuery.toString()}`, { scroll: false });
+          }}
+          disabled={isLoadingCategories}
+        >
           <SelectTrigger className="w-full sm:w-[180px]">
-            <SelectValue placeholder="Filter by category" />
+            <SelectValue placeholder={isLoadingCategories ? "Loading..." : "Filter by category"} />
           </SelectTrigger>
           <SelectContent>
-            {uniqueCategories.map(category => (
-              <SelectItem key={category} value={category}>{category === 'all' ? 'All Categories' : category}</SelectItem>
+            {categoryOptionsForFilter.map(cat => (
+              <SelectItem key={cat.id.toString()} value={cat.name}>{cat.name}</SelectItem>
             ))}
           </SelectContent>
         </Select>
@@ -269,7 +296,7 @@ export default function InventoryPage() {
                 <TableCell className="hidden md:table-cell">{product.code}</TableCell>
                 <TableCell className="hidden lg:table-cell">{product.reference}</TableCell>
                 <TableCell className="hidden md:table-cell">{product.brand}</TableCell>
-                <TableCell>{product.category}</TableCell>
+                <TableCell>{product.category || 'N/A'}</TableCell>
                 <TableCell className="text-right">{product.stock}</TableCell>
                 <TableCell className="text-right hidden sm:table-cell">${Number(product.cost).toFixed(2)}</TableCell>
                 <TableCell className="text-right">${Number(product.price).toFixed(2)}</TableCell>
