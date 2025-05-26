@@ -24,13 +24,15 @@ const ProductCreateSchema = z.object({
 
 // Helper function to parse product fields from DB strings to numbers, now including category name from join
 const parseProductFromDB = (dbProduct: any): Product => {
-  // Ensure that numeric fields are parsed correctly and default to 0 if NaN
+  // Ensure that numeric fields are parsed correctly and default to 0 if NaN or missing
   const stock = parseInt(String(dbProduct.stock), 10);
-  const minStock = parseInt(String(dbProduct.minstock), 10); // DB uses minstock
-  const maxStockValue = dbProduct.maxstock !== null && dbProduct.maxstock !== undefined ? String(dbProduct.maxstock) : '0'; // DB uses maxstock
+  const minStock = parseInt(String(dbProduct.minstock), 10);
+  const maxStockValue = dbProduct.maxstock !== null && dbProduct.maxstock !== undefined ? String(dbProduct.maxstock) : '0';
   const maxStock = parseInt(maxStockValue, 10);
   const cost = parseFloat(String(dbProduct.cost));
   const price = parseFloat(String(dbProduct.price));
+  const categoryId = dbProduct.category_id !== null && dbProduct.category_id !== undefined ? parseInt(String(dbProduct.category_id), 10) : undefined;
+
 
   return {
     id: String(dbProduct.id),
@@ -40,14 +42,14 @@ const parseProductFromDB = (dbProduct: any): Product => {
     barcode: dbProduct.barcode,
     stock: !isNaN(stock) ? stock : 0,
     category: dbProduct.category_name || 'N/A', // Use joined category_name from ProductCategories
-    categoryId: dbProduct.category_id ? parseInt(dbProduct.category_id, 10) : undefined,
+    categoryId: categoryId,
     brand: dbProduct.brand,
     minStock: !isNaN(minStock) ? minStock : 0,
     maxStock: !isNaN(maxStock) ? maxStock : 0,
     cost: !isNaN(cost) ? cost : 0,
     price: !isNaN(price) ? price : 0,
-    imageUrl: dbProduct.imageurl, // DB uses imageurl
-    dataAiHint: dbProduct.dataaihint, // DB uses dataaihint
+    imageUrl: dbProduct.imageurl,
+    dataAiHint: dbProduct.dataaihint,
     createdAt: dbProduct.createdat ? new Date(dbProduct.createdat).toISOString() : undefined,
     updatedAt: dbProduct.updatedat ? new Date(dbProduct.updatedat).toISOString() : undefined,
   };
@@ -91,7 +93,7 @@ export async function POST(request: NextRequest) {
         minStock, maxStock, cost, price, imageUrl, dataAiHint
     } = validation.data;
 
-    const finalImageUrl = imageUrl || `https://placehold.co/100x100.png?text=${name.substring(0,3)}`; // Corrected: Removed leading \
+    const finalImageUrl = imageUrl || `https://placehold.co/100x100.png?text=${name.substring(0,3)}`;
     const finalDataAiHint = dataAiHint || (name.split(' ').slice(0,2).join(' ') || "product");
 
     // The 'id' column is TEXT PRIMARY KEY, so we generate it here (unless changed to SERIAL)
@@ -100,7 +102,7 @@ export async function POST(request: NextRequest) {
     const sqlInsert = `
       INSERT INTO products (id, name, code, reference, barcode, stock, category_id, brand, minstock, maxstock, cost, price, imageurl, dataaihint)
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
-      RETURNING id, name, code, reference, barcode, stock, category_id, brand, minstock, maxstock, cost, price, imageurl, dataaihint, createdat, updatedat
+      RETURNING *
     `;
     // createdat and updatedat will use database defaults
     const params = [
@@ -148,4 +150,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ message: 'Failed to create product', error: (error as Error).message }, { status: 500 });
   }
 }
+    
+
     
