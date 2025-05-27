@@ -8,7 +8,7 @@ import { format, isValid, parseISO } from 'date-fns';
 
 // Zod schema for ExpenseCategoryEnum
 const ExpenseCategoryEnumSchema = z.enum([
-    'Rent', 'Utilities', 'Supplies', 'Salaries', 'Marketing', 'Maintenance', 
+    'Rent', 'Utilities', 'Supplies', 'Salaries', 'Marketing', 'Maintenance',
     'Office', 'Travel', 'Taxes', 'Insurance', 'Bank Fees', 'Shipping', 'Meals & Entertainment', 'Other'
 ]);
 
@@ -36,25 +36,42 @@ const parseExpenseFromDB = (dbExpense: any): DailyExpense => {
   };
 };
 
-// GET handler to fetch expenses (e.g., for today or a date range)
+// GET handler to fetch expenses
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
-  const dateParam = searchParams.get('date'); // Expects 'today' or 'YYYY-MM-DD'
-  // TODO: Add startDate and endDate for range filtering later
+  const dateParam = searchParams.get('date');
+  const startDateParam = searchParams.get('startDate');
+  const endDateParam = searchParams.get('endDate');
 
   let sql = 'SELECT id, expenseDate, description, category, amount, notes, createdAt, updatedAt FROM DailyExpenses';
   const queryParams: any[] = [];
+  const conditions: string[] = [];
+  let paramIndex = 1;
 
-  if (dateParam === 'today') {
-    sql += ' WHERE expenseDate = CURRENT_DATE ORDER BY createdAt DESC';
-  } else if (dateParam && isValid(parseISO(dateParam))) {
-    sql += ' WHERE expenseDate = $1 ORDER BY createdAt DESC';
-    queryParams.push(dateParam);
-  } else {
-    // Default: Fetch today's expenses if no valid date or 'today' is specified
-    sql += ' WHERE expenseDate = CURRENT_DATE ORDER BY createdAt DESC';
+  if (startDateParam && endDateParam) {
+    const startDate = parseISO(startDateParam);
+    const endDate = parseISO(endDateParam);
+    if (isValid(startDate) && isValid(endDate)) {
+      conditions.push(`expenseDate >= $${paramIndex++}`);
+      queryParams.push(format(startDate, 'yyyy-MM-dd'));
+      conditions.push(`expenseDate <= $${paramIndex++}`);
+      queryParams.push(format(endDate, 'yyyy-MM-dd'));
+    }
+  } else if (dateParam) {
+    if (dateParam === 'today') {
+      conditions.push(`expenseDate = CURRENT_DATE`);
+    } else if (isValid(parseISO(dateParam))) {
+      conditions.push(`expenseDate = $${paramIndex++}`);
+      queryParams.push(dateParam);
+    }
   }
-  
+  // If no date parameters are provided, it fetches all expenses.
+
+  if (conditions.length > 0) {
+    sql += ` WHERE ${conditions.join(' AND ')}`;
+  }
+  sql += ' ORDER BY expenseDate DESC, createdAt DESC';
+
   try {
     const dbExpenses = await query(sql, queryParams);
     const expenses: DailyExpense[] = dbExpenses.map(parseExpenseFromDB);
@@ -83,7 +100,7 @@ export async function POST(request: NextRequest) {
       RETURNING *
     `;
     const params = [expenseDate, description, category, amount, notes || null];
-    
+
     const result = await query(sqlInsert, params);
     const newExpense: DailyExpense = parseExpenseFromDB(result[0]);
 
@@ -91,7 +108,6 @@ export async function POST(request: NextRequest) {
 
   } catch (error) {
     console.error('Failed to create expense:', error);
-    // Consider specific error codes if needed, e.g., for check constraints
     return NextResponse.json({ message: 'Failed to create expense', error: (error as Error).message }, { status: 500 });
   }
 }

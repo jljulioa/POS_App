@@ -11,7 +11,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Calendar as CalendarIcon, DollarSign, PlusCircle, Save, Loader2, AlertTriangle, ListFilter } from 'lucide-react';
+import { Calendar as CalendarIcon, DollarSign, PlusCircle, Save, Loader2, AlertTriangle, FilterX } from 'lucide-react';
 import { Calendar } from "@/components/ui/calendar";
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -21,7 +21,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { format, parseISO, isValid } from 'date-fns';
 import type { DailyExpense, ExpenseCategoryEnum } from '@/lib/mockData';
 import { expenseCategories } from '@/lib/mockData'; // Import predefined categories
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { cn } from "@/lib/utils";
 
 const ExpenseCategoryEnumSchema = z.enum(expenseCategories as [ExpenseCategoryEnum, ...ExpenseCategoryEnum[]]);
@@ -44,10 +44,21 @@ const defaultFormValues: Partial<ExpenseFormValues> = {
   notes: '',
 };
 
-// API fetch function for expenses for a specific date
-const fetchExpenses = async (date: Date): Promise<DailyExpense[]> => {
-  const formattedDate = format(date, 'yyyy-MM-dd');
-  const res = await fetch(`/api/expenses?date=${formattedDate}`);
+// API fetch function for expenses
+const fetchExpensesAPI = async (startDate?: Date, endDate?: Date): Promise<DailyExpense[]> => {
+  const params = new URLSearchParams();
+  if (startDate) {
+    params.append('startDate', format(startDate, 'yyyy-MM-dd'));
+  }
+  if (endDate) {
+    params.append('endDate', format(endDate, 'yyyy-MM-dd'));
+  }
+  // If no dates, API fetches all. If only one, API logic should handle (or we enforce both for range)
+  // Current API fetches all if no date params, or specific date if `date=` is used.
+  // If only startDate, it will fetch all. If only endDate, it will fetch all.
+  // We will ensure both are present for range, or none for all.
+
+  const res = await fetch(`/api/expenses?${params.toString()}`);
   if (!res.ok) {
     const errorData = await res.json().catch(() => ({ message: 'Failed to fetch expenses' }));
     throw new Error(errorData.message || 'Failed to fetch expenses');
@@ -76,11 +87,17 @@ const addExpenseAPI = async (newExpense: ExpenseFormValues): Promise<DailyExpens
 export default function ExpensesPage() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const [filterDate, setFilterDate] = useState<Date>(new Date());
+  const [startDate, setStartDate] = useState<Date | undefined>(undefined);
+  const [endDate, setEndDate] = useState<Date | undefined>(undefined);
+
+  const queryKeyParams = [
+    startDate ? format(startDate, 'yyyy-MM-dd') : 'all',
+    endDate ? format(endDate, 'yyyy-MM-dd') : 'all',
+  ];
 
   const { data: expenses = [], isLoading: isLoadingExpenses, error: expensesError, refetch: refetchExpenses } = useQuery<DailyExpense[], Error>({
-    queryKey: ['expenses', format(filterDate, 'yyyy-MM-dd')],
-    queryFn: () => fetchExpenses(filterDate),
+    queryKey: ['expenses', ...queryKeyParams],
+    queryFn: () => fetchExpensesAPI(startDate, endDate),
   });
 
   const form = useForm<ExpenseFormValues>({
@@ -92,12 +109,9 @@ export default function ExpensesPage() {
     mutationFn: addExpenseAPI,
     onSuccess: (data) => {
       toast({ title: "Expense Added", description: `${data.description} has been successfully recorded.` });
-      queryClient.invalidateQueries({ queryKey: ['expenses', format(data.expenseDate ? parseISO(data.expenseDate) : filterDate, 'yyyy-MM-dd')] });
-      // If the added expense's date is the current filterDate, refetch immediately
-      if (format(data.expenseDate ? parseISO(data.expenseDate) : new Date() , 'yyyy-MM-dd') === format(filterDate, 'yyyy-MM-dd')) {
-        refetchExpenses();
-      }
-      form.reset(defaultFormValues); // Reset form to default
+      // Invalidate all expense queries to refresh list which might include the new one
+      queryClient.invalidateQueries({ queryKey: ['expenses'] });
+      form.reset(defaultFormValues);
     },
     onError: (error) => {
       toast({ variant: "destructive", title: "Failed to Add Expense", description: error.message });
@@ -108,39 +122,78 @@ export default function ExpensesPage() {
     addMutation.mutate(data);
   };
 
-  const totalExpensesForDay = expenses.reduce((sum, expense) => sum + expense.amount, 0);
+  const totalFilteredExpenses = useMemo(() => {
+    return expenses.reduce((sum, expense) => sum + expense.amount, 0);
+  }, [expenses]);
 
-  useEffect(() => {
-    refetchExpenses();
-  }, [filterDate, refetchExpenses]);
+  const handleClearFilters = () => {
+    setStartDate(undefined);
+    setEndDate(undefined);
+  };
+
+  const pageTitle = useMemo(() => {
+    if (startDate && endDate) {
+      return `Expenses from ${format(startDate, "PPP")} to ${format(endDate, "PPP")}`;
+    }
+    return "All Recorded Expenses";
+  }, [startDate, endDate]);
 
 
   return (
     <AppLayout>
       <PageHeader title="Daily Expenses" description="Track and manage your daily operational costs.">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
             <Popover>
               <PopoverTrigger asChild>
                 <Button
                   variant={"outline"}
                   className={cn(
-                    "w-[200px] justify-start text-left font-normal",
-                    !filterDate && "text-muted-foreground"
+                    "w-full sm:w-[180px] justify-start text-left font-normal",
+                    !startDate && "text-muted-foreground"
                   )}
                 >
                   <CalendarIcon className="mr-2 h-4 w-4" />
-                  {filterDate ? format(filterDate, "PPP") : <span>Pick a date</span>}
+                  {startDate ? format(startDate, "PPP") : <span>Start Date</span>}
                 </Button>
               </PopoverTrigger>
               <PopoverContent className="w-auto p-0">
                 <Calendar
                   mode="single"
-                  selected={filterDate}
-                  onSelect={(date) => date && setFilterDate(date)}
+                  selected={startDate}
+                  onSelect={setStartDate}
+                  disabled={(date) => endDate ? date > endDate : false}
                   initialFocus
                 />
               </PopoverContent>
             </Popover>
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button
+                  variant={"outline"}
+                  className={cn(
+                    "w-full sm:w-[180px] justify-start text-left font-normal",
+                    !endDate && "text-muted-foreground"
+                  )}
+                >
+                  <CalendarIcon className="mr-2 h-4 w-4" />
+                  {endDate ? format(endDate, "PPP") : <span>End Date</span>}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-0">
+                <Calendar
+                  mode="single"
+                  selected={endDate}
+                  onSelect={setEndDate}
+                  disabled={(date) => startDate ? date < startDate : false}
+                  initialFocus
+                />
+              </PopoverContent>
+            </Popover>
+            {(startDate || endDate) && (
+              <Button variant="ghost" onClick={handleClearFilters} className="text-muted-foreground hover:text-destructive">
+                <FilterX className="mr-2 h-4 w-4" /> Clear
+              </Button>
+            )}
         </div>
       </PageHeader>
 
@@ -259,8 +312,8 @@ export default function ExpensesPage() {
           <Card className="shadow-lg">
             <CardHeader>
               <CardTitle className="flex items-center justify-between">
-                <span className="flex items-center"><DollarSign className="mr-2 h-5 w-5 text-primary"/>Expenses for {format(filterDate, "PPP")}</span>
-                <span className="text-lg font-semibold text-primary">Total: ${totalExpensesForDay.toFixed(2)}</span>
+                <span className="flex items-center"><DollarSign className="mr-2 h-5 w-5 text-primary"/>{pageTitle}</span>
+                <span className="text-lg font-semibold text-primary">Total: ${totalFilteredExpenses.toFixed(2)}</span>
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -273,13 +326,14 @@ export default function ExpensesPage() {
                 </div>
               )}
               {!isLoadingExpenses && !expensesError && expenses.length === 0 && (
-                <p className="text-muted-foreground text-center py-4">No expenses recorded for this day.</p>
+                <p className="text-muted-foreground text-center py-4">No expenses recorded for the selected criteria.</p>
               )}
               {!isLoadingExpenses && !expensesError && expenses.length > 0 && (
                 <div className="rounded-md border">
                   <Table>
                     <TableHeader>
                       <TableRow>
+                        <TableHead>Date</TableHead>
                         <TableHead>Description</TableHead>
                         <TableHead>Category</TableHead>
                         <TableHead className="text-right">Amount</TableHead>
@@ -290,6 +344,7 @@ export default function ExpensesPage() {
                     <TableBody>
                       {expenses.map((expense) => (
                         <TableRow key={expense.id}>
+                          <TableCell className="text-sm">{format(parseISO(expense.expenseDate), 'MMM d, yyyy')}</TableCell>
                           <TableCell className="font-medium">{expense.description}</TableCell>
                           <TableCell>{expense.category}</TableCell>
                           <TableCell className="text-right">${expense.amount.toFixed(2)}</TableCell>
