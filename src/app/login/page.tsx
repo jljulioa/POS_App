@@ -8,35 +8,32 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
-import { Bike, LogIn } from 'lucide-react';
+import { Bike, LogIn, Loader2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
 export default function LoginPage() {
-  const [email, setEmail] = useState('cashier@motofox.com');
-  const [password, setPassword] = useState('password');
-  const { login } = useAuth();
+  const [email, setEmail] = useState(''); // Default to empty
+  const [password, setPassword] = useState(''); // Default to empty
+  const { login, isLoading: isAuthLoading } = useAuth(); // Use isLoading from AuthContext
   const router = useRouter();
   const { toast } = useToast();
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleSubmit = (event: FormEvent) => {
+  const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
-    // Mock authentication
-    if ((email === 'cashier@motofox.com' || email === 'admin@motofox.com') && password === 'password') {
-      const role = email === 'admin@motofox.com' ? 'admin' : 'cashier';
-      login(role);
-      toast({
-        title: "Login Successful",
-        description: `Welcome back, ${role}!`,
-      });
-      router.push('/');
-    } else {
-      toast({
-        variant: "destructive",
-        title: "Login Failed",
-        description: "Invalid email or password.",
-      });
+    setIsSubmitting(true);
+    try {
+      await login(email, password);
+      // AuthContext handles redirection and success toast
+    } catch (error: any) {
+      // Error toast is handled by AuthContext's login function
+      // console.error("Login page caught error:", error); // Optional: for further debugging
+    } finally {
+      setIsSubmitting(false);
     }
   };
+
+  const isLoading = isAuthLoading || isSubmitting;
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background p-4">
@@ -60,6 +57,7 @@ export default function LoginPage() {
                 onChange={(e) => setEmail(e.target.value)}
                 required
                 className="text-base"
+                disabled={isLoading}
               />
             </div>
             <div className="space-y-2">
@@ -71,10 +69,17 @@ export default function LoginPage() {
                 onChange={(e) => setPassword(e.target.value)}
                 required
                 className="text-base"
+                disabled={isLoading}
+                placeholder="Password"
               />
             </div>
-            <Button type="submit" className="w-full text-lg py-6">
-              <LogIn className="mr-2 h-5 w-5" /> Sign In
+            <Button type="submit" className="w-full text-lg py-6" disabled={isLoading}>
+              {isLoading ? (
+                <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+              ) : (
+                <LogIn className="mr-2 h-5 w-5" />
+              )}
+              {isLoading ? 'Signing In...' : 'Sign In'}
             </Button>
           </form>
         </CardContent>

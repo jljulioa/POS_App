@@ -8,13 +8,13 @@ import { SidebarProvider, Sidebar, SidebarHeader, SidebarContent, SidebarFooter,
 import { SidebarNav } from '@/components/navigation/SidebarNav';
 import { Logo } from '@/components/Logo';
 import { Button } from '@/components/ui/button';
-import { LogOut, UserCircle } from 'lucide-react';
+import { LogOut, UserCircle, Loader2 } from 'lucide-react'; // Added Loader2
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { ThemeToggle } from "@/components/ThemeToggle";
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated, isLoading, logout, userRole } = useAuth();
+  const { isAuthenticated, isLoading, logout, userRole, firebaseUser } = useAuth(); // Added firebaseUser
   const router = useRouter();
   const pathname = usePathname();
 
@@ -27,7 +27,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   if (isLoading || (!isAuthenticated && pathname !== '/login')) {
     return (
       <div className="flex h-screen w-full items-center justify-center bg-background">
-        <div className="h-12 w-12 animate-spin rounded-full border-4 border-primary border-t-transparent"></div>
+        {/* <div className="h-12 w-12 animate-spin rounded-full border-4 border-primary border-t-transparent"></div> */}
+        <Loader2 className="h-12 w-12 animate-spin text-primary" />
       </div>
     );
   }
@@ -61,17 +62,17 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" className="relative h-9 w-9 sm:h-10 sm:w-10 rounded-full">
                   <Avatar className="h-8 w-8 sm:h-9 sm:w-9">
-                    <AvatarImage src="https://placehold.co/40x40.png" alt="@motofoxuser" data-ai-hint="profile avatar" />
-                    <AvatarFallback>MF</AvatarFallback>
+                    <AvatarImage src={firebaseUser?.photoURL || "https://placehold.co/40x40.png"} alt={firebaseUser?.displayName || "User"} data-ai-hint="profile avatar" />
+                    <AvatarFallback>{firebaseUser?.email ? firebaseUser.email.substring(0,2).toUpperCase() : "MF"}</AvatarFallback>
                   </Avatar>
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent className="w-56" align="end" forceMount>
                 <DropdownMenuLabel className="font-normal">
                   <div className="flex flex-col space-y-1">
-                    <p className="text-sm font-medium leading-none">MotoFox User</p>
+                    <p className="text-sm font-medium leading-none">{firebaseUser?.displayName || "MotoFox User"}</p>
                     <p className="text-xs leading-none text-muted-foreground">
-                      {userRole || 'user'}@motofox.com
+                      {firebaseUser?.email || (userRole ? `${userRole}@motofox.com` : 'user@motofox.com')}
                     </p>
                   </div>
                 </DropdownMenuLabel>
@@ -84,7 +85,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             </DropdownMenu>
           </div>
         </header>
-        <main className="flex-1 overflow-y-auto p-4 sm:p-6 bg-background">
+        <main className="flex-1 overflow-y-auto overflow-x-hidden p-4 sm:p-6 bg-background">
           {children}
         </main>
       </div>
