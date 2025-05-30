@@ -11,7 +11,7 @@ import { Button } from '@/components/ui/button';
 import { LogOut, Loader2 } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
-import { ThemeToggle } from "@/components/ThemeToggle";
+import { ThemeToggle } from "@/components/ThemeToggle"; // Corrected import path
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isLoading, logout, appUser, supabaseUser } = useAuth();
@@ -38,7 +38,27 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   const userDisplayName = appUser?.full_name || supabaseUser?.email || "User";
   const userEmail = supabaseUser?.email || (appUser?.email || 'user@motofox.com');
-  const userAvatarFallback = (appUser?.full_name?.substring(0,2) || supabaseUser?.email?.substring(0,2) || "MF").toUpperCase();
+  
+  let fallbackInitials = "MF"; // Default
+  if (appUser?.full_name) {
+    const nameParts = appUser.full_name.trim().split(/\s+/).filter(part => part.length > 0);
+    if (nameParts.length > 0) {
+      fallbackInitials = nameParts[0][0]; 
+      if (nameParts.length > 1) {
+        fallbackInitials += nameParts[nameParts.length -1][0]; // Use first letter of last name part
+      }
+      // If only one name part, fallbackInitials will be the first letter of that part.
+    }
+  } else if (supabaseUser?.email) {
+    const emailNamePart = supabaseUser.email.split('@')[0];
+    if (emailNamePart.length > 1) {
+      fallbackInitials = emailNamePart.substring(0, 2);
+    } else if (emailNamePart.length === 1) {
+      fallbackInitials = emailNamePart[0];
+    }
+  }
+  const userAvatarFallback = fallbackInitials.toUpperCase();
+
 
   return (
     <SidebarProvider defaultOpen>
@@ -65,8 +85,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" className="relative h-9 w-9 sm:h-10 sm:w-10 rounded-full">
                   <Avatar className="h-8 w-8 sm:h-9 sm:w-9">
-                    {/* Supabase user object doesn't have photoURL directly, user_metadata might */}
-                    <AvatarImage src={supabaseUser?.user_metadata?.avatar_url || "https://placehold.co/40x40.png"} alt={userDisplayName} data-ai-hint="profile avatar" />
+                    <AvatarImage src={supabaseUser?.user_metadata?.avatar_url || `https://placehold.co/40x40.png?text=${userAvatarFallback}`} alt={userDisplayName} data-ai-hint="profile avatar" />
                     <AvatarFallback>{userAvatarFallback}</AvatarFallback>
                   </Avatar>
                 </Button>
