@@ -20,7 +20,7 @@ const mainNavItems = [
   { href: '/purchase-invoices', label: 'Purchase Invoices', icon: FileText },
   { href: '/expenses', label: 'Expenses', icon: Landmark },
   { href: '/reordering', label: 'Smart Reordering', icon: Bot },
-  { href: '/users', label: 'Manage Users', icon: UserCog },
+  // { href: '/users', label: 'Manage Users', icon: UserCog }, // Removed from main nav
 ];
 
 // Example categories - in a real app, these might be fetched or configured
@@ -68,10 +68,9 @@ export function SidebarNav() {
 
       {/* Settings Menu */}
       <SidebarMenuItem>
-        <Link href="/settings"> {/* Main Settings link now points to /settings */}
+        <Link href="/settings"> {/* Main Settings link now points to /settings hub page */}
           <SidebarMenuButton
-            // No asChild, Link renders the <a>, SidebarMenuButton renders its content
-            isActive={isSettingsPathActive} // Active if on /settings or any sub-settings page
+            isActive={isSettingsPathActive}
             className="justify-start"
             tooltip={{ children: 'Settings', side: 'right', align: 'center' }}
           >
@@ -79,7 +78,6 @@ export function SidebarNav() {
             <span className="group-data-[collapsible=icon]:hidden">Settings</span>
           </SidebarMenuButton>
         </Link>
-        {/* No Submenu here anymore */}
       </SidebarMenuItem>
     </SidebarMenu>
   );

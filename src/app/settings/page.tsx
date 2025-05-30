@@ -5,7 +5,7 @@ import AppLayout from '@/components/layout/AppLayout';
 import { PageHeader } from '@/components/PageHeader';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { FileText, Settings as SettingsIcon, ArrowRight } from 'lucide-react'; // Changed Settings to SettingsIcon
+import { FileText, Settings as SettingsIcon, ArrowRight, UserCog } from 'lucide-react'; // Changed Settings to SettingsIcon, Added UserCog
 import Link from 'next/link';
 
 interface SettingsCardProps {
@@ -48,7 +48,7 @@ export default function SettingsPage() {
       />
       <div className="space-y-8">
         <div>
-          <h2 className="text-xl font-semibold mb-4 text-foreground">Invoice Settings</h2>
+          <h2 className="text-xl font-semibold mb-4 text-foreground">Customization</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             <SettingsOptionCard
               title="Invoice Customization"
@@ -57,36 +57,40 @@ export default function SettingsPage() {
               link="/settings/invoice"
               linkText="Configure Invoice Details"
             />
-            {/* Add other settings cards here as needed */}
           </div>
         </div>
 
-        {/* Placeholder for General Settings section from image */}
         <div>
-          <h2 className="text-xl font-semibold mb-4 text-foreground">General Settings</h2>
+          <h2 className="text-xl font-semibold mb-4 text-foreground">User & Access Control</h2>
            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <SettingsOptionCard
+              title="User Management"
+              description="Manage application users, roles, and permissions."
+              icon={UserCog}
+              link="/users"
+              linkText="Manage Users"
+            />
             <Card className="shadow-md opacity-50 cursor-not-allowed">
               <CardHeader className="flex flex-row items-center gap-4 space-y-0">
                  <div className="p-3 rounded-full bg-muted text-muted-foreground">
                   <SettingsIcon className="h-6 w-6" />
                 </div>
                 <div>
-                  <CardTitle>Store Details</CardTitle>
-                  <CardDescription>Configure store name, contact (Not implemented)</CardDescription>
+                  <CardTitle>Roles & Permissions</CardTitle>
+                  <CardDescription>Define user roles and access levels (Not implemented)</CardDescription>
                 </div>
               </CardHeader>
               <CardContent>
                 <Button variant="outline" disabled className="w-full sm:w-auto">
-                    Configure Store <ArrowRight className="ml-2 h-4 w-4" />
+                    Configure Roles <ArrowRight className="ml-2 h-4 w-4" />
                 </Button>
               </CardContent>
             </Card>
           </div>
         </div>
         
-        {/* Placeholder for POS Preferences section from image */}
          <div>
-          <h2 className="text-xl font-semibold mb-4 text-foreground">POS Preferences</h2>
+          <h2 className="text-xl font-semibold mb-4 text-foreground">System Preferences</h2>
            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             <Card className="shadow-md opacity-50 cursor-not-allowed">
               <CardHeader className="flex flex-row items-center gap-4 space-y-0">
@@ -101,6 +105,22 @@ export default function SettingsPage() {
               <CardContent>
                 <Button variant="outline" disabled className="w-full sm:w-auto">
                   Configure POS <ArrowRight className="ml-2 h-4 w-4" />
+                </Button>
+              </CardContent>
+            </Card>
+             <Card className="shadow-md opacity-50 cursor-not-allowed">
+              <CardHeader className="flex flex-row items-center gap-4 space-y-0">
+                 <div className="p-3 rounded-full bg-muted text-muted-foreground">
+                  <SettingsIcon className="h-6 w-6" />
+                </div>
+                <div>
+                  <CardTitle>Store Details</CardTitle>
+                  <CardDescription>Configure store name, contact (Not implemented)</CardDescription>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <Button variant="outline" disabled className="w-full sm:w-auto">
+                    Configure Store <ArrowRight className="ml-2 h-4 w-4" />
                 </Button>
               </CardContent>
             </Card>
