@@ -244,7 +244,11 @@ const Sidebar = React.forwardRef<
             // Adjust the padding for floating and inset variants.
             variant === "floating" || variant === "inset"
               ? "p-2 group-data-[collapsible=icon]:w-[calc(var(--sidebar-width-icon)_+_theme(spacing.4)_+2px)]"
-              : "group-data-[collapsible=icon]:w-[--sidebar-width-icon] group-data-[side=left]:border-r group-data-[side=right]:border-l",
+              : cn(
+                  "group-data-[collapsible=icon]:w-[--sidebar-width-icon]",
+                  side === "left" ? "" : "border-l", // Remove border-r for left side
+                  side === "right" ? "border-l" : "" // Keep border-l for right side if needed
+                ),
             className
           )}
           {...props}
@@ -541,7 +545,7 @@ const SidebarMenuButton = React.forwardRef<
   React.ComponentProps<"button"> & {
     asChild?: boolean
     isActive?: boolean
-    isSub?: boolean // Destructure isSub here
+    isSub?: boolean 
     tooltip?: string | React.ComponentProps<typeof TooltipContent>
   } & VariantProps<typeof sidebarMenuButtonVariants>
 >(
@@ -549,12 +553,12 @@ const SidebarMenuButton = React.forwardRef<
     {
       asChild = false,
       isActive = false,
-      isSub, // Destructured, so it won't be in 'rest'
+      isSub, 
       variant = "default",
       size = "default",
       tooltip,
       className,
-      ...rest // All other props
+      ...rest 
     },
     ref
   ) => {
@@ -567,10 +571,8 @@ const SidebarMenuButton = React.forwardRef<
         data-sidebar="menu-button"
         data-size={size}
         data-active={isActive}
-        // If 'isSub' needs to be a data-attribute for styling purposes, add it here:
-        // data-issub={isSub}
         className={cn(sidebarMenuButtonVariants({ variant, size }), className)}
-        {...rest} // Spread the rest of the props, which no longer contains 'isSub'
+        {...rest} 
       />
     )
 

@@ -11,7 +11,8 @@ import { Button } from '@/components/ui/button';
 import { LogOut, Loader2 } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
-import { ThemeToggle } from "@/components/ThemeToggle"; // Corrected import path
+import { ThemeToggle } from "@/components/ThemeToggle";
+import { Breadcrumbs } from '@/components/Breadcrumbs'; // Import Breadcrumbs
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isLoading, logout, appUser, supabaseUser } = useAuth();
@@ -39,15 +40,14 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const userDisplayName = appUser?.full_name || supabaseUser?.email || "User";
   const userEmail = supabaseUser?.email || (appUser?.email || 'user@motofox.com');
   
-  let fallbackInitials = "MF"; // Default
+  let fallbackInitials = "MF"; 
   if (appUser?.full_name) {
     const nameParts = appUser.full_name.trim().split(/\s+/).filter(part => part.length > 0);
     if (nameParts.length > 0) {
       fallbackInitials = nameParts[0][0]; 
       if (nameParts.length > 1) {
-        fallbackInitials += nameParts[nameParts.length -1][0]; // Use first letter of last name part
+        fallbackInitials += nameParts[nameParts.length -1][0]; 
       }
-      // If only one name part, fallbackInitials will be the first letter of that part.
     }
   } else if (supabaseUser?.email) {
     const emailNamePart = supabaseUser.email.split('@')[0];
@@ -62,7 +62,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   return (
     <SidebarProvider defaultOpen>
-      <Sidebar collapsible="icon" className="border-r border-sidebar-border">
+      <Sidebar collapsible="icon" className="bg-sidebar text-sidebar-foreground">
         <SidebarHeader className="p-4">
           <Logo />
         </SidebarHeader>
@@ -74,10 +74,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         </SidebarFooter>
       </Sidebar>
       <div className="flex flex-col flex-1 min-h-screen">
-        <header className="sticky top-0 z-10 flex h-16 items-center justify-between border-b bg-card px-4 sm:px-6 shadow-sm">
+        <header className="sticky top-0 z-10 flex h-16 items-center justify-between bg-background px-4 sm:px-6">
           <div className="flex items-center gap-2 sm:gap-4">
              <SidebarTrigger className="md:hidden" /> {/* Only show on mobile */}
-             <h1 className="text-lg sm:text-xl font-semibold capitalize">{pathname.substring(1) || 'Dashboard'}</h1>
+             <Breadcrumbs />
           </div>
           <div className="flex items-center gap-2 sm:gap-3">
             <ThemeToggle />
@@ -85,7 +85,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" className="relative h-9 w-9 sm:h-10 sm:w-10 rounded-full">
                   <Avatar className="h-8 w-8 sm:h-9 sm:w-9">
-                    <AvatarImage src={supabaseUser?.user_metadata?.avatar_url || `https://placehold.co/40x40.png?text=${userAvatarFallback}`} alt={userDisplayName} data-ai-hint="profile avatar" />
+                    <AvatarImage src={supabaseUser?.user_metadata?.avatar_url || `https://placehold.co/40x40.png?text=${userAvatarFallback}`} alt={userDisplayName} data-ai-hint="profile avatar"/>
                     <AvatarFallback>{userAvatarFallback}</AvatarFallback>
                   </Avatar>
                 </Button>
