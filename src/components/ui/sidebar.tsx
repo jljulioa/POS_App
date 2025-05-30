@@ -11,7 +11,7 @@ import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Separator } from "@/components/ui/separator"
-import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet" // Added SheetTitle import
+import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet"
 import { Skeleton } from "@/components/ui/skeleton"
 import {
   Tooltip,
@@ -541,6 +541,7 @@ const SidebarMenuButton = React.forwardRef<
   React.ComponentProps<"button"> & {
     asChild?: boolean
     isActive?: boolean
+    isSub?: boolean // Destructure isSub here
     tooltip?: string | React.ComponentProps<typeof TooltipContent>
   } & VariantProps<typeof sidebarMenuButtonVariants>
 >(
@@ -548,11 +549,12 @@ const SidebarMenuButton = React.forwardRef<
     {
       asChild = false,
       isActive = false,
+      isSub, // Destructured, so it won't be in 'rest'
       variant = "default",
       size = "default",
       tooltip,
       className,
-      ...props
+      ...rest // All other props
     },
     ref
   ) => {
@@ -565,8 +567,10 @@ const SidebarMenuButton = React.forwardRef<
         data-sidebar="menu-button"
         data-size={size}
         data-active={isActive}
+        // If 'isSub' needs to be a data-attribute for styling purposes, add it here:
+        // data-issub={isSub}
         className={cn(sidebarMenuButtonVariants({ variant, size }), className)}
-        {...props}
+        {...rest} // Spread the rest of the props, which no longer contains 'isSub'
       />
     )
 
@@ -764,5 +768,3 @@ export {
   SidebarTrigger,
   useSidebar,
 }
-
-    
