@@ -3,7 +3,7 @@
 
 import React, { createContext, useState, useEffect, ReactNode, useCallback } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
-import { supabase } from '@/lib/supabase/client'; // Import Supabase client
+import { supabase } from '@/lib/supabase/client'; 
 import type { User as SupabaseUser, Session } from '@supabase/supabase-js';
 import { useToast } from '@/hooks/use-toast';
 import type { User as AppUser, UserRole } from '@/lib/mockData';
@@ -29,29 +29,34 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const { toast } = useToast();
 
   const fetchAppUser = useCallback(async (user: SupabaseUser) => {
-    if (!user || !user.email) {
+    if (!user || !user.id) { // Now using user.id (Supabase UUID)
       setAppUser(null);
+      console.log("No Supabase user or user ID, cannot fetch app user.");
       return;
     }
     try {
-      const response = await fetch(`/api/users/by-email/${encodeURIComponent(user.email)}`);
+      console.log(`Fetching app user with Supabase ID: ${user.id}`);
+      const response = await fetch(`/api/users/by-supabase-id/${user.id}`);
       if (response.ok) {
         const userData: AppUser = await response.json();
         setAppUser(userData);
-        console.log("App user fetched:", userData);
+        console.log("App user fetched by Supabase ID:", userData);
       } else {
-        console.warn(`User ${user.email} authenticated with Supabase but not found or inactive in app DB.`);
+        const errorData = await response.json().catch(() => ({ message: "Unknown error fetching app user" }));
+        console.warn(`App user not found or inactive for Supabase ID ${user.id}. Status: ${response.status}. Message: ${errorData.message}`);
         setAppUser(null);
-        // Potentially redirect or show a message if app user is required.
+        // Consider what to do if the Supabase user exists but has no corresponding app user
+        // For now, they won't be considered fully authenticated in the app.
       }
     } catch (error) {
-      console.error("Failed to fetch app user data:", error);
+      console.error("Failed to fetch app user data by Supabase ID:", error);
       setAppUser(null);
     }
   }, []);
 
   useEffect(() => {
     const getSession = async () => {
+        setIsLoading(true);
         const { data: { session } } = await supabase.auth.getSession();
         setSupabaseUser(session?.user ?? null);
         if (session?.user) {
@@ -62,26 +67,29 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     getSession();
 
     const { data: authListener } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      setSupabaseUser(session?.user ?? null);
-      if (session?.user) {
-        await fetchAppUser(session.user);
+      setIsLoading(true); // Set loading true during auth state change processing
+      const newSupabaseUser = session?.user ?? null;
+      setSupabaseUser(newSupabaseUser);
+      if (newSupabaseUser) {
+        await fetchAppUser(newSupabaseUser);
       } else {
         setAppUser(null);
-        if (pathname !== '/login') {
-          router.push('/login');
-        }
+        // No automatic redirect here; let navigation guard handle it if needed
       }
-      // Moved setIsLoading(false) to getSession to avoid flicker on initial load
+      setIsLoading(false); // Set loading false after processing
     });
 
     return () => {
       authListener?.subscription.unsubscribe();
     };
-  }, [fetchAppUser, router, pathname]);
+  }, [fetchAppUser]);
 
 
   useEffect(() => {
+    // Navigation guard: If not loading and not authenticated, redirect to login (unless already there).
+    // This is a common pattern but ensure it doesn't conflict with Supabase's own potential redirect mechanisms.
     if (!isLoading && !supabaseUser && pathname !== '/login') {
+      console.log("Not authenticated, redirecting to login.");
       router.push('/login');
     }
   }, [supabaseUser, isLoading, router, pathname]);
@@ -98,8 +106,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       if (error) {
         throw error;
       }
-
-      // onAuthStateChange will handle setting supabaseUser and calling fetchAppUser
+      
+      // onAuthStateChange will handle setting supabaseUser and calling fetchAppUser.
+      // It will also set isLoading to false eventually.
+      // No explicit setSupabaseUser or fetchAppUser here.
+      
       toast({
         title: "Login Successful",
         description: "Welcome back!",
@@ -112,13 +123,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         title: "Login Failed",
         description: error.message || "Invalid email or password.",
       });
-      // setIsLoading(false); // onAuthStateChange will eventually set loading to false
-      throw error; // Re-throw so the login page can catch it if needed
-    } finally {
-        // Delay setting isLoading to false to allow onAuthStateChange to process
-        // This is tricky; ideally, loading state management is more nuanced
-        // For now, onAuthStateChange handles the final setIsLoading(false)
+      setIsLoading(false); // Ensure loading is false on login failure
+      throw error; 
     }
+    // setIsLoading(false) is handled by onAuthStateChange or the error block
   };
 
   const logout = async () => {
@@ -126,8 +134,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     try {
       const { error } = await supabase.auth.signOut();
       if (error) throw error;
-      setSupabaseUser(null);
-      setAppUser(null);
+      // onAuthStateChange will set supabaseUser and appUser to null
+      // No explicit setSupabaseUser or setAppUser here.
       router.push('/login');
     } catch (error: any) {
       console.error("Supabase logout error:", error);

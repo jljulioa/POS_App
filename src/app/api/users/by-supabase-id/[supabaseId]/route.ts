@@ -1,11 +1,8 @@
 
-// This file is no longer used for fetching the appUser in the AuthContext.
-// It's being replaced by /api/users/by-supabase-id/[supabaseId]/route.ts
-// You can delete this file if it's not used by any other part of your application.
-
+// src/app/api/users/by-supabase-id/[supabaseId]/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { query } from '@/lib/db';
-import type { User, UserRole } from '@/lib/mockData'; // Using User type
+import type { User, UserRole } from '@/lib/mockData';
 
 const parseUserFromDB = (dbUser: any): User | null => {
   if (!dbUser) return null;
@@ -22,30 +19,28 @@ const parseUserFromDB = (dbUser: any): User | null => {
   };
 };
 
-export async function GET(request: NextRequest, { params }: { params: { email: string } }) {
-  const { email } = params;
+export async function GET(request: NextRequest, { params }: { params: { supabaseId: string } }) {
+  const { supabaseId } = params;
 
-  if (!email) {
-    return NextResponse.json({ message: 'Email parameter is required' }, { status: 400 });
+  if (!supabaseId) {
+    return NextResponse.json({ message: 'Supabase ID parameter is required' }, { status: 400 });
   }
-
-  console.warn("Deprecated API endpoint /api/users/by-email called. Please use /api/users/by-supabase-id.");
 
   try {
     // Select all fields EXCEPT password_hash for security
     const result = await query(
-      'SELECT id, username, email, role, full_name, is_active, created_at, updated_at, supabase_user_id FROM Users WHERE email = $1 AND is_active = TRUE',
-      [decodeURIComponent(email)]
+      'SELECT id, username, email, role, full_name, is_active, created_at, updated_at, supabase_user_id FROM Users WHERE supabase_user_id = $1 AND is_active = TRUE',
+      [supabaseId]
     );
 
     if (result.length === 0) {
-      return NextResponse.json({ message: 'User not found or not active' }, { status: 404 });
+      return NextResponse.json({ message: 'User not found or not active for the given Supabase ID' }, { status: 404 });
     }
 
     const user = parseUserFromDB(result[0]);
     return NextResponse.json(user);
   } catch (error) {
-    console.error(`Failed to fetch user by email ${email}:`, error);
+    console.error(`Failed to fetch user by Supabase ID ${supabaseId}:`, error);
     return NextResponse.json({ message: 'Failed to fetch user', error: (error as Error).message }, { status: 500 });
   }
 }

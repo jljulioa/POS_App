@@ -6,7 +6,7 @@ export interface Product {
   reference: string;
   barcode?: string | null;
   stock: number;
-  category: string; // This is the category NAME (from ProductCategories.name)
+  category: string; // This is the category NAME (e.g., "Engine Parts")
   categoryId?: number; // This is the foreign key (ProductCategories.id)
   brand: string;
   minStock: number;
@@ -123,5 +123,5 @@ export interface User {
   is_active?: boolean;
   created_at?: string; // ISO string
   updated_at?: string; // ISO string
-  // supabase_user_id?: string | null; // If you add a column to link to Supabase auth.users.id
+  supabase_user_id?: string | null; // To link with Supabase auth.users.id
 }
