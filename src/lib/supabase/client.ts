@@ -2,72 +2,64 @@
 // src/lib/supabase/client.ts
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+const supabaseUrlFromEnv = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const supabaseAnonKeyFromEnv = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
 let supabaseInstance: SupabaseClient | null = null;
 let initializationError: Error | null = null;
 
-if (!supabaseUrl || typeof supabaseUrl !== 'string' || supabaseUrl.trim() === '') {
-  const errorMsg = 'Supabase URL is missing or invalid. Please ensure NEXT_PUBLIC_SUPABASE_URL environment variable is set correctly in your .env.local file and is a valid URL string.';
+if (!supabaseUrlFromEnv || typeof supabaseUrlFromEnv !== 'string' || supabaseUrlFromEnv.trim() === '') {
+  const errorMsg = 'CRITICAL: NEXT_PUBLIC_SUPABASE_URL environment variable is missing or empty. Please ensure it is set correctly in your .env.local file. It should be your Supabase Project URL (e.g., https://<your-project-ref>.supabase.co).';
   console.error("***************************************************************************");
-  console.error("FATAL ERROR INITIALIZING SUPABASE CLIENT (env var check):");
-  console.error(errorMsg);
-  console.error(`Current NEXT_PUBLIC_SUPABASE_URL type: ${typeof supabaseUrl}, value (if any): '${supabaseUrl}'`);
-  console.error("Expected format: https://<your-project-ref>.supabase.co");
+  console.error("SUPABASE CLIENT INIT ERROR:", errorMsg);
   console.error("***************************************************************************");
   initializationError = new Error(errorMsg);
-} else if (!supabaseUrl.startsWith('http://') && !supabaseUrl.startsWith('https://')) {
-  const errorMsg = `The provided Supabase URL '${supabaseUrl}' does not start with http:// or https://. It seems you might be using a PostgreSQL connection string instead of your Supabase Project URL. Please use your Supabase Project URL (e.g., https://<your-project-ref>.supabase.co) for NEXT_PUBLIC_SUPABASE_URL.`;
+} else if (!supabaseUrlFromEnv.startsWith('http://') && !supabaseUrlFromEnv.startsWith('https://')) {
+  const errorMsg = `CRITICAL: The NEXT_PUBLIC_SUPABASE_URL '${supabaseUrlFromEnv}' does not start with http:// or https://. It seems you might be using a PostgreSQL connection string instead of your Supabase Project URL. Please use your Supabase Project URL (e.g., https://<your-project-ref>.supabase.co) for NEXT_PUBLIC_SUPABASE_URL.`;
   console.error("***************************************************************************");
-  console.error("FATAL ERROR INITIALIZING SUPABASE CLIENT (URL format check):");
-  console.error(errorMsg);
+  console.error("SUPABASE CLIENT INIT ERROR:", errorMsg);
   console.error("***************************************************************************");
   initializationError = new Error(errorMsg);
 }
 
 
-if (!supabaseAnonKey || typeof supabaseAnonKey !== 'string' || supabaseAnonKey.trim() === '') {
-  const errorMsg = 'Supabase Anon Key is missing or invalid. Please ensure NEXT_PUBLIC_SUPABASE_ANON_KEY environment variable is set correctly in your .env.local file.';
+if (!supabaseAnonKeyFromEnv || typeof supabaseAnonKeyFromEnv !== 'string' || supabaseAnonKeyFromEnv.trim() === '') {
+  const errorMsg = 'CRITICAL: NEXT_PUBLIC_SUPABASE_ANON_KEY environment variable is missing or empty. Please ensure it is set correctly in your .env.local file. It should be your Supabase Anon (public) Key.';
   console.error("***************************************************************************");
-  console.error("FATAL ERROR INITIALIZING SUPABASE CLIENT (env var check):");
-  console.error(errorMsg);
-  console.error(`Current NEXT_PUBLIC_SUPABASE_ANON_KEY type: ${typeof supabaseAnonKey}`);
+  console.error("SUPABASE CLIENT INIT ERROR:", errorMsg);
   console.error("***************************************************************************");
-  if (!initializationError) { // Only set if not already set by URL error
+  if (!initializationError) { 
     initializationError = new Error(errorMsg);
   }
 }
 
 if (!initializationError) {
   try {
-    console.log(`Attempting to create Supabase client with URL: '${supabaseUrl}' and Anon Key starting with: '${supabaseAnonKey?.substring(0, 5)}...'`);
-    supabaseInstance = createClient(supabaseUrl!, supabaseAnonKey!);
-    console.log("Supabase client initialized successfully via createClient.");
+    console.log(`Supabase Client: Attempting to initialize with URL: '${supabaseUrlFromEnv}' and Anon Key starting with: '${supabaseAnonKeyFromEnv?.substring(0, 10)}...'`);
+    supabaseInstance = createClient(supabaseUrlFromEnv!, supabaseAnonKeyFromEnv!);
+    console.log("Supabase Client: Successfully initialized via createClient.");
   } catch (e: any) {
-    const errorMsg = `Error during Supabase createClient call: ${e.message}. This likely means the URL or Key is still malformed or invalid despite initial checks.`;
+    const errorMsg = `Supabase Client: Error during createClient call: ${e.message}. This likely means the URL or Key is still malformed or invalid despite initial checks.`;
     console.error("***************************************************************************");
-    console.error("FATAL ERROR INITIALIZING SUPABASE CLIENT (during createClient call):");
-    console.error(errorMsg);
-    console.error("URL used:", supabaseUrl);
-    console.error("Anon Key used starts with:", supabaseAnonKey?.substring(0, 5) + "...");
+    console.error("SUPABASE CLIENT INIT ERROR (during createClient call):", errorMsg);
+    console.error("URL used:", supabaseUrlFromEnv);
+    console.error("Anon Key used (first 10 chars):", supabaseAnonKeyFromEnv?.substring(0, 10) + "...");
     console.error("Original error:", e);
     console.error("***************************************************************************");
     initializationError = new Error(errorMsg);
   }
 } else {
-    console.error("Supabase client was NOT initialized due to errors in environment variables or URL format. See previous logs.");
+    console.error("Supabase Client: NOT initialized due to errors in environment variables or URL format. See previous critical logs.");
 }
 
 export const supabase = {
   get client(): SupabaseClient {
     if (initializationError) {
-      console.error("Attempted to access Supabase client, but initialization failed:", initializationError.message);
+      console.error("Supabase Client: Attempted to access client, but initialization previously failed:", initializationError.message);
       throw new Error(`Supabase client could not be initialized: ${initializationError.message}`);
     }
     if (!supabaseInstance) {
-      // This should ideally be caught by initializationError, but serves as a fallback.
-      const criticalError = "Supabase client instance is null and no initializationError was set. This is an unexpected state. Please check setup and env vars.";
+      const criticalError = "Supabase Client: Instance is null and no initializationError was set. This is an unexpected state. Please check setup and environment variables (NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY) in .env.local and restart the server.";
       console.error(criticalError);
       throw new Error(criticalError);
     }
