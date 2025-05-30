@@ -1,3 +1,4 @@
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -8,33 +9,33 @@ body {
 
 @layer base {
   :root {
-    --background: 225 67% 94%; /* #E8EAF6 Light Blue */
-    --foreground: 230 35% 15%; /* Darker Blue/Grey for text on light blue background */
+    --background: 0 0% 100%; /* White */
+    --foreground: 266 30% 20%; /* Very Dark Grape */
     
-    --card: 225 60% 97%; /* Lighter than background for cards */
-    --card-foreground: 230 35% 15%;
+    --card: 0 0% 100%; /* White */
+    --card-foreground: 266 30% 20%; /* Very Dark Grape */
     
-    --popover: 225 60% 97%;
-    --popover-foreground: 230 35% 15%;
+    --popover: 0 0% 100%; /* White */
+    --popover-foreground: 266 30% 20%; /* Very Dark Grape */
     
-    --primary: 231 48% 58%; /* #3F51B5 Deep Saturated Blue */
+    --primary: 266 40% 62%; /* Grape */
     --primary-foreground: 0 0% 100%; /* White */
     
-    --secondary: 230 50% 85%; /* Lighter blue */
-    --secondary-foreground: 230 35% 15%;
+    --secondary: 266 40% 92%; /* Very Light Grape */
+    --secondary-foreground: 266 40% 62%; /* Grape */
     
-    --muted: 225 40% 88%;
-    --muted-foreground: 225 30% 55%; /* Adjusted for better contrast on muted bg */
+    --muted: 266 40% 96%; /* Lighter Grape Tint */
+    --muted-foreground: 266 35% 55%; /* Muted Grape Text */
     
-    --accent: 266 40% 62%; /* #7E57C2 Vibrant Purple */
+    --accent: 266 40% 62%; /* Grape */
     --accent-foreground: 0 0% 100%; /* White */
     
     --destructive: 0 84.2% 60.2%; /* Default red */
-    --destructive-foreground: 0 0% 98%;
+    --destructive-foreground: 0 0% 98%; /* Default light text for destructive */
     
-    --border: 225 30% 80%;
-    --input: 225 40% 90%; /* Slightly lighter than border for input background */
-    --ring: 231 48% 58%; /* Primary color for focus rings */
+    --border: 266 40% 88%; /* Light Grape Border */
+    --input: 266 40% 98%; /* Very Light Grape Input Background */
+    --ring: 266 40% 62%; /* Grape */
     
     --chart-1: 12 76% 61%;
     --chart-2: 173 58% 39%;
@@ -44,48 +45,48 @@ body {
     
     --radius: 0.5rem;
 
-    /* ShadCN Sidebar variables - align with the theme */
-    --sidebar-background: 231 35% 30%; /* Darker Blue for sidebar background */
-    --sidebar-foreground: 225 60% 90%; /* Light text on dark sidebar */
+    /* ShadCN Sidebar variables - Light Theme */
+    --sidebar-background: 266 40% 25%; /* Dark Grape */
+    --sidebar-foreground: 266 30% 90%; /* Light Grape/Off-white */
     
-    --sidebar-primary: 225 67% 94%; /* Active item background - Light Blue like main bg */
-    --sidebar-primary-foreground: 231 35% 30%; /* Active item text - Dark Blue */
+    --sidebar-primary: 0 0% 100%; /* White (Active item background) */
+    --sidebar-primary-foreground: 266 40% 25%; /* Dark Grape (Active item text) */
     
-    --sidebar-accent: 231 38% 40%; /* Hover item background - slightly lighter than sidebar bg */
-    --sidebar-accent-foreground: 225 60% 90%; /* Hover item text */
+    --sidebar-accent: 266 40% 35%; /* Medium-Dark Grape (Hover item background) */
+    --sidebar-accent-foreground: 266 30% 90%; /* Light Grape/Off-white (Hover item text) */
     
-    --sidebar-border: 231 30% 25%; /* Border for sidebar elements */
-    --sidebar-ring: 225 67% 94%; /* Ring color, light blue */
+    --sidebar-border: 266 40% 20%; /* Very Dark Grape Border */
+    --sidebar-ring: 0 0% 100%; /* White */
   }
 
   .dark {
-    --background: 230 25% 18%; /* Dark Blue/Grey */
-    --foreground: 225 60% 90%; /* Light Blue/Grey for text */
+    --background: 266 10% 5%; /* Very Dark Grape/Almost Black */
+    --foreground: 266 30% 90%; /* Light Grape/Off-white Text */
     
-    --card: 230 25% 22%; /* Slightly lighter dark blue/grey */
-    --card-foreground: 225 60% 90%;
+    --card: 266 10% 8%; /* Slightly Lighter Dark Grape */
+    --card-foreground: 266 30% 90%; /* Light Grape/Off-white Text */
     
-    --popover: 230 25% 22%;
-    --popover-foreground: 225 60% 90%;
+    --popover: 266 10% 8%; /* Slightly Lighter Dark Grape */
+    --popover-foreground: 266 30% 90%; /* Light Grape/Off-white Text */
     
-    --primary: 231 48% 58%; /* #3F51B5 - keep same for branding */
-    --primary-foreground: 0 0% 100%;
+    --primary: 266 40% 62%; /* Grape */
+    --primary-foreground: 0 0% 100%; /* White */
     
-    --secondary: 230 30% 35%; /* Darker muted blue */
-    --secondary-foreground: 225 60% 90%;
+    --secondary: 266 30% 20%; /* Dark Muted Grape */
+    --secondary-foreground: 266 40% 80%; /* Lighter Grape Text */
     
-    --muted: 230 25% 30%;
-    --muted-foreground: 225 30% 70%;
+    --muted: 266 20% 15%; /* Darker Muted Grape */
+    --muted-foreground: 266 30% 70%; /* Muted Lighter Grape Text */
     
-    --accent: 266 40% 62%; /* #7E57C2 - keep same for branding */
-    --accent-foreground: 0 0% 100%;
+    --accent: 266 40% 62%; /* Grape */
+    --accent-foreground: 0 0% 100%; /* White */
     
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 0 0% 98%;
+    --destructive: 0 62.8% 30.6%; /* Default dark red */
+    --destructive-foreground: 0 0% 98%; /* Default light text for destructive */
     
-    --border: 230 20% 30%;
-    --input: 230 20% 28%;
-    --ring: 231 48% 58%;
+    --border: 266 20% 12%; /* Dark Grape Border */
+    --input: 266 15% 10%; /* Very Dark Grape Input Background */
+    --ring: 266 40% 62%; /* Grape */
     
     --chart-1: 220 70% 50%;
     --chart-2: 160 60% 45%;
@@ -94,17 +95,17 @@ body {
     --chart-5: 340 75% 55%;
 
     /* Dark ShadCN Sidebar variables */
-    --sidebar-background: 231 25% 15%; /* Even darker for dark mode sidebar */
-    --sidebar-foreground: 225 50% 85%;
+    --sidebar-background: 266 20% 8%; /* Very Dark Grape, almost black */
+    --sidebar-foreground: 266 35% 85%; /* Light Grape/Off-white */
     
-    --sidebar-primary: 231 48% 58%; /* Primary color for active items */
-    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-primary: 266 40% 62%; /* Grape (Active item background) */
+    --sidebar-primary-foreground: 0 0% 100%; /* White (Active item text) */
     
-    --sidebar-accent: 231 30% 25%;
-    --sidebar-accent-foreground: 225 50% 85%;
+    --sidebar-accent: 266 30% 20%; /* Darker Grape (Hover item background) */
+    --sidebar-accent-foreground: 266 35% 85%; /* Light Grape/Off-white (Hover item text) */
     
-    --sidebar-border: 231 20% 20%;
-    --sidebar-ring: 231 48% 58%;
+    --sidebar-border: 266 20% 5%; /* Near Black Grape Border */
+    --sidebar-ring: 266 40% 62%; /* Grape */
   }
 }
 
@@ -148,3 +149,4 @@ body {
     border-color: #ccc !important; /* Light grey border */
   }
 }
+    
