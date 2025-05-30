@@ -5,7 +5,7 @@ import React from 'react';
 import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
 import { cn } from '@/lib/utils';
-import { LayoutDashboard, Package, ShoppingCart, Users, Barcode, Bot, Settings, FileText, Archive, Tag, ArrowRightLeft, Landmark, UserCog } from 'lucide-react';
+import { LayoutDashboard, Package, ShoppingCart, Users, Barcode, Bot, Settings, FileText, Tag, ArrowRightLeft, Landmark, UserCog } from 'lucide-react';
 import { SidebarMenu, SidebarMenuItem, SidebarMenuButton, SidebarMenuSub, SidebarMenuSubItem, SidebarMenuSubButton } from '@/components/ui/sidebar';
 
 const mainNavItems = [
@@ -31,7 +31,6 @@ const settingsNavItems = [
 export function SidebarNav() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const currentUrlCategory = searchParams.get('category');
 
   const isSettingsPathActive = pathname.startsWith('/settings');
 
@@ -57,7 +56,7 @@ export function SidebarNav() {
 
       {/* Settings Menu */}
       <SidebarMenuItem>
-        <Link href="/settings/invoice" passHref legacyBehavior>
+        <Link href="/settings" passHref legacyBehavior> {/* Main Settings link now points to /settings */}
           <SidebarMenuButton
             asChild
             isSub // Keep isSub for submenu toggle behavior
@@ -71,7 +70,8 @@ export function SidebarNav() {
             </a>
           </SidebarMenuButton>
         </Link>
-        <SidebarMenuSub className={cn(!isSettingsPathActive && "hidden")}>
+        {/* Submenu is shown if on any /settings/* path */}
+        <SidebarMenuSub className={cn(!isSettingsPathActive && "hidden")}> 
           {settingsNavItems.map((subItem) => (
             <SidebarMenuSubItem key={subItem.href}>
               <Link href={subItem.href} passHref legacyBehavior>
