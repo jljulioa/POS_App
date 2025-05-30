@@ -34,6 +34,8 @@ const SalesTicketCreateSchema = z.object({
   name: z.string().min(1, { message: "Ticket name cannot be empty." }),
   cart_items: z.array(SaleItemSchema).optional().default([]),
   status: z.enum(['Active', 'On Hold', 'Pending Payment']),
+  customer_id: z.string().optional().nullable(),
+  customer_name: z.string().optional().nullable(),
 });
 
 // Interface for SalesTicket matching the DB schema
@@ -42,6 +44,8 @@ export interface SalesTicketDB {
   name: string;
   cart_items: SaleItemForTicket[]; 
   status: 'Active' | 'On Hold' | 'Pending Payment';
+  customer_id?: string | null;
+  customer_name?: string | null;
   created_at: string;
   last_updated_at: string;
 }
@@ -78,6 +82,8 @@ const parseSalesTicketFromDB = (dbTicket: any): SalesTicketDB => {
     name: String(dbTicket.name || 'Unnamed Ticket'),
     cart_items: parsedCartItems,
     status: dbTicket.status || 'Active',
+    customer_id: dbTicket.customer_id || null,
+    customer_name: dbTicket.customer_name || null,
     created_at: new Date(dbTicket.created_at || Date.now()).toISOString(),
     last_updated_at: new Date(dbTicket.last_updated_at || Date.now()).toISOString(),
   };
@@ -86,7 +92,7 @@ const parseSalesTicketFromDB = (dbTicket: any): SalesTicketDB => {
 // GET handler to fetch all sales tickets
 export async function GET(request: NextRequest) {
   try {
-    const dbTickets = await query('SELECT id, name, cart_items, status, created_at, last_updated_at FROM SalesTickets ORDER BY last_updated_at DESC');
+    const dbTickets = await query('SELECT id, name, cart_items, status, customer_id, customer_name, created_at, last_updated_at FROM SalesTickets ORDER BY last_updated_at DESC');
     const tickets: SalesTicketDB[] = dbTickets.map(parseSalesTicketFromDB);
     return NextResponse.json(tickets);
   } catch (error) {
@@ -106,15 +112,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ message: 'Invalid sales ticket data', errors: validation.error.format() }, { status: 400 });
     }
 
-    const { name, cart_items, status } = validation.data;
+    const { name, cart_items, status, customer_id, customer_name } = validation.data;
     const id = `T${Date.now()}${Math.random().toString(36).substring(2, 7)}`; 
 
     const sql = `
-      INSERT INTO SalesTickets (id, name, cart_items, status)
-      VALUES ($1, $2, $3, $4)
+      INSERT INTO SalesTickets (id, name, cart_items, status, customer_id, customer_name)
+      VALUES ($1, $2, $3, $4, $5, $6)
       RETURNING *
     `;
-    const params = [id, name, JSON.stringify(cart_items || []), status];
+    const params = [id, name, JSON.stringify(cart_items || []), status, customer_id || null, customer_name || null];
     
     const result = await query(sql, params);
     if (result.length === 0) {

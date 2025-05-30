@@ -21,6 +21,8 @@ export interface SalesTicketDB {
   name: string;
   cart_items: SaleItemForTicket[];
   status: 'Active' | 'On Hold' | 'Pending Payment';
+  customer_id?: string | null;
+  customer_name?: string | null;
   created_at: string;
   last_updated_at: string;
 }
@@ -40,6 +42,8 @@ const SalesTicketUpdateSchema = z.object({
   name: z.string().min(1, { message: "Ticket name cannot be empty." }).optional(),
   cart_items: z.array(SaleItemSchema).optional(), 
   status: z.enum(['Active', 'On Hold', 'Pending Payment']).optional(),
+  customer_id: z.string().nullable().optional(),
+  customer_name: z.string().nullable().optional(),
 });
 
 const parseSalesTicketFromDB = (dbTicket: any): SalesTicketDB => {
@@ -74,6 +78,8 @@ const parseSalesTicketFromDB = (dbTicket: any): SalesTicketDB => {
     name: String(dbTicket.name || 'Unnamed Ticket'),
     cart_items: parsedCartItems,
     status: dbTicket.status || 'Active',
+    customer_id: dbTicket.customer_id || null,
+    customer_name: dbTicket.customer_name || null,
     created_at: new Date(dbTicket.created_at || Date.now()).toISOString(),
     last_updated_at: new Date(dbTicket.last_updated_at || Date.now()).toISOString(),
   };
@@ -111,31 +117,37 @@ export async function PUT(request: NextRequest, { params }: { params: { ticketId
     if (currentTicketResult.length === 0) {
       return NextResponse.json({ message: 'Sales ticket not found for update' }, { status: 404 });
     }
-    const currentTicket = parseSalesTicketFromDB(currentTicketResult[0]);
+    // const currentTicket = parseSalesTicketFromDB(currentTicketResult[0]); // Not strictly needed if we update all provided fields
 
-    const { name, cart_items, status } = validation.data;
+    const updateFields = [];
+    const queryParams = [];
+    let paramIndex = 1;
 
-    const updatedName = name ?? currentTicket.name;
-    const updatedCartItems = cart_items ?? currentTicket.cart_items; 
-    const updatedStatus = status ?? currentTicket.status;
+    const addParam = (value: any) => {
+        queryParams.push(value);
+        return `$${paramIndex++}`;
+    };
+
+    const { name, cart_items, status, customer_id, customer_name } = validation.data;
+
+    if (name !== undefined) updateFields.push(`name = ${addParam(name)}`);
+    if (cart_items !== undefined) updateFields.push(`cart_items = ${addParam(JSON.stringify(cart_items))}`);
+    if (status !== undefined) updateFields.push(`status = ${addParam(status)}`);
+    if (customer_id !== undefined) updateFields.push(`customer_id = ${addParam(customer_id)}`);
+    if (customer_name !== undefined) updateFields.push(`customer_name = ${addParam(customer_name)}`);
     
+    if (updateFields.length === 0) {
+        return NextResponse.json({ message: "No fields to update provided." }, { status: 400 });
+    }
+    
+    updateFields.push(`last_updated_at = CURRENT_TIMESTAMP`); // Always update last_updated_at
+
     const sql = `
       UPDATE SalesTickets
-      SET name = $1, cart_items = $2, status = $3, last_updated_at = CURRENT_TIMESTAMP
-      WHERE id = $4
+      SET ${updateFields.join(', ')}
+      WHERE id = ${addParam(ticketId)}
       RETURNING *
     `;
-    // Ensure cart_items are stringified correctly, including all new fields
-    const queryParams = [updatedName, JSON.stringify(updatedCartItems.map(item => ({
-        productId: item.productId,
-        productName: item.productName,
-        quantity: item.quantity,
-        unitPrice: item.unitPrice,
-        originalUnitPrice: item.originalUnitPrice,
-        costPrice: item.costPrice,
-        discountPercentage: item.discountPercentage,
-        totalPrice: item.totalPrice,
-    }))), updatedStatus, ticketId];
 
     const result = await query(sql, queryParams);
     if (result.length === 0) {

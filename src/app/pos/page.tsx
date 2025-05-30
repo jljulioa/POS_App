@@ -8,10 +8,10 @@ import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/componen
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
-import type { Product as ProductType, Sale } from '@/lib/mockData';
+import type { Product as ProductType, Sale, Customer } from '@/lib/mockData';
 import type { SalesTicketDB, SaleItemForTicket } from '@/app/api/sales-tickets/route';
 import Image from 'next/image';
-import { Search, X, Plus, Minus, Save, ShoppingCart, CreditCard, DollarSign, PlusSquare, ListFilter, Loader2, AlertTriangle, Ticket } from 'lucide-react';
+import { Search, X, Plus, Minus, Save, ShoppingCart, CreditCard, DollarSign, PlusSquare, ListFilter, Loader2, AlertTriangle, Ticket, UserPlus, UserSearch, UserX } from 'lucide-react';
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { Badge } from '@/components/ui/badge';
@@ -26,6 +26,7 @@ import {
 import { cn } from '@/lib/utils';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/hooks/useAuth';
+import Link from 'next/link'; // Import Link
 
 // API fetch function for products
 const fetchProducts = async (): Promise<ProductType[]> => {
@@ -33,6 +34,16 @@ const fetchProducts = async (): Promise<ProductType[]> => {
   if (!res.ok) {
     const errorData = await res.json().catch(() => ({ message: 'Network response was not ok and failed to parse error JSON.' }));
     throw new Error(errorData.message || 'Network response was not ok');
+  }
+  return res.json();
+};
+
+// API fetch function for customers
+const fetchCustomers = async (): Promise<Customer[]> => {
+  const res = await fetch('/api/customers');
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({ message: 'Failed to fetch customers' }));
+    throw new Error(errorData.message || 'Failed to fetch customers');
   }
   return res.json();
 };
@@ -58,7 +69,7 @@ const fetchSalesTickets = async (): Promise<SalesTicketDB[]> => {
   return res.json();
 };
 
-const createSalesTicketAPI = async (ticketData: Pick<SalesTicketDB, 'name' | 'cart_items' | 'status'>): Promise<SalesTicketDB> => {
+const createSalesTicketAPI = async (ticketData: Pick<SalesTicketDB, 'name' | 'cart_items' | 'status' | 'customer_id' | 'customer_name'>): Promise<SalesTicketDB> => {
   const res = await fetch('/api/sales-tickets', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -71,7 +82,7 @@ const createSalesTicketAPI = async (ticketData: Pick<SalesTicketDB, 'name' | 'ca
   return res.json();
 };
 
-const updateSalesTicketAPI = async ({ ticketId, data }: { ticketId: string; data: Partial<Pick<SalesTicketDB, 'name' | 'cart_items' | 'status'>> }): Promise<SalesTicketDB> => {
+const updateSalesTicketAPI = async ({ ticketId, data }: { ticketId: string; data: Partial<Pick<SalesTicketDB, 'name' | 'cart_items' | 'status' | 'customer_id' | 'customer_name'>> }): Promise<SalesTicketDB> => {
   const res = await fetch(`/api/sales-tickets/${ticketId}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
@@ -98,13 +109,22 @@ export default function POSPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const { appUser, supabaseUser } = useAuth(); // Get appUser and supabaseUser
+  const { appUser, supabaseUser } = useAuth(); 
   const [activeTicketId, setActiveTicketId] = useState<string | null>(null);
   const finalizedTicketIdRef = useRef<string | null>(null); 
   
+  const [customerSearchTerm, setCustomerSearchTerm] = useState('');
+  const [showCustomerSearchResults, setShowCustomerSearchResults] = useState(false);
+
+
   const { data: products = [], isLoading: isLoadingProducts, error: productsError, isError: isProductsError } = useQuery<ProductType[], Error>({
     queryKey: ['products'],
     queryFn: fetchProducts,
+  });
+
+  const { data: customers = [], isLoading: isLoadingCustomers, error: customersError, isError: isCustomersError } = useQuery<Customer[], Error>({
+    queryKey: ['customers'],
+    queryFn: fetchCustomers,
   });
 
   const { data: salesTickets = [], isLoading: isLoadingSalesTickets, refetch: refetchSalesTickets } = useQuery<SalesTicketDB[], Error>({
@@ -112,7 +132,7 @@ export default function POSPage() {
     queryFn: fetchSalesTickets,
   });
   
-  const createTicketMutation = useMutation<SalesTicketDB, Error, Pick<SalesTicketDB, 'name' | 'cart_items' | 'status'>>({
+  const createTicketMutation = useMutation<SalesTicketDB, Error, Pick<SalesTicketDB, 'name' | 'cart_items' | 'status' | 'customer_id' | 'customer_name'>>({
     mutationFn: createSalesTicketAPI,
     onSuccess: (newTicket) => {
       queryClient.setQueryData(['salesTickets'], (oldData: SalesTicketDB[] = []) => [...oldData, newTicket] );
@@ -143,8 +163,11 @@ export default function POSPage() {
       name: newTicketName,
       cart_items: [],
       status: 'Active',
+      customer_id: null,
+      customer_name: null,
     });
     setSearchTerm('');
+    setCustomerSearchTerm('');
   }, [queryClient, createTicketMutation]);
 
 
@@ -165,7 +188,7 @@ export default function POSPage() {
   }, [salesTickets, isLoadingSalesTickets, activeTicketId, createTicketMutation.isPending]); 
 
 
-  const updateTicketMutation = useMutation<SalesTicketDB, Error, { ticketId: string; data: Partial<Pick<SalesTicketDB, 'name' | 'cart_items' | 'status'>> }>({
+  const updateTicketMutation = useMutation<SalesTicketDB, Error, { ticketId: string; data: Partial<Pick<SalesTicketDB, 'name' | 'cart_items' | 'status' | 'customer_id' | 'customer_name'>> }>({
     mutationFn: updateSalesTicketAPI,
     onSuccess: (updatedTicket) => {
       queryClient.setQueryData(['salesTickets'], (oldData: SalesTicketDB[] | undefined) =>
@@ -202,6 +225,7 @@ export default function POSPage() {
         }
       });
       setSearchTerm(''); 
+      setCustomerSearchTerm('');
     },
     onError: (error, variables_ticketIdAttempted) => {
       toast({ variant: 'destructive', title: 'Error Closing Ticket', description: error.message });
@@ -211,7 +235,7 @@ export default function POSPage() {
     },
   });
 
-  const searchResults = useMemo(() => {
+  const productSearchResults = useMemo(() => {
     if (!searchTerm.trim() || isLoadingProducts || isProductsError) return [];
     const termLower = searchTerm.toLowerCase();
     return products.filter(product =>
@@ -222,9 +246,41 @@ export default function POSPage() {
     ).slice(0, 10);
   }, [searchTerm, products, isLoadingProducts, isProductsError]);
 
+  const customerSearchResults = useMemo(() => {
+    if (!customerSearchTerm.trim() || isLoadingCustomers || isCustomersError) return [];
+    const termLower = customerSearchTerm.toLowerCase();
+    return customers.filter(customer =>
+      customer.name.toLowerCase().includes(termLower) ||
+      (customer.identificationNumber && customer.identificationNumber.toLowerCase().includes(termLower)) ||
+      (customer.email && customer.email.toLowerCase().includes(termLower))
+    ).slice(0, 5);
+  }, [customerSearchTerm, customers, isLoadingCustomers, isCustomersError]);
+
   const activeTicket = useMemo(() => {
     return salesTickets?.find(ticket => ticket.id === activeTicketId);
   }, [salesTickets, activeTicketId]);
+
+  const handleSelectCustomer = (customer: Customer) => {
+    if (!activeTicket) return;
+    updateTicketMutation.mutate({ 
+      ticketId: activeTicket.id, 
+      data: { 
+        customer_id: customer.identificationNumber || customer.id, // Prefer identificationNumber
+        customer_name: customer.name 
+      } 
+    });
+    setCustomerSearchTerm('');
+    setShowCustomerSearchResults(false);
+  };
+
+  const handleClearCustomer = () => {
+    if (!activeTicket) return;
+    updateTicketMutation.mutate({
+      ticketId: activeTicket.id,
+      data: { customer_id: null, customer_name: null }
+    });
+  };
+
 
   const addToCart = useCallback((productToAdd: ProductType) => {
     if (!activeTicket) return;
@@ -382,6 +438,7 @@ export default function POSPage() {
   const switchTicket = (ticketId: string) => {
     setActiveTicketId(ticketId);
     setSearchTerm('');
+    setCustomerSearchTerm('');
   };
 
   const handleCloseTicket = (ticketId: string) => {
@@ -445,6 +502,8 @@ export default function POSPage() {
           totalPrice: Number(item.totalPrice) || 0, 
       })),
       totalAmount: cartTotal,
+      customerId: activeTicket.customer_id || null,
+      customerName: activeTicket.customer_name || null,
       paymentMethod: paymentMethod,
       cashierId: currentCashierName, 
     };
@@ -462,7 +521,7 @@ export default function POSPage() {
 
   const isProcessingAnyTicketAction = createTicketMutation.isPending || updateTicketMutation.isPending || deleteTicketMutation.isPending;
   const isProcessingSale = saleApiMutation.isPending;
-  const isCurrentlyLoadingData = isLoadingSalesTickets || isLoadingProducts;
+  const isCurrentlyLoadingData = isLoadingSalesTickets || isLoadingProducts || isLoadingCustomers;
 
 
   if (isCurrentlyLoadingData && (!salesTickets || salesTickets.length === 0) && !createTicketMutation.isPending && !activeTicketId ) {
@@ -559,6 +618,50 @@ export default function POSPage() {
         <div className="flex flex-col md:flex-row gap-4 sm:gap-6 h-[calc(100vh-4rem-3rem-10rem)]"> 
           <Card className="w-full md:w-2/5 flex flex-col shadow-lg">
             <CardHeader className="p-4 sm:p-6">
+              <CardTitle className="text-base sm:text-lg mb-2">Customer</CardTitle>
+              <div className="relative">
+                <UserSearch className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  type="text"
+                  placeholder="Search Customer (Name/ID)..."
+                  value={customerSearchTerm}
+                  onChange={(e) => {setCustomerSearchTerm(e.target.value); setShowCustomerSearchResults(true);}}
+                  onBlur={() => setTimeout(() => setShowCustomerSearchResults(false), 150)} // Delay hide to allow click on results
+                  onFocus={() => setShowCustomerSearchResults(true)}
+                  className="pl-8 py-2 text-sm sm:text-base"
+                  disabled={isLoadingCustomers || isProcessingAnyTicketAction || isProcessingSale}
+                />
+                {showCustomerSearchResults && customerSearchResults.length > 0 && (
+                  <ScrollArea className="absolute z-20 w-full bg-background border rounded-md shadow-lg max-h-48 mt-1">
+                    {customerSearchResults.map(cust => (
+                      <div key={cust.id}
+                           onClick={() => handleSelectCustomer(cust)}
+                           className="p-2 hover:bg-accent cursor-pointer text-sm">
+                        {cust.name} ({cust.identificationNumber || 'N/A'})
+                      </div>
+                    ))}
+                  </ScrollArea>
+                )}
+              </div>
+              {activeTicket.customer_name && (
+                <div className="mt-2 p-2 border rounded-md bg-muted/50 text-sm">
+                  <div className="flex justify-between items-center">
+                    <div>
+                      <span className="font-semibold">{activeTicket.customer_name}</span>
+                      {activeTicket.customer_id && <span className="text-xs text-muted-foreground ml-1"> (ID: {activeTicket.customer_id})</span>}
+                    </div>
+                    <Button variant="ghost" size="icon" className="h-6 w-6 text-destructive" onClick={handleClearCustomer} disabled={isProcessingAnyTicketAction || isProcessingSale}>
+                      <UserX className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              )}
+               <Button variant="outline" size="sm" asChild className="mt-2 w-full">
+                  <Link href="/customers/add" target="_blank">
+                    <UserPlus className="mr-2 h-4 w-4" /> Add New Customer
+                  </Link>
+                </Button>
+              <Separator className="my-3"/>
               <CardTitle className="text-base sm:text-lg">Product Search</CardTitle>
               <div className="relative mt-2">
                 <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -586,9 +689,9 @@ export default function POSPage() {
                     Error loading products: {productsError?.message}
                   </div>
                 )}
-                {!isLoadingProducts && !isProductsError && searchResults.length > 0 && (
+                {!isLoadingProducts && !isProductsError && productSearchResults.length > 0 && (
                   <ul className="space-y-2">
-                    {searchResults.map(product => (
+                    {productSearchResults.map(product => (
                       <li key={product.id} className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-2 sm:p-3 rounded-md border bg-card hover:bg-muted transition-colors">
                         <div className="flex items-center gap-2 sm:gap-3 flex-grow mb-2 sm:mb-0">
                           <Image src={product.imageUrl || `https://placehold.co/40x40.png?text=${product.name.substring(0,2)}`} alt={product.name} width={40} height={40} className="rounded-sm object-cover" data-ai-hint={product.dataAiHint || "motorcycle part"}/>
@@ -604,7 +707,7 @@ export default function POSPage() {
                     ))}
                   </ul>
                 )}
-                {!isLoadingProducts && !isProductsError && searchTerm && searchResults.length === 0 && (
+                {!isLoadingProducts && !isProductsError && searchTerm && productSearchResults.length === 0 && (
                   <p className="text-center text-muted-foreground py-4 text-sm">No products found for "{searchTerm}".</p>
                 )}
                 {!isLoadingProducts && !isProductsError && !searchTerm && (
