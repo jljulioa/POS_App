@@ -5,7 +5,7 @@ import React from 'react';
 import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
 import { cn } from '@/lib/utils';
-import { LayoutDashboard, Package, ShoppingCart, Users, Barcode, Bot, Settings, FileText, Tag, ArrowRightLeft, Landmark, UserCog } from 'lucide-react';
+import { LayoutDashboard, Package, ShoppingCart, Users, Barcode, Bot, Settings, FileText, Tag, ArrowRightLeft, Landmark, UserCog, Archive } from 'lucide-react';
 import { SidebarMenu, SidebarMenuItem, SidebarMenuButton, SidebarMenuSub, SidebarMenuSubItem, SidebarMenuSubButton } from '@/components/ui/sidebar';
 
 const mainNavItems = [
@@ -23,16 +23,24 @@ const mainNavItems = [
   { href: '/users', label: 'Manage Users', icon: UserCog },
 ];
 
-const settingsNavItems = [
-  { href: '/settings/invoice', label: 'Invoice', icon: FileText },
-  // Add other settings sub-items here if needed
+// Example categories - in a real app, these might be fetched or configured
+const exampleCategories = [
+  { name: "Engine Parts", icon: Settings }, // Using Settings as a generic icon
+  { name: "Lubricants", icon: FileText }, // Example icon
+  { name: "Brakes", icon: Package }, // Example icon
+  { name: "Riding Gear", icon: Users }, // Example icon
+  { name: "Filters", icon: Archive },
+  { name: "Electrical", icon: Barcode},
 ];
+
 
 export function SidebarNav() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const currentCategoryFilter = searchParams.get('category');
 
+  const isInventoryPathActive = pathname === '/inventory';
+  const isCategoriesPathActive = pathname.startsWith('/categories');
   const isSettingsPathActive = pathname.startsWith('/settings');
 
   return (
@@ -60,11 +68,10 @@ export function SidebarNav() {
 
       {/* Settings Menu */}
       <SidebarMenuItem>
-        <Link href="/settings"> {/* Use modern Link behavior: no legacyBehavior, no passHref */}
+        <Link href="/settings"> {/* Main Settings link now points to /settings */}
           <SidebarMenuButton
-            // No asChild: SidebarMenuButton will render a <button>
-            isSub // For submenu toggle behavior
-            isActive={isSettingsPathActive && !currentCategoryFilter} // Active if on /settings but not a sub-category link
+            // No asChild, Link renders the <a>, SidebarMenuButton renders its content
+            isActive={isSettingsPathActive} // Active if on /settings or any sub-settings page
             className="justify-start"
             tooltip={{ children: 'Settings', side: 'right', align: 'center' }}
           >
@@ -72,24 +79,7 @@ export function SidebarNav() {
             <span className="group-data-[collapsible=icon]:hidden">Settings</span>
           </SidebarMenuButton>
         </Link>
-        {/* Submenu is shown if on any /settings/* path */}
-        <SidebarMenuSub className={cn(!isSettingsPathActive && "hidden")}>
-          {settingsNavItems.map((subItem) => (
-            <SidebarMenuSubItem key={subItem.href}>
-              <Link href={subItem.href} passHref legacyBehavior>
-                <SidebarMenuSubButton
-                  asChild
-                  isActive={pathname === subItem.href}
-                >
-                  <a>
-                    <subItem.icon className="mr-2 h-4 w-4" />
-                    {subItem.label}
-                  </a>
-                </SidebarMenuSubButton>
-              </Link>
-            </SidebarMenuSubItem>
-          ))}
-        </SidebarMenuSub>
+        {/* No Submenu here anymore */}
       </SidebarMenuItem>
     </SidebarMenu>
   );
