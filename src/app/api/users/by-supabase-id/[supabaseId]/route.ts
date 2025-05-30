@@ -8,7 +8,6 @@ const parseUserFromDB = (dbUser: any): User | null => {
   if (!dbUser) return null;
   return {
     id: parseInt(dbUser.id, 10),
-    username: dbUser.username,
     email: dbUser.email,
     role: dbUser.role as UserRole,
     full_name: dbUser.full_name || null,
@@ -30,7 +29,7 @@ export async function GET(request: NextRequest, { params }: { params: { supabase
   try {
     // Select all fields EXCEPT password_hash for security
     const result = await query(
-      'SELECT id, username, email, role, full_name, is_active, created_at, updated_at, supabase_user_id FROM Users WHERE supabase_user_id = $1 AND is_active = TRUE',
+      'SELECT id, email, role, full_name, is_active, created_at, updated_at, supabase_user_id FROM "users" WHERE supabase_user_id = $1 AND is_active = TRUE',
       [supabaseId]
     );
 

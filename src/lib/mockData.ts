@@ -115,7 +115,6 @@ export type UserRole = 'admin' | 'cashier';
 
 export interface User {
   id: number; // From your PostgreSQL Users table
-  username: string;
   email: string;
   // password_hash is intentionally omitted for client-side type
   role: UserRole;
@@ -125,3 +124,4 @@ export interface User {
   updated_at?: string; // ISO string
   supabase_user_id?: string | null; // To link with Supabase auth.users.id
 }
+

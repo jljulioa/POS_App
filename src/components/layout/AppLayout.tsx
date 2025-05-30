@@ -36,9 +36,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
      return <>{children}</>;
   }
 
-  const userDisplayName = appUser?.full_name || appUser?.username || supabaseUser?.email || "User";
+  const userDisplayName = appUser?.full_name || supabaseUser?.email || "User";
   const userEmail = supabaseUser?.email || (appUser?.email || 'user@motofox.com');
-  const userAvatarFallback = userDisplayName.substring(0,2).toUpperCase() || "MF";
+  const userAvatarFallback = (appUser?.full_name?.substring(0,2) || supabaseUser?.email?.substring(0,2) || "MF").toUpperCase();
 
   return (
     <SidebarProvider defaultOpen>
