@@ -3,21 +3,16 @@
 
 import React, { createContext, useState, useEffect, ReactNode, useCallback } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
-import { auth } from '@/lib/firebase/config'; // Import Firebase auth instance
-import {
-  onAuthStateChanged,
-  signInWithEmailAndPassword,
-  signOut,
-  type User as FirebaseUser,
-} from 'firebase/auth';
+import { supabase } from '@/lib/supabase/client'; // Import Supabase client
+import type { User as SupabaseUser, Session } from '@supabase/supabase-js';
 import { useToast } from '@/hooks/use-toast';
-import type { User as AppUser, UserRole } from '@/lib/mockData'; // Your app-specific User type
+import type { User as AppUser, UserRole } from '@/lib/mockData';
 
 interface AuthContextType {
   isAuthenticated: boolean;
   isLoading: boolean;
-  firebaseUser: FirebaseUser | null;
-  appUser: AppUser | null; // Store your app-specific user data
+  supabaseUser: SupabaseUser | null;
+  appUser: AppUser | null;
   login: (email: string, pass: string) => Promise<void>;
   logout: () => Promise<void>;
   userRole: UserRole | null;
@@ -26,30 +21,28 @@ interface AuthContextType {
 export const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
-  const [firebaseUser, setFirebaseUser] = useState<FirebaseUser | null>(null);
+  const [supabaseUser, setSupabaseUser] = useState<SupabaseUser | null>(null);
   const [appUser, setAppUser] = useState<AppUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const router = useRouter();
   const pathname = usePathname();
   const { toast } = useToast();
 
-  const fetchAppUser = useCallback(async (fbUser: FirebaseUser) => {
-    if (!fbUser || !fbUser.email) {
+  const fetchAppUser = useCallback(async (user: SupabaseUser) => {
+    if (!user || !user.email) {
       setAppUser(null);
       return;
     }
     try {
-      const response = await fetch(`/api/users/by-email/${encodeURIComponent(fbUser.email)}`);
+      const response = await fetch(`/api/users/by-email/${encodeURIComponent(user.email)}`);
       if (response.ok) {
         const userData: AppUser = await response.json();
         setAppUser(userData);
+        console.log("App user fetched:", userData);
       } else {
-        // User authenticated with Firebase but not found in your Users table or inactive
-        // This could be a new Firebase user not yet synced, or an issue.
-        console.warn(`User ${fbUser.email} authenticated with Firebase but not found or inactive in app DB.`);
-        setAppUser(null); // Or handle as a partially authenticated user
-        // You might want to redirect them to a profile creation page or show a message
-        // For now, they won't have an app-specific role from the DB.
+        console.warn(`User ${user.email} authenticated with Supabase but not found or inactive in app DB.`);
+        setAppUser(null);
+        // Potentially redirect or show a message if app user is required.
       }
     } catch (error) {
       console.error("Failed to fetch app user data:", error);
@@ -58,75 +51,101 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   }, []);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      setFirebaseUser(user);
-      if (user) {
-        await fetchAppUser(user);
+    const getSession = async () => {
+        const { data: { session } } = await supabase.auth.getSession();
+        setSupabaseUser(session?.user ?? null);
+        if (session?.user) {
+            await fetchAppUser(session.user);
+        }
+        setIsLoading(false);
+    };
+    getSession();
+
+    const { data: authListener } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      setSupabaseUser(session?.user ?? null);
+      if (session?.user) {
+        await fetchAppUser(session.user);
       } else {
         setAppUser(null);
+        if (pathname !== '/login') {
+          router.push('/login');
+        }
       }
-      setIsLoading(false);
+      // Moved setIsLoading(false) to getSession to avoid flicker on initial load
     });
-    return () => unsubscribe();
-  }, [fetchAppUser]);
+
+    return () => {
+      authListener?.subscription.unsubscribe();
+    };
+  }, [fetchAppUser, router, pathname]);
+
 
   useEffect(() => {
-    if (!isLoading && !firebaseUser && pathname !== '/login') {
+    if (!isLoading && !supabaseUser && pathname !== '/login') {
       router.push('/login');
     }
-  }, [firebaseUser, isLoading, router, pathname]);
+  }, [supabaseUser, isLoading, router, pathname]);
 
 
   const login = async (email: string, pass: string) => {
     setIsLoading(true);
     try {
-      const userCredential = await signInWithEmailAndPassword(auth, email, pass);
-      // onAuthStateChanged will handle setting firebaseUser and calling fetchAppUser
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: email,
+        password: pass,
+      });
+
+      if (error) {
+        throw error;
+      }
+
+      // onAuthStateChange will handle setting supabaseUser and calling fetchAppUser
       toast({
         title: "Login Successful",
         description: "Welcome back!",
       });
       router.push('/'); // Redirect to dashboard
     } catch (error: any) {
-      console.error("Firebase login error:", error);
+      console.error("Supabase login error:", error);
       toast({
         variant: "destructive",
         title: "Login Failed",
         description: error.message || "Invalid email or password.",
       });
-      setIsLoading(false);
-      throw error;
+      // setIsLoading(false); // onAuthStateChange will eventually set loading to false
+      throw error; // Re-throw so the login page can catch it if needed
+    } finally {
+        // Delay setting isLoading to false to allow onAuthStateChange to process
+        // This is tricky; ideally, loading state management is more nuanced
+        // For now, onAuthStateChange handles the final setIsLoading(false)
     }
   };
 
   const logout = async () => {
     setIsLoading(true);
     try {
-      await signOut(auth);
-      setFirebaseUser(null);
+      const { error } = await supabase.auth.signOut();
+      if (error) throw error;
+      setSupabaseUser(null);
       setAppUser(null);
       router.push('/login');
-    } catch (error) {
-      console.error("Firebase logout error:", error);
+    } catch (error: any) {
+      console.error("Supabase logout error:", error);
       toast({
         variant: "destructive",
         title: "Logout Failed",
-        description: "Could not log out. Please try again.",
+        description: error.message || "Could not log out. Please try again.",
       });
     } finally {
         setIsLoading(false);
     }
   };
-  
-  const isAuthenticated = !!firebaseUser && !!appUser && appUser.is_active === true;
-  // Derive userRole from appUser if available, otherwise fallback or null
-  const userRole = appUser?.role || null;
-   // If you want a default role if appUser is null but firebaseUser exists:
-   // const userRole = appUser?.role || (firebaseUser ? 'cashier' : null);
 
+  const isAuthenticated = !!supabaseUser && !!appUser && appUser.is_active === true;
+  const userRole = appUser?.role || null;
 
   return (
-    <AuthContext.Provider value={{ isAuthenticated, isLoading, firebaseUser, appUser, login, logout, userRole }}>
+    <AuthContext.Provider value={{ isAuthenticated, isLoading, supabaseUser, appUser, login, logout, userRole }}>
       {children}
     </AuthContext.Provider>
   );

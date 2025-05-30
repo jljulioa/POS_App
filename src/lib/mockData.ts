@@ -4,17 +4,17 @@ export interface Product {
   name: string;
   code: string;
   reference: string;
-  barcode?: string | null; // Allow null
+  barcode?: string | null;
   stock: number;
-  category: string; // This will be the category NAME fetched via JOIN
-  categoryId?: number; // This is the foreign key
+  category: string; // This is the category NAME (from ProductCategories.name)
+  categoryId?: number; // This is the foreign key (ProductCategories.id)
   brand: string;
   minStock: number;
   maxStock: number;
   cost: number;
   price: number;
-  imageUrl?: string | null; // Allow null
-  dataAiHint?: string | null; // Allow null
+  imageUrl?: string | null;
+  dataAiHint?: string | null;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -23,15 +23,15 @@ export interface SaleItem {
   productId: string;
   productName: string;
   quantity: number;
-  unitPrice: number;
-  costPrice: number;
-  totalPrice: number;
-  category?: string;
+  unitPrice: number; // Effective price after discount
+  costPrice: number; // Cost of the item at time of sale
+  totalPrice: number; // quantity * unitPrice
+  category?: string; // Product category name
 }
 
 export interface Sale {
   id: string;
-  date: string;
+  date: string; // ISO string
   items: SaleItem[];
   totalAmount: number;
   customerId?: string | null;
@@ -62,13 +62,13 @@ export interface PurchaseInvoiceItem {
   quantity: number;
   costPrice: number;
   totalCost: number;
-  newSellingPrice?: number; // Used during processing
+  newSellingPrice?: number;
 }
 
 export interface PurchaseInvoice {
   id: string;
   invoiceNumber: string;
-  invoiceDate: string;
+  invoiceDate: string; // YYYY-MM-DD
   supplierName: string;
   totalAmount: number;
   paymentTerms: 'Credit' | 'Cash';
@@ -102,45 +102,26 @@ export const expenseCategories: ExpenseCategoryEnum[] = [
 
 export interface DailyExpense {
   id: number;
-  expenseDate: string;
+  expenseDate: string; // YYYY-MM-DD
   description: string;
   category: ExpenseCategoryEnum;
   amount: number;
   notes?: string | null;
-  createdAt: string;
-  updatedAt: string;
+  createdAt: string; // ISO string
+  updatedAt: string; // ISO string
 }
 
 export type UserRole = 'admin' | 'cashier';
 
 export interface User {
-  id: number;
+  id: number; // From your PostgreSQL Users table
   username: string;
   email: string;
   // password_hash is intentionally omitted for client-side type
   role: UserRole;
   full_name?: string | null;
   is_active?: boolean;
-  created_at?: string;
-  updated_at?: string;
-  firebase_uid?: string | null; // Optional, if you decide to link directly by Firebase UID
+  created_at?: string; // ISO string
+  updated_at?: string; // ISO string
+  // supabase_user_id?: string | null; // If you add a column to link to Supabase auth.users.id
 }
-
-// Mock data is kept for reference but API calls should be used
-
-export const mockProducts: Product[] = [
-  // ... existing mock products ...
-];
-
-export const mockSales: Sale[] = [
-  // ... existing mock sales ...
-];
-
-export const mockCustomers: Customer[] = [
-  // ... existing mock customers ...
-];
-
-export const mockPurchaseInvoices: PurchaseInvoice[] = [
-  // ... existing mock purchase invoices ...
-];
-

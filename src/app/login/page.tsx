@@ -12,9 +12,9 @@ import { Bike, LogIn, Loader2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
 export default function LoginPage() {
-  const [email, setEmail] = useState(''); // Default to empty
-  const [password, setPassword] = useState(''); // Default to empty
-  const { login, isLoading: isAuthLoading } = useAuth(); // Use isLoading from AuthContext
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const { login, isLoading: isAuthLoading } = useAuth();
   const router = useRouter();
   const { toast } = useToast();
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -24,15 +24,17 @@ export default function LoginPage() {
     setIsSubmitting(true);
     try {
       await login(email, password);
-      // AuthContext handles redirection and success toast
+      // AuthContext handles redirection and success toast for successful login
     } catch (error: any) {
-      // Error toast is handled by AuthContext's login function
-      // console.error("Login page caught error:", error); // Optional: for further debugging
+      // AuthContext's login function already shows an error toast.
+      // No need to show another one here unless for specific page-level feedback.
+      console.error("Login page caught error during login attempt:", error);
     } finally {
       setIsSubmitting(false);
     }
   };
 
+  // isLoading combines the auth context's global loading state and local form submission state
   const isLoading = isAuthLoading || isSubmitting;
 
   return (

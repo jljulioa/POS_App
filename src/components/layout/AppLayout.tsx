@@ -8,13 +8,13 @@ import { SidebarProvider, Sidebar, SidebarHeader, SidebarContent, SidebarFooter,
 import { SidebarNav } from '@/components/navigation/SidebarNav';
 import { Logo } from '@/components/Logo';
 import { Button } from '@/components/ui/button';
-import { LogOut, UserCircle, Loader2 } from 'lucide-react'; // Added Loader2
+import { LogOut, Loader2 } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { ThemeToggle } from "@/components/ThemeToggle";
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated, isLoading, logout, userRole, firebaseUser } = useAuth(); // Added firebaseUser
+  const { isAuthenticated, isLoading, logout, appUser, supabaseUser } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
 
@@ -27,7 +27,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   if (isLoading || (!isAuthenticated && pathname !== '/login')) {
     return (
       <div className="flex h-screen w-full items-center justify-center bg-background">
-        {/* <div className="h-12 w-12 animate-spin rounded-full border-4 border-primary border-t-transparent"></div> */}
         <Loader2 className="h-12 w-12 animate-spin text-primary" />
       </div>
     );
@@ -36,6 +35,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   if (pathname === '/login') {
      return <>{children}</>;
   }
+
+  const userDisplayName = appUser?.full_name || appUser?.username || supabaseUser?.email || "User";
+  const userEmail = supabaseUser?.email || (appUser?.email || 'user@motofox.com');
+  const userAvatarFallback = userDisplayName.substring(0,2).toUpperCase() || "MF";
 
   return (
     <SidebarProvider defaultOpen>
@@ -62,17 +65,18 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" className="relative h-9 w-9 sm:h-10 sm:w-10 rounded-full">
                   <Avatar className="h-8 w-8 sm:h-9 sm:w-9">
-                    <AvatarImage src={firebaseUser?.photoURL || "https://placehold.co/40x40.png"} alt={firebaseUser?.displayName || "User"} data-ai-hint="profile avatar" />
-                    <AvatarFallback>{firebaseUser?.email ? firebaseUser.email.substring(0,2).toUpperCase() : "MF"}</AvatarFallback>
+                    {/* Supabase user object doesn't have photoURL directly, user_metadata might */}
+                    <AvatarImage src={supabaseUser?.user_metadata?.avatar_url || "https://placehold.co/40x40.png"} alt={userDisplayName} data-ai-hint="profile avatar" />
+                    <AvatarFallback>{userAvatarFallback}</AvatarFallback>
                   </Avatar>
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent className="w-56" align="end" forceMount>
                 <DropdownMenuLabel className="font-normal">
                   <div className="flex flex-col space-y-1">
-                    <p className="text-sm font-medium leading-none">{firebaseUser?.displayName || "MotoFox User"}</p>
+                    <p className="text-sm font-medium leading-none">{userDisplayName}</p>
                     <p className="text-xs leading-none text-muted-foreground">
-                      {firebaseUser?.email || (userRole ? `${userRole}@motofox.com` : 'user@motofox.com')}
+                      {userEmail}
                     </p>
                   </div>
                 </DropdownMenuLabel>
