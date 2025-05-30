@@ -4,7 +4,7 @@
 import AppLayout from '@/components/layout/AppLayout';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Barcode, Package, ShoppingCart, Users, ArrowRight, Loader2, AlertTriangle, FileText, Landmark, Bot } from 'lucide-react';
+import { Barcode, Package, ShoppingCart, Users, ArrowRight, Loader2, AlertTriangle, FileText, Landmark, Bot, Archive } from 'lucide-react';
 import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
 
@@ -70,6 +70,18 @@ const fetchCustomerStats = async (): Promise<{ totalCustomers: number }> => {
   return res.json();
 };
 
+const fetchLowStockStats = async (): Promise<{ totalLowStockItems: number }> => {
+  const res = await fetch('/api/products/stats/lowstock');
+  if (!res.ok) throw new Error('Failed to fetch low stock stats');
+  return res.json();
+};
+
+const fetchOutOfStockStats = async (): Promise<{ totalOutOfStockItems: number }> => {
+  const res = await fetch('/api/products/stats/outofstock');
+  if (!res.ok) throw new Error('Failed to fetch out of stock stats');
+  return res.json();
+};
+
 
 export default function DashboardPage() {
   const { data: productStats, isLoading: isLoadingProductStats, isError: isErrorProductStats, error: productStatsError } = useQuery({
@@ -85,6 +97,16 @@ export default function DashboardPage() {
   const { data: customerStats, isLoading: isLoadingCustomerStats, isError: isErrorCustomerStats, error: customerStatsError } = useQuery({
     queryKey: ['customerStats'],
     queryFn: fetchCustomerStats,
+  });
+
+  const { data: lowStockStats, isLoading: isLoadingLowStockStats, isError: isErrorLowStockStats, error: lowStockStatsError } = useQuery({
+    queryKey: ['lowStockStats'],
+    queryFn: fetchLowStockStats,
+  });
+
+  const { data: outOfStockStats, isLoading: isLoadingOutOfStockStats, isError: isErrorOutOfStockStats, error: outOfStockStatsError } = useQuery({
+    queryKey: ['outOfStockStats'],
+    queryFn: fetchOutOfStockStats,
   });
 
   return (
@@ -137,6 +159,30 @@ export default function DashboardPage() {
             isLoading={isLoadingCustomerStats}
             isError={isErrorCustomerStats}
             errorMessage={(customerStatsError as Error)?.message}
+          />
+          <StatCard
+            title="Low Stock Items"
+            value={lowStockStats?.totalLowStockItems ?? 'N/A'}
+            icon={AlertTriangle}
+            description="Items needing reorder soon."
+            ctaLink="/inventory?status=low_stock"
+            ctaText="View Low Stock"
+            colorClass="text-yellow-500"
+            isLoading={isLoadingLowStockStats}
+            isError={isErrorLowStockStats}
+            errorMessage={(lowStockStatsError as Error)?.message}
+          />
+          <StatCard
+            title="Out of Stock Items"
+            value={outOfStockStats?.totalOutOfStockItems ?? 'N/A'}
+            icon={Archive}
+            description="Items currently unavailable."
+            ctaLink="/inventory?status=out_of_stock"
+            ctaText="View Out of Stock"
+            colorClass="text-red-500"
+            isLoading={isLoadingOutOfStockStats}
+            isError={isErrorOutOfStockStats}
+            errorMessage={(outOfStockStatsError as Error)?.message}
           />
         </div>
 

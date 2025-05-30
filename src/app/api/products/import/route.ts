@@ -14,7 +14,7 @@ const ProductImportItemSchema = z.object({
   reference: z.string().optional().nullable(),
   barcode: z.string().optional().nullable(),
   stock: z.number().int().min(0),
-  categoryId: z.number().int().positive().optional().nullable(), // Category ID from ProductCategories table
+  category_id: z.number().int().positive().optional().nullable(), // Changed from categoryId
   brand: z.string().optional().nullable(),
   minStock: z.number().int().min(0),
   maxStock: z.number().int().min(0).optional().nullable(),
@@ -23,6 +23,7 @@ const ProductImportItemSchema = z.object({
   imageUrl: z.string().url().optional().nullable(),
   dataAiHint: z.string().max(50).optional().nullable(),
 });
+
 
 const ProductImportSchema = z.array(ProductImportItemSchema);
 
@@ -55,10 +56,10 @@ export async function POST(request: NextRequest) {
       const productData = productsToImport[i];
       try {
         // Check if categoryId exists, if provided
-        if (productData.categoryId) {
-          const categoryExists = await client.query('SELECT id FROM productcategories WHERE id = $1', [productData.categoryId]);
+        if (productData.category_id) {
+          const categoryExists = await client.query('SELECT id FROM productcategories WHERE id = $1', [productData.category_id]);
           if (categoryExists.rowCount === 0) {
-            detailedErrors.push({ row: i + 1, productCode: productData.code, error: `Category ID ${productData.categoryId} does not exist.` });
+            detailedErrors.push({ row: i + 1, productCode: productData.code, error: `Category ID ${productData.category_id} does not exist.` });
             continue; // Skip this product
           }
         }
@@ -84,7 +85,7 @@ export async function POST(request: NextRequest) {
             productData.reference || productData.code,
             productData.barcode,
             productData.stock,
-            productData.categoryId,
+            productData.category_id,
             productData.brand,
             productData.minStock,
             productData.maxStock,
@@ -109,7 +110,7 @@ export async function POST(request: NextRequest) {
             productData.reference || productData.code,
             productData.barcode,
             productData.stock,
-            productData.categoryId,
+            productData.category_id,
             productData.brand,
             productData.minStock,
             productData.maxStock,
