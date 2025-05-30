@@ -45,18 +45,18 @@ body {
     
     --radius: 0.5rem;
 
-    /* ShadCN Sidebar variables - Light Theme */
-    --sidebar-background: 266 40% 25%; /* Dark Grape */
-    --sidebar-foreground: 266 30% 90%; /* Light Grape/Off-white */
+    /* ShadCN Sidebar variables - Light Theme (White Sidebar) */
+    --sidebar-background: 0 0% 100%; /* White */
+    --sidebar-foreground: 266 30% 20%; /* Very Dark Grape (main foreground) */
     
-    --sidebar-primary: 0 0% 100%; /* White (Active item background) */
-    --sidebar-primary-foreground: 266 40% 25%; /* Dark Grape (Active item text) */
+    --sidebar-primary: 266 40% 62%; /* Grape (Active item background) */
+    --sidebar-primary-foreground: 0 0% 100%; /* White (Active item text) */
     
-    --sidebar-accent: 266 40% 35%; /* Medium-Dark Grape (Hover item background) */
-    --sidebar-accent-foreground: 266 30% 90%; /* Light Grape/Off-white (Hover item text) */
+    --sidebar-accent: 266 40% 96%; /* Lighter Grape Tint (Hover item background) */
+    --sidebar-accent-foreground: 266 40% 62%; /* Grape (Hover item text) */
     
-    --sidebar-border: 266 40% 20%; /* Very Dark Grape Border */
-    --sidebar-ring: 0 0% 100%; /* White */
+    --sidebar-border: 266 40% 88%; /* Light Grape Border (main border) */
+    --sidebar-ring: 266 40% 62%; /* Grape (main ring) */
   }
 
   .dark {
@@ -94,7 +94,7 @@ body {
     --chart-4: 280 65% 60%;
     --chart-5: 340 75% 55%;
 
-    /* Dark ShadCN Sidebar variables */
+    /* Dark ShadCN Sidebar variables (Remains Dark Sidebar) */
     --sidebar-background: 266 20% 8%; /* Very Dark Grape, almost black */
     --sidebar-foreground: 266 35% 85%; /* Light Grape/Off-white */
     
