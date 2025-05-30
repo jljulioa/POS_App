@@ -31,47 +31,49 @@ const settingsNavItems = [
 export function SidebarNav() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const currentCategoryFilter = searchParams.get('category');
 
   const isSettingsPathActive = pathname.startsWith('/settings');
 
   return (
     <SidebarMenu>
-      {mainNavItems.map((item) => (
-        <SidebarMenuItem key={item.href}>
-          <Link href={item.href} passHref legacyBehavior>
-            <SidebarMenuButton
-              asChild
-              isActive={pathname === item.href}
-              tooltip={{ children: item.label, side: 'right', align: 'center' }}
-              className="justify-start"
-            >
-              <a>
-                <item.icon className="h-5 w-5" />
-                <span className="group-data-[collapsible=icon]:hidden">{item.label}</span>
-              </a>
-            </SidebarMenuButton>
-          </Link>
-        </SidebarMenuItem>
-      ))}
+      {mainNavItems.map((item) => {
+        const isActive = item.href === '/' ? pathname === '/' : pathname.startsWith(item.href);
+        return (
+          <SidebarMenuItem key={item.href}>
+            <Link href={item.href} passHref legacyBehavior>
+              <SidebarMenuButton
+                asChild
+                isActive={isActive}
+                tooltip={{ children: item.label, side: 'right', align: 'center' }}
+                className="justify-start"
+              >
+                <a>
+                  <item.icon className="h-5 w-5" />
+                  <span className="group-data-[collapsible=icon]:hidden">{item.label}</span>
+                </a>
+              </SidebarMenuButton>
+            </Link>
+          </SidebarMenuItem>
+        );
+      })}
 
       {/* Settings Menu */}
       <SidebarMenuItem>
-        <Link href="/settings" passHref legacyBehavior> {/* Main Settings link now points to /settings */}
+        <Link href="/settings"> {/* Use modern Link behavior: no legacyBehavior, no passHref */}
           <SidebarMenuButton
-            asChild
-            isSub // Keep isSub for submenu toggle behavior
-            isActive={isSettingsPathActive}
+            // No asChild: SidebarMenuButton will render a <button>
+            isSub // For submenu toggle behavior
+            isActive={isSettingsPathActive && !currentCategoryFilter} // Active if on /settings but not a sub-category link
             className="justify-start"
             tooltip={{ children: 'Settings', side: 'right', align: 'center' }}
           >
-            <a>
-              <Settings className="h-5 w-5" />
-              <span className="group-data-[collapsible=icon]:hidden">Settings</span>
-            </a>
+            <Settings className="h-5 w-5" />
+            <span className="group-data-[collapsible=icon]:hidden">Settings</span>
           </SidebarMenuButton>
         </Link>
         {/* Submenu is shown if on any /settings/* path */}
-        <SidebarMenuSub className={cn(!isSettingsPathActive && "hidden")}> 
+        <SidebarMenuSub className={cn(!isSettingsPathActive && "hidden")}>
           {settingsNavItems.map((subItem) => (
             <SidebarMenuSubItem key={subItem.href}>
               <Link href={subItem.href} passHref legacyBehavior>
