@@ -43,6 +43,7 @@ export default function CustomersPage() {
   const filteredCustomers = useMemo(() => {
     return customers.filter(customer =>
       customer.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (customer.identificationNumber && customer.identificationNumber.toLowerCase().includes(searchTerm.toLowerCase())) ||
       (customer.email && customer.email.toLowerCase().includes(searchTerm.toLowerCase())) ||
       (customer.phone && customer.phone.includes(searchTerm))
     );
@@ -98,7 +99,7 @@ export default function CustomersPage() {
 
       <div className="mb-6">
         <Input
-          placeholder="Search by name, email, phone..."
+          placeholder="Search by name, ID, email, phone..."
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
           className="max-w-sm"
@@ -111,6 +112,7 @@ export default function CustomersPage() {
             <TableRow>
               <TableHead className="w-[60px]">Avatar</TableHead>
               <TableHead>Name</TableHead>
+              <TableHead>ID Number</TableHead>
               <TableHead>Email</TableHead>
               <TableHead>Phone</TableHead>
               <TableHead className="text-right">Total Spent</TableHead>
@@ -127,6 +129,7 @@ export default function CustomersPage() {
                   </Avatar>
                 </TableCell>
                 <TableCell className="font-medium">{customer.name}</TableCell>
+                <TableCell>{customer.identificationNumber || 'N/A'}</TableCell>
                 <TableCell>{customer.email || 'N/A'}</TableCell>
                 <TableCell>{customer.phone || 'N/A'}</TableCell>
                 <TableCell className="text-right">${Number(customer.totalSpent).toFixed(2)}</TableCell>
@@ -147,7 +150,7 @@ export default function CustomersPage() {
             ))}
             {filteredCustomers.length === 0 && (
               <TableRow>
-                <TableCell colSpan={6} className="h-24 text-center">
+                <TableCell colSpan={7} className="h-24 text-center">
                   No customers found.
                 </TableCell>
               </TableRow>

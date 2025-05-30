@@ -10,6 +10,7 @@ const CustomerUpdateSchema = z.object({
   email: z.string().email({ message: "Invalid email address." }).optional().or(z.literal('')),
   phone: z.string().optional().or(z.literal('')),
   address: z.string().optional().or(z.literal('')),
+  identificationNumber: z.string().optional().or(z.literal('')), // Added new field
   purchaseHistoryCount: z.coerce.number().int().min(0).optional(), // Optional on update
   totalSpent: z.coerce.number().min(0).optional(), // Optional on update
   creditLimit: z.coerce.number().min(0).optional(),
@@ -25,6 +26,7 @@ const parseCustomerFromDB = (dbCustomer: any): Customer => {
     email: dbCustomer.email,
     phone: dbCustomer.phone,
     address: dbCustomer.address,
+    identificationNumber: dbCustomer.identification_number, // Added new field
     purchaseHistoryCount: parseInt(dbCustomer.purchasehistorycount, 10) || 0,
     totalSpent: parseFloat(dbCustomer.totalspent) || 0,
     creditLimit: dbCustomer.creditlimit !== null ? parseFloat(dbCustomer.creditlimit) : undefined,
@@ -36,7 +38,7 @@ const parseCustomerFromDB = (dbCustomer: any): Customer => {
 export async function GET(request: NextRequest, { params }: { params: { customerId: string } }) {
   const { customerId } = params;
   try {
-    const dbCustomers = await query('SELECT id, name, email, phone, address, purchasehistorycount, totalspent, creditlimit, outstandingbalance FROM Customers WHERE id = $1', [customerId]);
+    const dbCustomers = await query('SELECT id, name, email, phone, address, identification_number, purchasehistorycount, totalspent, creditlimit, outstandingbalance FROM Customers WHERE id = $1', [customerId]);
     if (dbCustomers.length === 0) {
       return NextResponse.json({ message: 'Customer not found' }, { status: 404 });
     }
@@ -60,21 +62,21 @@ export async function PUT(request: NextRequest, { params }: { params: { customer
     }
 
     const {
-        name, email, phone, address, purchaseHistoryCount,
+        name, email, phone, address, identificationNumber, purchaseHistoryCount,
         totalSpent, creditLimit, outstandingBalance
     } = validation.data;
 
     const sql = `
       UPDATE Customers
-      SET name = $1, email = $2, phone = $3, address = $4,
-          purchasehistorycount = COALESCE($5, purchasehistorycount), -- Keep old value if not provided
-          totalspent = COALESCE($6, totalspent),             -- Keep old value if not provided
-          creditlimit = $7, outstandingbalance = $8
-      WHERE id = $9
+      SET name = $1, email = $2, phone = $3, address = $4, identification_number = $5,
+          purchasehistorycount = COALESCE($6, purchasehistorycount), -- Keep old value if not provided
+          totalspent = COALESCE($7, totalspent),             -- Keep old value if not provided
+          creditlimit = $8, outstandingbalance = $9
+      WHERE id = $10
       RETURNING *
     `;
     const queryParams = [
-        name, email || null, phone || null, address || null,
+        name, email || null, phone || null, address || null, identificationNumber || null,
         purchaseHistoryCount, totalSpent, creditLimit ?? null, outstandingBalance ?? null,
         customerId
     ];
@@ -90,7 +92,10 @@ export async function PUT(request: NextRequest, { params }: { params: { customer
   } catch (error) {
     console.error(`Failed to update customer ${customerId}:`, error);
     if (error instanceof Error && (error as any).code === '23505') { // Unique constraint violation
-        return NextResponse.json({ message: 'Failed to update customer: Email might already exist for another customer.', error: (error as Error).message }, { status: 409 });
+        let field = 'email or identification number';
+        if ((error as Error).message.includes('customers_email_key')) field = 'email';
+        if ((error as Error).message.includes('customers_identification_number_key')) field = 'identification number'; // Assuming unique constraint name
+        return NextResponse.json({ message: `Failed to update customer: The ${field} might already exist for another customer.`, error: (error as Error).message }, { status: 409 });
     }
     return NextResponse.json({ message: 'Failed to update customer', error: (error as Error).message }, { status: 500 });
   }

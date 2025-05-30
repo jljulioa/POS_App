@@ -10,6 +10,7 @@ const CustomerCreateSchema = z.object({
   email: z.string().email({ message: "Invalid email address." }).optional().or(z.literal('')),
   phone: z.string().optional().or(z.literal('')),
   address: z.string().optional().or(z.literal('')),
+  identificationNumber: z.string().optional().or(z.literal('')), // Added new field
   purchaseHistoryCount: z.coerce.number().int().min(0).optional().default(0),
   totalSpent: z.coerce.number().min(0).optional().default(0),
   creditLimit: z.coerce.number().min(0).optional(),
@@ -24,6 +25,7 @@ const parseCustomerFromDB = (dbCustomer: any): Customer => {
     email: dbCustomer.email,
     phone: dbCustomer.phone,
     address: dbCustomer.address,
+    identificationNumber: dbCustomer.identification_number, // Added new field
     purchaseHistoryCount: parseInt(dbCustomer.purchasehistorycount, 10) || 0,
     totalSpent: parseFloat(dbCustomer.totalspent) || 0,
     creditLimit: dbCustomer.creditlimit !== null ? parseFloat(dbCustomer.creditlimit) : undefined,
@@ -34,7 +36,7 @@ const parseCustomerFromDB = (dbCustomer: any): Customer => {
 // GET handler to fetch all customers
 export async function GET(request: NextRequest) {
   try {
-    const dbCustomers = await query('SELECT id, name, email, phone, address, purchasehistorycount, totalspent, creditlimit, outstandingbalance FROM Customers ORDER BY name ASC');
+    const dbCustomers = await query('SELECT id, name, email, phone, address, identification_number, purchasehistorycount, totalspent, creditlimit, outstandingbalance FROM Customers ORDER BY name ASC');
     const customers: Customer[] = dbCustomers.map(parseCustomerFromDB);
     return NextResponse.json(customers);
   } catch (error) {
@@ -54,19 +56,19 @@ export async function POST(request: NextRequest) {
     }
 
     const {
-        name, email, phone, address, purchaseHistoryCount,
+        name, email, phone, address, identificationNumber, purchaseHistoryCount,
         totalSpent, creditLimit, outstandingBalance
     } = validation.data;
 
     const id = `C${Date.now()}${Math.random().toString(36).substring(2, 7)}`;
 
     const sql = `
-      INSERT INTO Customers (id, name, email, phone, address, purchasehistorycount, totalspent, creditlimit, outstandingbalance)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+      INSERT INTO Customers (id, name, email, phone, address, identification_number, purchasehistorycount, totalspent, creditlimit, outstandingbalance)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
       RETURNING *
     `;
     const params = [
-        id, name, email || null, phone || null, address || null,
+        id, name, email || null, phone || null, address || null, identificationNumber || null,
         purchaseHistoryCount, totalSpent, creditLimit ?? null, outstandingBalance ?? null
     ];
 
@@ -78,7 +80,10 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error('Failed to create customer:', error);
      if (error instanceof Error && (error as any).code === '23505') { // PostgreSQL unique_violation (e.g. for email if unique constraint added)
-        return NextResponse.json({ message: 'Failed to create customer: Email might already exist.', error: (error as Error).message }, { status: 409 });
+        let field = 'email or identification number';
+        if ((error as Error).message.includes('customers_email_key')) field = 'email';
+        if ((error as Error).message.includes('customers_identification_number_key')) field = 'identification number'; // Assuming unique constraint name
+        return NextResponse.json({ message: `Failed to create customer: The ${field} might already exist.`, error: (error as Error).message }, { status: 409 });
     }
     return NextResponse.json({ message: 'Failed to create customer', error: (error as Error).message }, { status: 500 });
   }

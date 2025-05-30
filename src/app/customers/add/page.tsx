@@ -22,6 +22,7 @@ const CustomerFormSchema = z.object({
   email: z.string().email({ message: "Invalid email address." }).optional().or(z.literal('')),
   phone: z.string().optional().or(z.literal('')),
   address: z.string().optional().or(z.literal('')),
+  identificationNumber: z.string().optional().or(z.literal('')), // Added new field
   // purchaseHistoryCount and totalSpent will be managed by backend or derived, not typically part of create form
   creditLimit: z.coerce.number().min(0, "Credit limit must be non-negative.").optional(),
   outstandingBalance: z.coerce.number().optional(), // Can be negative if customer has credit
@@ -57,6 +58,7 @@ export default function AddCustomerPage() {
       email: '',
       phone: '',
       address: '',
+      identificationNumber: '', // Added default
       creditLimit: undefined,
       outstandingBalance: undefined,
     },
@@ -114,6 +116,19 @@ export default function AddCustomerPage() {
                     <FormLabel>Full Name *</FormLabel>
                     <FormControl>
                       <Input placeholder="e.g., John Doe" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="identificationNumber"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Identification Number</FormLabel>
+                    <FormControl>
+                      <Input placeholder="e.g., National ID, DNI, Cédula" {...field} value={field.value ?? ''} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>

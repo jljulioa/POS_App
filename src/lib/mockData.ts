@@ -48,6 +48,7 @@ export interface Customer {
   email?: string | null;
   phone?: string | null;
   address?: string | null;
+  identificationNumber?: string | null; // Added new field
   purchaseHistoryCount: number;
   totalSpent: number;
   creditLimit?: number | null;

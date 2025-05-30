@@ -23,6 +23,7 @@ const CustomerFormSchema = z.object({
   email: z.string().email({ message: "Invalid email address." }).optional().or(z.literal('')),
   phone: z.string().optional().or(z.literal('')),
   address: z.string().optional().or(z.literal('')),
+  identificationNumber: z.string().optional().or(z.literal('')), // Added new field
   purchaseHistoryCount: z.coerce.number().int().min(0).optional(),
   totalSpent: z.coerce.number().min(0).optional(),
   creditLimit: z.coerce.number().min(0, "Credit limit must be non-negative.").optional(),
@@ -77,6 +78,7 @@ export default function EditCustomerPage() {
       email: '',
       phone: '',
       address: '',
+      identificationNumber: '', // Added default
       purchaseHistoryCount: 0,
       totalSpent: 0,
       creditLimit: undefined,
@@ -91,6 +93,7 @@ export default function EditCustomerPage() {
         email: customer.email || '',
         phone: customer.phone || '',
         address: customer.address || '',
+        identificationNumber: customer.identificationNumber || '', // Added value
         purchaseHistoryCount: customer.purchaseHistoryCount || 0,
         totalSpent: customer.totalSpent || 0,
         creditLimit: customer.creditLimit ?? undefined,
@@ -189,6 +192,19 @@ export default function EditCustomerPage() {
                     <FormLabel>Full Name *</FormLabel>
                     <FormControl>
                       <Input placeholder="e.g., John Doe" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+               <FormField
+                control={form.control}
+                name="identificationNumber"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Identification Number</FormLabel>
+                    <FormControl>
+                      <Input placeholder="e.g., National ID, DNI, Cédula" {...field} value={field.value ?? ''} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
