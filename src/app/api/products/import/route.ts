@@ -56,7 +56,7 @@ export async function POST(request: NextRequest) {
       try {
         // Check if categoryId exists, if provided
         if (productData.categoryId) {
-          const categoryExists = await client.query('SELECT id FROM ProductCategories WHERE id = $1', [productData.categoryId]);
+          const categoryExists = await client.query('SELECT id FROM productcategories WHERE id = $1', [productData.categoryId]);
           if (categoryExists.rowCount === 0) {
             detailedErrors.push({ row: i + 1, productCode: productData.code, error: `Category ID ${productData.categoryId} does not exist.` });
             continue; // Skip this product

@@ -109,7 +109,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         setAppUser(null);
       }
       setIsLoading(false);
-      console.log("AuthContext onAuthStateChange: State update complete. Current appUser:", appUser ? appUser.username : "None");
+      console.log("AuthContext onAuthStateChange: State update complete. Current appUser:", appUser ? appUser.full_name : "None");
     });
 
     return () => {
