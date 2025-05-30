@@ -21,42 +21,72 @@ const mainNavItems = [
   { href: '/reordering', label: 'Smart Reordering', icon: Bot },
 ];
 
+const settingsNavItems = [
+  { href: '/settings/invoice', label: 'Invoice Details', icon: FileText },
+  // Add other settings sub-items here if needed
+];
+
 export function SidebarNav() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const currentUrlCategory = searchParams.get('category');
 
+  const isSettingsPathActive = pathname.startsWith('/settings');
+
   return (
     <SidebarMenu>
-      {mainNavItems.map((item, index) => {
-        // Regular menu items
-        return (
-          <SidebarMenuItem key={item.href || `item-${index}`}>
-            <Link href={item.href!} passHref legacyBehavior>
-              <SidebarMenuButton
-                asChild
-                isActive={
-                  // Exact match for non-inventory, non-categories pages
-                  (pathname === item.href && item.href !== '/inventory' && item.href !== '/categories') ||
-                  // Inventory page active if path is /inventory AND no category filter
-                  (pathname === '/inventory' && item.href === '/inventory' && !currentUrlCategory) ||
-                  // Categories page active if path is /categories
-                  (pathname === '/categories' && item.href === '/categories') ||
-                  // For other parent routes like /customers/add, /inventory/add, etc.
-                  (item.href !== "/" && pathname.startsWith(item.href!) && item.href !== '/inventory' && item.href !== '/categories')
-                }
-                tooltip={{ children: item.label, side: 'right', align: 'center' }}
-                className="justify-start"
-              >
-                <a>
-                  <item.icon className="h-5 w-5" />
-                  <span className="group-data-[collapsible=icon]:hidden">{item.label}</span>
-                </a>
-              </SidebarMenuButton>
-            </Link>
-          </SidebarMenuItem>
-        );
-      })}
+      {mainNavItems.map((item) => (
+        <SidebarMenuItem key={item.href}>
+          <Link href={item.href} passHref legacyBehavior>
+            <SidebarMenuButton
+              asChild
+              isActive={
+                (pathname === item.href && item.href !== '/inventory' && item.href !== '/categories' && !item.href.startsWith('/settings')) ||
+                (pathname === '/inventory' && item.href === '/inventory' && !currentUrlCategory) ||
+                (pathname === '/categories' && item.href === '/categories') ||
+                (item.href !== "/" && pathname.startsWith(item.href) && item.href !== '/inventory' && item.href !== '/categories' && !item.href.startsWith('/settings'))
+              }
+              tooltip={{ children: item.label, side: 'right', align: 'center' }}
+              className="justify-start"
+            >
+              <a>
+                <item.icon className="h-5 w-5" />
+                <span className="group-data-[collapsible=icon]:hidden">{item.label}</span>
+              </a>
+            </SidebarMenuButton>
+          </Link>
+        </SidebarMenuItem>
+      ))}
+
+      {/* Settings Menu */}
+      <SidebarMenuItem>
+        <SidebarMenuButton
+          isSub
+          isActive={isSettingsPathActive}
+          className="justify-start"
+          tooltip={{ children: 'Settings', side: 'right', align: 'center' }}
+        >
+          <Settings className="h-5 w-5" />
+          <span className="group-data-[collapsible=icon]:hidden">Settings</span>
+        </SidebarMenuButton>
+        <SidebarMenuSub className={cn(!isSettingsPathActive && "hidden")}>
+          {settingsNavItems.map((subItem) => (
+            <SidebarMenuSubItem key={subItem.href}>
+              <Link href={subItem.href} passHref legacyBehavior>
+                <SidebarMenuSubButton
+                  asChild
+                  isActive={pathname === subItem.href}
+                >
+                  <a>
+                    <subItem.icon className="mr-2 h-4 w-4" />
+                    {subItem.label}
+                  </a>
+                </SidebarMenuSubButton>
+              </Link>
+            </SidebarMenuSubItem>
+          ))}
+        </SidebarMenuSub>
+      </SidebarMenuItem>
     </SidebarMenu>
   );
 }

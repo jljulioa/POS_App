@@ -114,14 +114,20 @@ export interface DailyExpense {
 export type UserRole = 'admin' | 'cashier';
 
 export interface User {
-  id: number; // From your PostgreSQL Users table
+  id: number;
+  // username?: string | null; // Removed as per user request
   email: string;
-  // password_hash is intentionally omitted for client-side type
   role: UserRole;
   full_name?: string | null;
   is_active?: boolean;
-  created_at?: string; // ISO string
-  updated_at?: string; // ISO string
-  supabase_user_id?: string | null; // To link with Supabase auth.users.id
+  created_at?: string;
+  updated_at?: string;
+  supabase_user_id?: string | null;
 }
 
+export interface InvoiceSettings {
+  companyName: string;
+  nit: string; // Tax ID or similar identifier
+  address: string;
+  footerMessage: string;
+}
