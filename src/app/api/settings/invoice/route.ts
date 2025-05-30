@@ -27,9 +27,10 @@ const parseInvoiceSettingsFromDB = (dbSettings: any): InvoiceSettings | null => 
 // GET handler to fetch invoice settings
 export async function GET(request: NextRequest) {
   try {
+    // Use lowercase column names as PostgreSQL stores unquoted identifiers in lowercase
     const result = await query('SELECT id, companyname, nit, address, footermessage, updatedat FROM InvoiceSettings WHERE id = $1', [1]);
     if (result.length === 0) {
-      // This case should ideally not happen if you've inserted the default row
+      // This case should ideally not happen if you've inserted the default row via SQL
       const defaultSettings: InvoiceSettings = {
         id: 1,
         companyName: 'MotoFox POS',
@@ -37,6 +38,7 @@ export async function GET(request: NextRequest) {
         address: 'Your Store Address',
         footerMessage: 'Thank you for your business!',
       };
+      console.warn("InvoiceSettings not found in DB, returning hardcoded defaults. Ensure default row (id=1) exists.");
       return NextResponse.json(defaultSettings);
     }
     const settings = parseInvoiceSettingsFromDB(result[0]);
@@ -59,17 +61,19 @@ export async function PUT(request: NextRequest) {
 
     const { companyName, nit, address, footerMessage } = validation.data;
 
-    // The ID is fixed at 1. The trigger handles `updatedAt`.
+    // Use lowercase column names for INSERT and UPDATE SET clauses
+    // The trigger handles `updatedat`.
     const sql = `
-      INSERT INTO InvoiceSettings (id, companyName, nit, address, footerMessage)
+      INSERT INTO InvoiceSettings (id, companyname, nit, address, footermessage)
       VALUES (1, $1, $2, $3, $4)
       ON CONFLICT (id) DO UPDATE SET
-        companyName = EXCLUDED.companyName,
+        companyname = EXCLUDED.companyname,
         nit = EXCLUDED.nit,
         address = EXCLUDED.address,
-        footerMessage = EXCLUDED.footerMessage
+        footermessage = EXCLUDED.footermessage
       RETURNING *
     `;
+    // Parameters map to $1, $2, $3, $4 as per their order
     const params = [companyName, nit, address, footerMessage || null];
     
     const result = await query(sql, params);
@@ -82,3 +86,4 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json({ message: 'Failed to update invoice settings', error: (error as Error).message }, { status: 500 });
   }
 }
+
