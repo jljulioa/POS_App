@@ -8,7 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
-import { PlusCircle, FileDown, Edit3, Trash2, Loader2, AlertTriangle } from 'lucide-react';
+import { PlusCircle, FileDown, Edit3, Trash2, Loader2, AlertTriangle, Upload } from 'lucide-react';
 import Image from 'next/image';
 import { Badge } from '@/components/ui/badge';
 import React, { useState, useMemo, useEffect } from 'react';
@@ -124,10 +124,9 @@ export default function InventoryPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const searchParams = useSearchParams();
   const router = useRouter();
-  const urlCategoryFilter = searchParams.get('category'); // This will be category name
   
   const [filterBrand, setFilterBrand] = useState('all');
-  const [filterCategoryName, setFilterCategoryName] = useState(urlCategoryFilter || 'all'); // Store category name
+  const [filterCategoryName, setFilterCategoryName] = useState('all'); 
 
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -143,8 +142,8 @@ export default function InventoryPage() {
   });
 
   useEffect(() => {
-    const newUrlCategoryName = searchParams.get('category');
-    setFilterCategoryName(newUrlCategoryName || 'all');
+    const urlCategoryFilter = searchParams.get('category');
+    setFilterCategoryName(urlCategoryFilter || 'all');
   }, [searchParams]);
 
   const deleteMutation = useMutation< { message: string }, Error, string>({
@@ -167,10 +166,15 @@ export default function InventoryPage() {
 
   const uniqueBrands = useMemo(() => ['all', ...new Set(products.map(p => p.brand).filter(Boolean).sort((a, b) => a.localeCompare(b)))], [products]);
   
-  // For category filter dropdown, use fetched categories
-  const categoryOptionsForFilter = useMemo(() => {
-    if (isLoadingCategories || !categories) return [{ id: 'all', name: 'All Categories' }];
-    return [{ id: 'all', name: 'All Categories' }, ...categories.map(cat => ({ id: cat.name, name: cat.name })).sort((a,b) => a.name.localeCompare(b.name))];
+  const categoryFilterOptions = useMemo(() => {
+    if (isLoadingCategories || !categories) return [{ value: 'all', label: 'All Categories' }];
+    const options = [{ value: 'all', label: 'All Categories' }];
+    categories.forEach(cat => {
+      if (cat.name) { // Ensure category name exists
+        options.push({ value: cat.name, label: cat.name });
+      }
+    });
+    return options.sort((a,b) => a.label.localeCompare(b.label));
   }, [categories, isLoadingCategories]);
 
 
@@ -182,7 +186,8 @@ export default function InventoryPage() {
                             product.reference.toLowerCase().includes(searchTermLower) ||
                             (product.barcode && product.barcode.toLowerCase().includes(searchTermLower));
       const matchesBrand = filterBrand === 'all' || product.brand === filterBrand;
-      const matchesCategory = filterCategoryName === 'all' || product.category === filterCategoryName; // Filter by category name
+      const currentProductCategory = product.category || 'N/A'; // Handle cases where product.category might be null/undefined
+      const matchesCategory = filterCategoryName === 'all' || currentProductCategory === filterCategoryName;
       return matchesSearch && matchesBrand && matchesCategory;
     });
   }, [searchTerm, filterBrand, filterCategoryName, products]);
@@ -221,6 +226,11 @@ export default function InventoryPage() {
             <PlusCircle className="mr-2 h-4 w-4" /> Add Product
           </Link>
         </Button>
+         <Button variant="outline" asChild>
+          <Link href="/inventory/import">
+            <Upload className="mr-2 h-4 w-4" /> Import Products
+          </Link>
+        </Button>
         <Button variant="outline">
           <FileDown className="mr-2 h-4 w-4" /> Export CSV
         </Button>
@@ -251,7 +261,7 @@ export default function InventoryPage() {
             if (value === 'all') {
               newQuery.delete('category');
             } else {
-              newQuery.set('category', value); // URL param remains category name
+              newQuery.set('category', value);
             }
             router.push(`/inventory?${newQuery.toString()}`, { scroll: false });
           }}
@@ -261,14 +271,14 @@ export default function InventoryPage() {
             <SelectValue placeholder={isLoadingCategories ? "Loading..." : "Filter by category"} />
           </SelectTrigger>
           <SelectContent>
-            {categoryOptionsForFilter.map(cat => (
-              <SelectItem key={cat.id.toString()} value={cat.name}>{cat.name}</SelectItem>
+            {categoryFilterOptions.map(opt => (
+              <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
             ))}
           </SelectContent>
         </Select>
       </div>
 
-      <div className="rounded-lg border shadow-sm bg-card">
+      <div className="rounded-lg border shadow-sm bg-card overflow-x-auto">
         <Table>
           <TableHeader>
             <TableRow>
