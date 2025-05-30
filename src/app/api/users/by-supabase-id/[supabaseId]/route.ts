@@ -25,6 +25,7 @@ export async function GET(request: NextRequest, { params }: { params: { supabase
   if (!supabaseId) {
     return NextResponse.json({ message: 'Supabase ID parameter is required' }, { status: 400 });
   }
+  console.log(`API /users/by-supabase-id: Attempting to fetch user for supabase_user_id: ${supabaseId}`);
 
   try {
     // Select all fields EXCEPT password_hash for security
@@ -34,13 +35,15 @@ export async function GET(request: NextRequest, { params }: { params: { supabase
     );
 
     if (result.length === 0) {
+      console.warn(`API /users/by-supabase-id: User not found or not active for supabase_user_id: ${supabaseId}`);
       return NextResponse.json({ message: 'User not found or not active for the given Supabase ID' }, { status: 404 });
     }
 
     const user = parseUserFromDB(result[0]);
+    console.log(`API /users/by-supabase-id: User found for supabase_user_id: ${supabaseId}`, user);
     return NextResponse.json(user);
   } catch (error) {
-    console.error(`Failed to fetch user by Supabase ID ${supabaseId}:`, error);
+    console.error(`API /users/by-supabase-id: Failed to fetch user by Supabase ID ${supabaseId}:`, error);
     return NextResponse.json({ message: 'Failed to fetch user', error: (error as Error).message }, { status: 500 });
   }
 }

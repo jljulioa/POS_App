@@ -31,6 +31,8 @@ async function initializePool(): Promise<Pool> {
   // Mask password for logging connection string
   const maskedConnectionString = connectionString.replace(/:([^:@]*)(?=@)/, ':********');
   console.log("initializePool: Using POSTGRES_URL (password masked):", maskedConnectionString);
+  console.log("initializePool: Full POSTGRES_URL being used (ensure this is correct):", connectionString);
+
 
   const config: PoolConfig = {
     connectionString: connectionString,
@@ -62,8 +64,10 @@ async function initializePool(): Promise<Pool> {
     console.error("CRITICAL ERROR during newPool.connect():", connectionError.message);
     console.error("Original error stack:", (err as Error).stack);
     console.error("Database connection string used (masked):", maskedConnectionString);
+    console.error("Full connection string that failed (check this carefully):", connectionString);
     console.error("SSL Configuration used:", config.ssl ? JSON.stringify(config.ssl) : 'Default/None');
     console.error("Please verify your POSTGRES_URL, network/firewall settings, and database server status (e.g., on Supabase/Neon dashboard).");
+    console.error("Ensure the host and port are correct for the type of connection (direct vs. pooler). Poolers typically use port 6543.");
     console.error("***************************************************************************");
     poolInitializationError = connectionError;
     try {
@@ -76,30 +80,25 @@ async function initializePool(): Promise<Pool> {
 }
 
 export async function getPool(): Promise<Pool> {
-  console.log("getPool: Attempting to get pool...");
+  // console.log("getPool: Attempting to get pool..."); // Reduced verbosity
   if (poolInitializationError) {
     console.error("getPool: Persistent pool initialization error encountered. Throwing stored error:", poolInitializationError.message);
     throw poolInitializationError;
   }
   if (!pool) {
-    console.log("getPool: Pool does not exist or was reset. Attempting to initialize a new pool.");
+    // console.log("getPool: Pool does not exist or was reset. Attempting to initialize a new pool."); // Reduced verbosity
     try {
       pool = await initializePool();
-      console.log("getPool: New pool initialized successfully.");
+      // console.log("getPool: New pool initialized successfully."); // Reduced verbosity
       pool.on('error', (err, client) => {
         console.error('getPool: Unexpected error on idle PostgreSQL client. Pool will be reset.', err);
-        poolInitializationError = err; // Store the error
-        pool = null; // Reset pool so it tries to re-initialize on next call, or fails due to poolInitializationError
+        poolInitializationError = err; 
+        pool = null; 
       });
     } catch (err) {
-      // initializePool already logs the error comprehensively and sets poolInitializationError.
       console.error("getPool: Error during initializePool call:", (err as Error).message);
-      // No need to log again here, just rethrow so the caller knows.
-      // The poolInitializationError will be set by initializePool.
       throw err;
     }
-  } else {
-     console.log("getPool: Returning existing pool.");
   }
   return pool;
 }
@@ -109,17 +108,14 @@ export async function query(sql: string, params?: any[]) {
   try {
     currentPool = await getPool();
   } catch (error) {
-    // Error is already logged by getPool/initializePool
-    // console.error("Failed to get database pool for query:", (error as Error).message); // Redundant
     throw new Error(`Failed to acquire database pool: ${(error as Error).message}`);
   }
   
   try {
     const startTime = Date.now();
-    // console.log(`Executing query: ${sql} with params: ${params ? JSON.stringify(params) : '[]'}`); // Uncomment for debugging SQL queries
     const results = await currentPool.query(sql, params);
     const duration = Date.now() - startTime;
-    // console.log(`Query executed successfully in ${duration}ms. Rows returned: ${results.rowCount}`); // Uncomment for performance logging
+    // console.log(`Query executed successfully in ${duration}ms. Rows returned: ${results.rowCount}`); 
     return results.rows;
   } catch (error) {
     console.error("***************************************************************************");
@@ -127,13 +123,11 @@ export async function query(sql: string, params?: any[]) {
     console.error("Message:", (error as Error).message);
     console.error("SQL:", sql);
     console.error("Params:", params ? JSON.stringify(params) : "[]");
-    // console.error("Original query error stack:", (error as Error).stack); // Uncomment for more detailed stack trace
     console.error("***************************************************************************");
     throw new Error(`Database query execution failed: ${(error as Error).message}`);
   }
 }
 
-// This function is typically called during application shutdown, which is less common in serverless environments.
 export async function closePool() {
   if (pool) {
     try {
@@ -148,24 +142,17 @@ export async function closePool() {
   }
 }
 
-// Helper for initial connection check, can be called at application startup.
 export async function ensureDbConnected() {
   console.log("ensureDbConnected: Starting database connection health check...");
   try {
     const currentPool = await getPool();
     const client = await currentPool.connect();
-    await client.query('SELECT NOW()'); // Simple query to test connection
+    await client.query('SELECT NOW()'); 
     client.release();
     console.log("ensureDbConnected: Database connection health check successful.");
     return true;
   } catch (error) {
     console.error("ensureDbConnected: Database connection health check FAILED. Error:", (error as Error).message);
-    // The detailed error should have been logged by initializePool or getPool.
     return false;
   }
 }
-
-// Optional: Call ensureDbConnected at module load if you want to check connection eagerly on server start.
-// This might have implications in serverless environments.
-// ensureDbConnected();
-    
