@@ -57,15 +57,20 @@ export function SidebarNav() {
 
       {/* Settings Menu */}
       <SidebarMenuItem>
-        <SidebarMenuButton
-          isSub
-          isActive={isSettingsPathActive}
-          className="justify-start"
-          tooltip={{ children: 'Settings', side: 'right', align: 'center' }}
-        >
-          <Settings className="h-5 w-5" />
-          <span className="group-data-[collapsible=icon]:hidden">Settings</span>
-        </SidebarMenuButton>
+        <Link href="/settings/invoice" passHref legacyBehavior>
+          <SidebarMenuButton
+            asChild
+            isSub // Keep isSub for submenu toggle behavior
+            isActive={isSettingsPathActive}
+            className="justify-start"
+            tooltip={{ children: 'Settings', side: 'right', align: 'center' }}
+          >
+            <a>
+              <Settings className="h-5 w-5" />
+              <span className="group-data-[collapsible=icon]:hidden">Settings</span>
+            </a>
+          </SidebarMenuButton>
+        </Link>
         <SidebarMenuSub className={cn(!isSettingsPathActive && "hidden")}>
           {settingsNavItems.map((subItem) => (
             <SidebarMenuSubItem key={subItem.href}>
