@@ -251,8 +251,7 @@ export default function POSPage() {
     const termLower = customerSearchTerm.toLowerCase();
     return customers.filter(customer =>
       customer.name.toLowerCase().includes(termLower) ||
-      (customer.identificationNumber && customer.identificationNumber.toLowerCase().includes(termLower)) ||
-      (customer.email && customer.email.toLowerCase().includes(termLower))
+      (customer.identificationNumber && customer.identificationNumber.toLowerCase().includes(termLower))
     ).slice(0, 5);
   }, [customerSearchTerm, customers, isLoadingCustomers, isCustomersError]);
 
@@ -265,7 +264,7 @@ export default function POSPage() {
     updateTicketMutation.mutate({ 
       ticketId: activeTicket.id, 
       data: { 
-        customer_id: customer.identificationNumber || customer.id, // Prefer identificationNumber
+        customer_id: customer.id, // Use customer's primary key
         customer_name: customer.name 
       } 
     });
@@ -502,7 +501,7 @@ export default function POSPage() {
           totalPrice: Number(item.totalPrice) || 0, 
       })),
       totalAmount: cartTotal,
-      customerId: activeTicket.customer_id || null,
+      customerId: activeTicket.customer_id || null, // This now holds the actual customer primary key
       customerName: activeTicket.customer_name || null,
       paymentMethod: paymentMethod,
       cashierId: currentCashierName, 
@@ -623,7 +622,7 @@ export default function POSPage() {
                 <UserSearch className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
                   type="text"
-                  placeholder="Search Customer (Name/ID)..."
+                  placeholder="Search Customer (Name/ID Number)..."
                   value={customerSearchTerm}
                   onChange={(e) => {setCustomerSearchTerm(e.target.value); setShowCustomerSearchResults(true);}}
                   onBlur={() => setTimeout(() => setShowCustomerSearchResults(false), 150)} // Delay hide to allow click on results
@@ -637,7 +636,7 @@ export default function POSPage() {
                       <div key={cust.id}
                            onClick={() => handleSelectCustomer(cust)}
                            className="p-2 hover:bg-accent cursor-pointer text-sm">
-                        {cust.name} ({cust.identificationNumber || 'N/A'})
+                        {cust.name} ({cust.identificationNumber || cust.id})
                       </div>
                     ))}
                   </ScrollArea>
@@ -834,3 +833,5 @@ export default function POSPage() {
     </AppLayout>
   );
 }
+
+    
