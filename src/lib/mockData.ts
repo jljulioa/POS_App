@@ -6,8 +6,8 @@ export interface Product {
   reference: string;
   barcode?: string | null;
   stock: number;
-  category: string; // This is the category NAME (e.g., "Engine Parts")
-  categoryId?: number; // This is the foreign key (ProductCategories.id)
+  category: string; // This is the category NAME, derived from category_id
+  categoryId?: number; // Foreign key to ProductCategories.id
   brand: string;
   minStock: number;
   maxStock: number;
@@ -115,7 +115,6 @@ export type UserRole = 'admin' | 'cashier';
 
 export interface User {
   id: number;
-  // username?: string | null; // Removed as per user request
   email: string;
   role: UserRole;
   full_name?: string | null;
@@ -126,8 +125,10 @@ export interface User {
 }
 
 export interface InvoiceSettings {
+  id?: number; // Will be 1 for the single row
   companyName: string;
   nit: string; // Tax ID or similar identifier
   address: string;
   footerMessage: string;
+  updatedAt?: string;
 }

@@ -13,86 +13,129 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useToast } from '@/hooks/use-toast';
-import { Save, Settings, FileText, Loader2 } from 'lucide-react';
+import { Save, Settings, FileText, Loader2, AlertTriangle } from 'lucide-react';
 import type { InvoiceSettings } from '@/lib/mockData';
-
-const INVOICE_SETTINGS_KEY = 'invoiceSettings';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 
 const InvoiceSettingsSchema = z.object({
   companyName: z.string().min(1, "Company name is required."),
   nit: z.string().min(1, "NIT/Tax ID is required."),
   address: z.string().min(1, "Address is required."),
-  footerMessage: z.string().optional(),
+  footerMessage: z.string().optional().or(z.literal('')),
 });
 
 type InvoiceSettingsFormValues = z.infer<typeof InvoiceSettingsSchema>;
 
-const defaultInvoiceSettings: InvoiceSettingsFormValues = {
+const defaultSettings: InvoiceSettingsFormValues = {
   companyName: 'MotoFox POS',
-  nit: '123456789-0',
-  address: '123 Motorcycle Lane, Anytown, USA',
+  nit: 'N/A',
+  address: 'Your Store Address',
   footerMessage: 'Thank you for your business!',
+};
+
+// API fetch function
+const fetchInvoiceSettingsAPI = async (): Promise<InvoiceSettings> => {
+  const response = await fetch('/api/settings/invoice');
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({ message: 'Failed to fetch settings' }));
+    throw new Error(errorData.message || 'Failed to fetch settings');
+  }
+  return response.json();
+};
+
+// API update function
+const updateInvoiceSettingsAPI = async (data: InvoiceSettingsFormValues): Promise<InvoiceSettings> => {
+  const response = await fetch('/api/settings/invoice', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({ message: 'Failed to update settings' }));
+    throw new Error(errorData.message || 'Failed to update settings');
+  }
+  return response.json();
 };
 
 export default function InvoiceSettingsPage() {
   const { toast } = useToast();
-  const [isLoading, setIsLoading] = React.useState(false);
+  const queryClient = useQueryClient();
+
+  const { data: currentSettings, isLoading: isLoadingSettings, error: settingsError, isError: isSettingsError } = useQuery<InvoiceSettings, Error>({
+    queryKey: ['invoiceSettings'],
+    queryFn: fetchInvoiceSettingsAPI,
+    staleTime: 5 * 60 * 1000, // Cache for 5 minutes
+  });
 
   const form = useForm<InvoiceSettingsFormValues>({
     resolver: zodResolver(InvoiceSettingsSchema),
-    defaultValues: defaultInvoiceSettings,
+    defaultValues: defaultSettings, 
   });
 
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const savedSettings = localStorage.getItem(INVOICE_SETTINGS_KEY);
-      if (savedSettings) {
-        try {
-          const parsedSettings = JSON.parse(savedSettings) as InvoiceSettingsFormValues;
-          // Validate parsed settings against schema before resetting form
-          const validation = InvoiceSettingsSchema.safeParse(parsedSettings);
-          if (validation.success) {
-            form.reset(validation.data);
-          } else {
-            console.warn("Invalid settings found in localStorage, using defaults.", validation.error);
-            localStorage.setItem(INVOICE_SETTINGS_KEY, JSON.stringify(defaultInvoiceSettings)); // Save defaults if stored is bad
-            form.reset(defaultInvoiceSettings);
-          }
-        } catch (error) {
-          console.error("Failed to parse invoice settings from localStorage:", error);
-          localStorage.setItem(INVOICE_SETTINGS_KEY, JSON.stringify(defaultInvoiceSettings));
-          form.reset(defaultInvoiceSettings);
-        }
-      } else {
-        // If no settings saved, save the default ones
-        localStorage.setItem(INVOICE_SETTINGS_KEY, JSON.stringify(defaultInvoiceSettings));
-      }
+    if (currentSettings) {
+      form.reset({
+        companyName: currentSettings.companyName,
+        nit: currentSettings.nit,
+        address: currentSettings.address,
+        footerMessage: currentSettings.footerMessage || '',
+      });
     }
-  }, [form]);
+  }, [currentSettings, form]);
 
-  const onSubmit = (data: InvoiceSettingsFormValues) => {
-    setIsLoading(true);
-    try {
-      localStorage.setItem(INVOICE_SETTINGS_KEY, JSON.stringify(data));
+  const mutation = useMutation<InvoiceSettings, Error, InvoiceSettingsFormValues>({
+    mutationFn: updateInvoiceSettingsAPI,
+    onSuccess: (data) => {
       toast({
         title: "Settings Saved",
-        description: "Invoice details have been updated.",
+        description: "Invoice settings have been updated.",
       });
-    } catch (error) {
+      queryClient.setQueryData(['invoiceSettings'], data); // Optimistically update the cache
+      queryClient.invalidateQueries({ queryKey: ['invoiceSettings'] }); // Refetch in background
+    },
+    onError: (error) => {
       toast({
         variant: "destructive",
         title: "Failed to Save Settings",
-        description: "Could not save settings to local storage. Your browser might be configured to block it.",
+        description: error.message || "An unexpected error occurred.",
       });
-      console.error("Error saving invoice settings to localStorage:", error);
-    } finally {
-      setIsLoading(false);
-    }
+    },
+  });
+
+  const onSubmit = (data: InvoiceSettingsFormValues) => {
+    mutation.mutate(data);
   };
+
+  if (isLoadingSettings) {
+    return (
+      <AppLayout>
+        <PageHeader title="Invoice Settings" description="Loading settings..." />
+        <div className="flex justify-center items-center h-64">
+          <Loader2 className="h-12 w-12 animate-spin text-primary" />
+        </div>
+      </AppLayout>
+    );
+  }
+
+  if (isSettingsError) {
+    return (
+      <AppLayout>
+        <PageHeader title="Invoice Settings" description="Error loading settings." />
+        <Card className="max-w-2xl mx-auto shadow-lg">
+          <CardHeader>
+            <CardTitle className="flex items-center text-destructive"><AlertTriangle className="mr-2"/>Error</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p>{settingsError?.message || "Could not load invoice settings."}</p>
+          </CardContent>
+        </Card>
+      </AppLayout>
+    );
+  }
 
   return (
     <AppLayout>
-      <PageHeader title="Invoice & Receipt Settings" description="Configure the details that appear on your sales receipts and invoices." />
+      <PageHeader title="Invoice Settings" description="Configure the details that appear on your sales receipts and invoices." />
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)}>
           <Card className="max-w-2xl mx-auto shadow-lg">
@@ -158,8 +201,8 @@ export default function InvoiceSettingsPage() {
               />
             </CardContent>
             <CardFooter className="border-t px-6 py-4">
-              <Button type="submit" disabled={isLoading}>
-                {isLoading ? (
+              <Button type="submit" disabled={mutation.isPending}>
+                {mutation.isPending ? (
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 ) : (
                   <Save className="mr-2 h-4 w-4" />

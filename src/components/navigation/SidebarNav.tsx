@@ -5,7 +5,7 @@ import React from 'react';
 import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
 import { cn } from '@/lib/utils';
-import { LayoutDashboard, Package, ShoppingCart, Users, Barcode, Bot, Settings, FileText, Archive, Tag, ArrowRightLeft, Landmark } from 'lucide-react';
+import { LayoutDashboard, Package, ShoppingCart, Users, Barcode, Bot, Settings, FileText, Archive, Tag, ArrowRightLeft, Landmark, UserCog } from 'lucide-react';
 import { SidebarMenu, SidebarMenuItem, SidebarMenuButton, SidebarMenuSub, SidebarMenuSubItem, SidebarMenuSubButton } from '@/components/ui/sidebar';
 
 const mainNavItems = [
@@ -14,15 +14,17 @@ const mainNavItems = [
   { href: '/inventory', label: 'Inventory', icon: Package },
   { href: '/transactions', label: 'Transactions', icon: ArrowRightLeft },
   { href: '/categories', label: 'Manage Categories', icon: Tag },
-  { href: '/sales', label: 'Sales', icon: ShoppingCart },
+  { href: '/sales', label: 'Sales Records', icon: ShoppingCart },
+  { href: '/sales/reports', label: "Today's Report", icon: FileText},
   { href: '/customers', label: 'Customers', icon: Users },
   { href: '/purchase-invoices', label: 'Purchase Invoices', icon: FileText },
   { href: '/expenses', label: 'Expenses', icon: Landmark },
   { href: '/reordering', label: 'Smart Reordering', icon: Bot },
+  { href: '/users', label: 'Manage Users', icon: UserCog },
 ];
 
 const settingsNavItems = [
-  { href: '/settings/invoice', label: 'Invoice Details', icon: FileText },
+  { href: '/settings/invoice', label: 'Invoice', icon: FileText },
   // Add other settings sub-items here if needed
 ];
 
@@ -40,12 +42,7 @@ export function SidebarNav() {
           <Link href={item.href} passHref legacyBehavior>
             <SidebarMenuButton
               asChild
-              isActive={
-                (pathname === item.href && item.href !== '/inventory' && item.href !== '/categories' && !item.href.startsWith('/settings')) ||
-                (pathname === '/inventory' && item.href === '/inventory' && !currentUrlCategory) ||
-                (pathname === '/categories' && item.href === '/categories') ||
-                (item.href !== "/" && pathname.startsWith(item.href) && item.href !== '/inventory' && item.href !== '/categories' && !item.href.startsWith('/settings'))
-              }
+              isActive={pathname === item.href}
               tooltip={{ children: item.label, side: 'right', align: 'center' }}
               className="justify-start"
             >

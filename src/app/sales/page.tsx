@@ -27,15 +27,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Calendar } from "@/components/ui/calendar";
 import { cn } from "@/lib/utils";
 import { z } from 'zod';
-
-const INVOICE_SETTINGS_KEY = 'invoiceSettings'; // Same key as used in settings page
-const defaultInvoiceSettings: InvoiceSettings = {
-  companyName: 'MotoFox POS',
-  nit: 'N/A',
-  address: 'Your Store Address',
-  footerMessage: 'Thank you for your business!',
-};
-
+import type { jsPDF } from 'jspdf'; // Import jsPDF type
 
 // API fetch function for sales
 const fetchSales = async (startDate?: Date, endDate?: Date): Promise<Sale[]> => {
@@ -87,79 +79,147 @@ const processReturnAPI = async (returnData: z.infer<typeof ProcessReturnSchema>)
   return response.json();
 };
 
-// New function to generate PDF using jsPDF
-const generatePdfReceipt = async (sale: Sale, settings: InvoiceSettings) => {
-  const { jsPDF } = await import('jspdf');
-  const autoTable = (await import('jspdf-autotable')).default; // Default import
-
-  const doc = new jsPDF();
-  let yPos = 15; // Initial Y position
-
-  // Company Details
-  doc.setFontSize(16);
-  doc.text(settings.companyName || defaultInvoiceSettings.companyName, 14, yPos);
-  yPos += 7;
-  doc.setFontSize(10);
-  doc.text(`NIT: ${settings.nit || defaultInvoiceSettings.nit}`, 14, yPos);
-  yPos += 5;
-  doc.text(settings.address || defaultInvoiceSettings.address, 14, yPos);
-  yPos += 10;
-
-  // Receipt Details
-  doc.setFontSize(12);
-  doc.text(`Receipt No: ${sale.id}`, 14, yPos);
-  doc.text(`Date: ${format(new Date(sale.date), 'PPpp')}`, 120, yPos, { align: 'left' }); // Align right might need manual x calc
-  yPos += 7;
-  doc.text(`Cashier: ${sale.cashierId || 'N/A'}`, 14, yPos);
-  if (sale.customerName) {
-    yPos += 7;
-    doc.text(`Customer: ${sale.customerName}`, 14, yPos);
+const fetchInvoiceSettingsAPI = async (): Promise<InvoiceSettings> => {
+  const response = await fetch('/api/settings/invoice');
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({ message: 'Failed to fetch settings' }));
+    throw new Error(errorData.message || 'Failed to fetch settings');
   }
-  yPos += 10;
+  return response.json();
+};
 
-  // Items Table
-  const tableColumn = ["Product Name", "Qty", "Unit Price", "Total"];
-  const tableRows = sale.items.map(item => [
-    item.productName,
-    item.quantity.toString(),
-    `$${Number(item.unitPrice).toFixed(2)}`,
-    `$${Number(item.totalPrice).toFixed(2)}`
-  ]);
+const defaultInvoiceSettings: InvoiceSettings = {
+  companyName: 'MotoFox POS',
+  nit: 'N/A',
+  address: 'Your Store Address',
+  footerMessage: 'Thank you for your business!',
+};
 
-  autoTable(doc, {
-    head: [tableColumn],
-    body: tableRows,
-    startY: yPos,
-    theme: 'grid',
-    headStyles: { fillColor: [220, 220, 220], textColor: 20 },
-    styles: { fontSize: 9, cellPadding: 2 },
-    columnStyles: {
-      0: { cellWidth: 'auto' }, // Product Name
-      1: { cellWidth: 15, halign: 'center' }, // Qty
-      2: { cellWidth: 25, halign: 'right' }, // Unit Price
-      3: { cellWidth: 25, halign: 'right' }, // Total
-    }
+// Function to generate PDF receipt using jsPDF
+const generateSaleReceiptPdf = async (sale: Sale, settings: InvoiceSettings) => {
+  const { jsPDF } = await import('jspdf');
+  const autoTable = (await import('jspdf-autotable')).default;
+
+  const doc = new jsPDF({
+    orientation: 'portrait',
+    unit: 'mm',
+    format: [76, 200] // Approx 3-inch width, 200mm height (can adjust)
   });
 
-  yPos = (doc as any).lastAutoTable.finalY + 10; // Get Y position after table
+  let yPos = 10;
+  const lineSpacing = 5;
+  const smallLineSpacing = 3.5;
+  const leftMargin = 5;
+  const contentWidth = 76 - (leftMargin * 2);
 
-  // Grand Total
+  // Company Name - Centered, Bold
   doc.setFontSize(12);
   doc.setFont(undefined, 'bold');
-  doc.text("Grand Total:", 130, yPos, {align: 'right'});
-  doc.text(`$${Number(sale.totalAmount).toFixed(2)}`, doc.internal.pageSize.getWidth() - 14, yPos, {align: 'right'});
-  yPos += 7;
+  const companyNameText = settings.companyName || defaultInvoiceSettings.companyName;
+  const companyNameWidth = doc.getTextWidth(companyNameText);
+  doc.text(companyNameText, (76 - companyNameWidth) / 2, yPos);
+  yPos += lineSpacing;
+
+  // Address - Centered, Smaller
+  doc.setFontSize(8);
   doc.setFont(undefined, 'normal');
-  doc.setFontSize(10);
-  doc.text(`Payment Method: ${sale.paymentMethod}`, 14, yPos);
-  yPos += 10;
+  const addressText = settings.address || defaultInvoiceSettings.address;
+  const addressLines = doc.splitTextToSize(addressText, contentWidth);
+  addressLines.forEach((line: string) => {
+    const lineWidth = doc.getTextWidth(line);
+    doc.text(line, (76 - lineWidth) / 2, yPos);
+    yPos += smallLineSpacing;
+  });
 
-  // Footer Message
-  if (settings.footerMessage || defaultInvoiceSettings.footerMessage) {
-    doc.setFontSize(9);
-    doc.text(settings.footerMessage || defaultInvoiceSettings.footerMessage, 14, yPos, { maxWidth: doc.internal.pageSize.getWidth() - 28 });
+  // NIT - Centered, Smaller
+  const nitText = `NIT: ${settings.nit || defaultInvoiceSettings.nit}`;
+  const nitWidth = doc.getTextWidth(nitText);
+  doc.text(nitText, (76 - nitWidth) / 2, yPos);
+  yPos += lineSpacing;
+  
+  doc.text('-------------------------------------', leftMargin, yPos); // Line separator
+  yPos += smallLineSpacing;
+
+  // Receipt Info
+  doc.text(`Receipt No: ${sale.id}`, leftMargin, yPos);
+  yPos += smallLineSpacing;
+  doc.text(`Date: ${format(new Date(sale.date), 'dd/MM/yyyy HH:mm')}`, leftMargin, yPos);
+  yPos += smallLineSpacing;
+  if (sale.cashierId) {
+    doc.text(`Cashier: ${sale.cashierId}`, leftMargin, yPos);
+    yPos += smallLineSpacing;
   }
+  if (sale.customerName) {
+    doc.text(`Customer: ${sale.customerName}`, leftMargin, yPos);
+    yPos += smallLineSpacing;
+  }
+  yPos += smallLineSpacing; // Extra space before items
 
+  // Items Table
+  const tableColumn = [
+    { header: 'Item', dataKey: 'name' },
+    { header: 'Qty', dataKey: 'qty' },
+    { header: 'Price', dataKey: 'unit' },
+    { header: 'Total', dataKey: 'total' },
+  ];
+  const tableRows = sale.items.map(item => ({
+    name: item.productName,
+    qty: item.quantity.toString(),
+    unit: Number(item.unitPrice).toFixed(2),
+    total: Number(item.totalPrice).toFixed(2),
+  }));
+
+  autoTable(doc, {
+    columns: tableColumn,
+    body: tableRows,
+    startY: yPos,
+    theme: 'plain',
+    styles: {
+      fontSize: 7,
+      cellPadding: { top: 0.5, right: 0.5, bottom: 0.5, left: 0.5 },
+      halign: 'left',
+      valign: 'middle',
+      overflow: 'linebreak',
+    },
+    columnStyles: {
+      name: { cellWidth: 30 },
+      qty: { cellWidth: 8, halign: 'center' },
+      unit: { cellWidth: 15, halign: 'right' },
+      total: { cellWidth: 15, halign: 'right' },
+    },
+    headStyles: { fontSize: 7.5, fontStyle: 'bold', halign: 'center' },
+    margin: { left: leftMargin, right: leftMargin },
+  });
+
+  yPos = (doc as any).lastAutoTable.finalY + lineSpacing;
+
+  // Grand Total
+  doc.setFontSize(9);
+  doc.setFont(undefined, 'bold');
+  doc.text('TOTAL:', leftMargin + 35, yPos, { align: 'right' }); // Align before amount
+  doc.text(`$${Number(sale.totalAmount).toFixed(2)}`, 76 - leftMargin, yPos, { align: 'right' });
+  yPos += lineSpacing;
+
+  doc.setFontSize(8);
+  doc.setFont(undefined, 'normal');
+  doc.text(`Payment: ${sale.paymentMethod}`, leftMargin, yPos);
+  yPos += lineSpacing;
+
+  doc.text('-------------------------------------', leftMargin, yPos); // Line separator
+  yPos += smallLineSpacing;
+  
+  // Footer Message - Centered
+  const footerText = settings.footerMessage || defaultInvoiceSettings.footerMessage;
+  if (footerText) {
+    doc.setFontSize(7.5);
+    const footerLines = doc.splitTextToSize(footerText, contentWidth);
+    footerLines.forEach((line: string) => {
+      const lineWidth = doc.getTextWidth(line);
+      doc.text(line, (76 - lineWidth) / 2, yPos);
+      yPos += smallLineSpacing;
+    });
+  }
+  
   doc.save(`Receipt_${sale.id.replace(/\s+/g, '_')}.pdf`);
 };
 
@@ -189,6 +249,12 @@ export default function SalesPage() {
         description: err.message || "An unexpected error occurred.",
       });
     }
+  });
+
+  const { data: invoiceSettings, isLoading: isLoadingInvoiceSettings } = useQuery<InvoiceSettings, Error>({
+    queryKey: ['invoiceSettings'], // Use the same key as in settings page to potentially share cache
+    queryFn: fetchInvoiceSettingsAPI,
+    staleTime: 10 * 60 * 1000, // Cache for 10 minutes
   });
 
   const filteredSales = useMemo(() => {
@@ -305,23 +371,16 @@ export default function SalesPage() {
       return;
     }
     if (isPrintingReceipt) return;
-
-    setIsPrintingReceipt(true);
-    
-    let settings: InvoiceSettings = defaultInvoiceSettings;
-    if (typeof window !== 'undefined') {
-        const savedSettings = localStorage.getItem(INVOICE_SETTINGS_KEY);
-        if (savedSettings) {
-            try {
-                settings = JSON.parse(savedSettings);
-            } catch (e) {
-                console.error("Failed to parse invoice settings from localStorage", e);
-            }
-        }
+    if (isLoadingInvoiceSettings) {
+        toast({ variant: 'outline', title: 'Please wait', description: 'Loading invoice settings...' });
+        return;
     }
 
+    setIsPrintingReceipt(true);
+    const settingsToUse = invoiceSettings || defaultInvoiceSettings;
+
     try {
-      await generatePdfReceipt(saleToPrint, settings);
+      await generateSaleReceiptPdf(saleToPrint, settingsToUse);
       toast({ title: 'Receipt Downloaded', description: `Receipt for sale ${saleToPrint.id} has been generated.` });
     } catch (error) {
       console.error('Error generating PDF receipt:', error);
@@ -334,7 +393,6 @@ export default function SalesPage() {
       setIsPrintingReceipt(false);
     }
   };
-
 
   const handleClearFilters = () => {
     setStartDate(undefined);
@@ -539,10 +597,10 @@ export default function SalesPage() {
                  <Button
                   variant="outline"
                   onClick={() => handlePrintSaleReceipt(selectedSale)}
-                  disabled={isPrintingReceipt || !selectedSale}
+                  disabled={isPrintingReceipt || !selectedSale || isLoadingInvoiceSettings}
                   className="w-full sm:w-auto"
                 >
-                  {isPrintingReceipt ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Printer className="mr-2 h-4 w-4" />}
+                  {isPrintingReceipt || isLoadingInvoiceSettings ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Printer className="mr-2 h-4 w-4" />}
                   Print Receipt
                 </Button>
                 <Button
