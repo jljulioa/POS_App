@@ -14,12 +14,24 @@ import Papa from 'papaparse';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import type { Product } from '@/lib/mockData';
 
-// Define the expected shape for an imported product item after parsing
-// This should align with what the backend expects (excluding 'id' and 'category' string if using categoryId)
-type ImportedProduct = Omit<Product, 'id' | 'category' | 'createdAt' | 'updatedAt'> & {
-  // categoryId will be expected as a number if present in CSV, otherwise it's optional in the schema.
-  // If categoryId is not provided or invalid, the backend should handle it (e.g. set to null or a default)
+// Define the shape for an imported product item that will be sent to the API
+// This should align with the backend's Zod schema (ProductImportItemSchema in api/products/import/route.ts)
+type ProductImportAPISchema = {
+  name: string;
+  code: string;
+  reference?: string | null;
+  barcode?: string | null;
+  stock: number;
+  category_id?: number | null; // Changed from categoryId to category_id
+  brand?: string | null;
+  minStock: number;
+  maxStock?: number | null;
+  cost: number;
+  price: number;
+  imageUrl?: string | null;
+  dataAiHint?: string | null;
 };
+
 
 interface ImportResult {
   success: boolean;
@@ -31,7 +43,7 @@ interface ImportResult {
 }
 
 // API mutation function to import products
-const importProductsAPI = async (products: ImportedProduct[]): Promise<ImportResult> => {
+const importProductsAPI = async (products: ProductImportAPISchema[]): Promise<ImportResult> => {
   const response = await fetch('/api/products/import', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -47,13 +59,13 @@ const importProductsAPI = async (products: ImportedProduct[]): Promise<ImportRes
 
 export default function ImportInventoryPage() {
   const [file, setFile] = useState<File | null>(null);
-  const [parsedData, setParsedData] = useState<ImportedProduct[]>([]);
+  const [parsedData, setParsedData] = useState<ProductImportAPISchema[]>([]);
   const [fileName, setFileName] = useState<string>('');
   const [importResult, setImportResult] = useState<ImportResult | null>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  const importMutation = useMutation<ImportResult, Error, ImportedProduct[]>({
+  const importMutation = useMutation<ImportResult, Error, ProductImportAPISchema[]>({
     mutationFn: importProductsAPI,
     onSuccess: (data) => {
       setImportResult(data);
@@ -117,13 +129,12 @@ export default function ImportInventoryPage() {
     Papa.parse<any>(file, {
       header: true,
       skipEmptyLines: true,
-      dynamicTyping: false, // Keep everything as string initially, convert specifically later
+      dynamicTyping: false, 
       complete: (results) => {
-        const productsToImport: ImportedProduct[] = [];
+        const productsToImport: ProductImportAPISchema[] = [];
         const processingErrors: Array<{ row: number; error: string; rawData: any }> = [];
 
         results.data.forEach((row, index) => {
-          // Basic validation and mapping
           const code = row.code?.trim();
           if (!code) {
             processingErrors.push({ row: index + 1, error: "Product 'code' is missing or empty.", rawData: row });
@@ -135,32 +146,35 @@ export default function ImportInventoryPage() {
             return;
           }
           
-          // Coerce numbers, provide defaults for optional fields if not present or invalid
           const stock = parseInt(row.stock, 10);
           const minStock = parseInt(row.minStock, 10);
           const maxStock = row.maxStock ? parseInt(row.maxStock, 10) : undefined;
           const cost = parseFloat(row.cost);
           const price = parseFloat(row.price);
-          const categoryId = row.categoryId ? parseInt(row.categoryId, 10) : undefined;
+          
+          // Try to parse category_id from CSV, prefer 'category_id' header, fallback to 'categoryId'
+          const categoryIdFromFile = row.category_id || row.categoryId;
+          const categoryId = categoryIdFromFile ? parseInt(categoryIdFromFile, 10) : undefined;
+
 
           if (isNaN(stock)) { processingErrors.push({row: index + 1, error: `Invalid 'stock' value for code ${code}. Must be a number.`, rawData: row }); return; }
           if (isNaN(minStock)) { processingErrors.push({row: index + 1, error: `Invalid 'minStock' value for code ${code}. Must be a number.`, rawData: row }); return; }
           if (maxStock !== undefined && isNaN(maxStock)) { processingErrors.push({row: index + 1, error: `Invalid 'maxStock' value for code ${code}. Must be a number.`, rawData: row }); return; }
           if (isNaN(cost)) { processingErrors.push({row: index + 1, error: `Invalid 'cost' value for code ${code}. Must be a number.`, rawData: row }); return; }
           if (isNaN(price)) { processingErrors.push({row: index + 1, error: `Invalid 'price' value for code ${code}. Must be a number.`, rawData: row }); return; }
-          if (categoryId !== undefined && isNaN(categoryId)) { processingErrors.push({row: index + 1, error: `Invalid 'categoryId' for code ${code}. Must be a number.`, rawData: row }); return; }
+          if (categoryId !== undefined && isNaN(categoryId)) { processingErrors.push({row: index + 1, error: `Invalid 'category_id' for code ${code}. Must be a number.`, rawData: row }); return; }
 
 
           productsToImport.push({
             name,
             code,
-            reference: row.reference?.trim() || code, // Default reference to code if empty
+            reference: row.reference?.trim() || code, 
             barcode: row.barcode?.trim() || null,
             stock: stock,
-            categoryId: categoryId, // Will be undefined if not present or invalid
+            category_id: categoryId, // Corrected: use category_id as the key
             brand: row.brand?.trim() || 'N/A',
             minStock: minStock,
-            maxStock: maxStock || 0, // Default maxStock if undefined
+            maxStock: maxStock === undefined ? null : maxStock, // Ensure maxStock is null if not provided or 0
             cost: cost,
             price: price,
             imageUrl: row.imageUrl?.trim() || null,
@@ -176,14 +190,19 @@ export default function ImportInventoryPage() {
                 errors: processingErrors.map(e => ({row: e.row, error: e.error}))
             });
             toast({variant: 'destructive', title: 'Parsing Errors', description: `Found ${processingErrors.length} errors in the CSV file. Please correct them and try again.`})
+            setParsedData([]); // Clear parsed data if there are client-side errors
             return;
         }
 
         setParsedData(productsToImport);
         if (productsToImport.length > 0) {
           importMutation.mutate(productsToImport);
-        } else {
-          toast({title: 'No Data', description: 'No valid product data found in the file to import.'});
+        } else if (results.data.length > 0 && productsToImport.length === 0 && processingErrors.length === 0) {
+          // This case means all rows were processed but resulted in no valid productsToImport (might be all errors handled by backend)
+          // But we now stop if processingErrors.length > 0
+          toast({title: 'No Valid Data', description: 'No valid product data found in the file to import after initial parsing.'});
+        } else if (results.data.length === 0) {
+            toast({title: 'Empty File', description: 'The CSV file appears to be empty or contains no data rows.'});
         }
       },
       error: (error: any) => {
@@ -209,10 +228,10 @@ export default function ImportInventoryPage() {
             <CardDescription>
               Ensure your CSV file has a header row. Expected columns:
               <code className="block bg-muted p-2 rounded-md text-xs my-2 overflow-x-auto">
-                name, code, reference, barcode, stock, categoryId, brand, minStock, maxStock, cost, price, imageUrl, dataAiHint
+                name, code, reference, barcode, stock, category_id, brand, minStock, maxStock, cost, price, imageUrl, dataAiHint
               </code>
-              <span className="font-semibold">'name', 'code', 'stock', 'minStock', 'cost', 'price', 'categoryId'</span> are typically required.
-              'categoryId' must be the numeric ID of an existing category. Other fields are optional or will use defaults.
+              <span className="font-semibold">'name', 'code', 'stock', 'minStock', 'cost', 'price'</span> are strictly required.
+              'category_id' must be the numeric ID of an existing category. Other fields are optional or will use defaults.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
