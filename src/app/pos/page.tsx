@@ -11,7 +11,7 @@ import { Separator } from '@/components/ui/separator';
 import type { Product as ProductType, Sale, Customer } from '@/lib/mockData';
 import type { SalesTicketDB, SaleItemForTicket } from '@/app/api/sales-tickets/route';
 import Image from 'next/image';
-import { Search, X, Plus, Minus, Save, ShoppingCart, CreditCard, DollarSign, PlusSquare, ListFilter, Loader2, AlertTriangle, Ticket, UserPlus, UserSearch, UserX } from 'lucide-react';
+import { Search, X, Plus, Minus, Save, ShoppingCart, CreditCard, DollarSign, PlusSquare, ListFilter, Loader2, AlertTriangle, Ticket, UserPlus, UserSearch, UserX, UserRound } from 'lucide-react';
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { Badge } from '@/components/ui/badge';
@@ -26,7 +26,7 @@ import {
 import { cn } from '@/lib/utils';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/hooks/useAuth';
-import Link from 'next/link'; // Import Link
+import Link from 'next/link'; 
 
 // API fetch function for products
 const fetchProducts = async (): Promise<ProductType[]> => {
@@ -106,16 +106,14 @@ const deleteSalesTicketAPI = async (ticketId: string): Promise<{ message: string
 
 
 export default function POSPage() {
-  const [searchTerm, setSearchTerm] = useState('');
+  const [searchTerm, setSearchTerm] = useState(''); // For product search
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { appUser, supabaseUser } = useAuth(); 
   const [activeTicketId, setActiveTicketId] = useState<string | null>(null);
   const finalizedTicketIdRef = useRef<string | null>(null); 
   
-  const [customerSearchTerm, setCustomerSearchTerm] = useState('');
-  const [showCustomerSearchResults, setShowCustomerSearchResults] = useState(false);
-
+  const [customerSearchTerm, setCustomerSearchTerm] = useState(''); // For customer search within dropdown
 
   const { data: products = [], isLoading: isLoadingProducts, error: productsError, isError: isProductsError } = useQuery<ProductType[], Error>({
     queryKey: ['products'],
@@ -252,7 +250,7 @@ export default function POSPage() {
     return customers.filter(customer =>
       customer.name.toLowerCase().includes(termLower) ||
       (customer.identificationNumber && customer.identificationNumber.toLowerCase().includes(termLower))
-    ).slice(0, 5);
+    ).slice(0, 10); // Increased limit for better search results in dropdown
   }, [customerSearchTerm, customers, isLoadingCustomers, isCustomersError]);
 
   const activeTicket = useMemo(() => {
@@ -264,12 +262,11 @@ export default function POSPage() {
     updateTicketMutation.mutate({ 
       ticketId: activeTicket.id, 
       data: { 
-        customer_id: customer.id, // Use customer's primary key
+        customer_id: customer.id, 
         customer_name: customer.name 
       } 
     });
-    setCustomerSearchTerm('');
-    setShowCustomerSearchResults(false);
+    setCustomerSearchTerm(''); // Clear search term after selection
   };
 
   const handleClearCustomer = () => {
@@ -501,7 +498,7 @@ export default function POSPage() {
           totalPrice: Number(item.totalPrice) || 0, 
       })),
       totalAmount: cartTotal,
-      customerId: activeTicket.customer_id || null, // This now holds the actual customer primary key
+      customerId: activeTicket.customer_id || null, 
       customerName: activeTicket.customer_name || null,
       paymentMethod: paymentMethod,
       cashierId: currentCashierName, 
@@ -617,50 +614,6 @@ export default function POSPage() {
         <div className="flex flex-col md:flex-row gap-4 sm:gap-6 h-[calc(100vh-4rem-3rem-10rem)]"> 
           <Card className="w-full md:w-2/5 flex flex-col shadow-lg">
             <CardHeader className="p-4 sm:p-6">
-              <CardTitle className="text-base sm:text-lg mb-2">Customer</CardTitle>
-              <div className="relative">
-                <UserSearch className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  type="text"
-                  placeholder="Search Customer (Name/ID Number)..."
-                  value={customerSearchTerm}
-                  onChange={(e) => {setCustomerSearchTerm(e.target.value); setShowCustomerSearchResults(true);}}
-                  onBlur={() => setTimeout(() => setShowCustomerSearchResults(false), 150)} // Delay hide to allow click on results
-                  onFocus={() => setShowCustomerSearchResults(true)}
-                  className="pl-8 py-2 text-sm sm:text-base"
-                  disabled={isLoadingCustomers || isProcessingAnyTicketAction || isProcessingSale}
-                />
-                {showCustomerSearchResults && customerSearchResults.length > 0 && (
-                  <ScrollArea className="absolute z-20 w-full bg-background border rounded-md shadow-lg max-h-48 mt-1">
-                    {customerSearchResults.map(cust => (
-                      <div key={cust.id}
-                           onClick={() => handleSelectCustomer(cust)}
-                           className="p-2 hover:bg-accent cursor-pointer text-sm">
-                        {cust.name} ({cust.identificationNumber || cust.id})
-                      </div>
-                    ))}
-                  </ScrollArea>
-                )}
-              </div>
-              {activeTicket.customer_name && (
-                <div className="mt-2 p-2 border rounded-md bg-muted/50 text-sm">
-                  <div className="flex justify-between items-center">
-                    <div>
-                      <span className="font-semibold">{activeTicket.customer_name}</span>
-                      {activeTicket.customer_id && <span className="text-xs text-muted-foreground ml-1"> (ID: {activeTicket.customer_id})</span>}
-                    </div>
-                    <Button variant="ghost" size="icon" className="h-6 w-6 text-destructive" onClick={handleClearCustomer} disabled={isProcessingAnyTicketAction || isProcessingSale}>
-                      <UserX className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </div>
-              )}
-               <Button variant="outline" size="sm" asChild className="mt-2 w-full">
-                  <Link href="/customers/add" target="_blank">
-                    <UserPlus className="mr-2 h-4 w-4" /> Add New Customer
-                  </Link>
-                </Button>
-              <Separator className="my-3"/>
               <CardTitle className="text-base sm:text-lg">Product Search</CardTitle>
               <div className="relative mt-2">
                 <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -718,8 +671,10 @@ export default function POSPage() {
 
           <Card className="w-full md:w-3/5 flex flex-col shadow-lg">
             <CardHeader className="p-4 sm:p-6">
-              <CardTitle className="flex items-center justify-between text-base sm:text-lg">
-                <span>Current Sale: {activeTicket.name}
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+                <CardTitle className="flex items-center text-base sm:text-lg">
+                  <ShoppingCart className="h-5 w-5 sm:h-6 sm:w-6 text-primary mr-2" />
+                  <span>Current Sale: {activeTicket.name}</span>
                   <Badge
                     variant={activeTicketId === activeTicket.id ? 'outline' : getTicketBadgeVariant(activeTicket.status)}
                     className={cn(
@@ -730,9 +685,55 @@ export default function POSPage() {
                   >
                     {activeTicket.status}
                   </Badge>
-                </span>
-                <ShoppingCart className="h-5 w-5 sm:h-6 sm:w-6 text-primary" />
-              </CardTitle>
+                </CardTitle>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" size="sm" className="shrink-0 w-full sm:w-auto" disabled={isProcessingAnyTicketAction || isProcessingSale || isLoadingCustomers}>
+                       <UserRound className="mr-2 h-4 w-4" />
+                      {activeTicket.customer_name ? 
+                        <span className="truncate max-w-[150px]">{activeTicket.customer_name}</span> : 
+                        "Assign Customer"
+                      }
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent className="w-64 sm:w-72" align="end">
+                    <DropdownMenuLabel>Manage Customer</DropdownMenuLabel>
+                    <div className="px-2 py-1">
+                      <Input 
+                        placeholder="Search by Name/ID..." 
+                        value={customerSearchTerm}
+                        onChange={(e) => setCustomerSearchTerm(e.target.value)}
+                        className="h-8 text-sm"
+                        disabled={isLoadingCustomers}
+                      />
+                    </div>
+                    {isLoadingCustomers ? (
+                      <DropdownMenuItem disabled><Loader2 className="mr-2 h-4 w-4 animate-spin"/>Loading...</DropdownMenuItem>
+                    ) : customerSearchResults.length > 0 ? (
+                      <ScrollArea className="max-h-40">
+                        {customerSearchResults.map(cust => (
+                          <DropdownMenuItem key={cust.id} onSelect={() => handleSelectCustomer(cust)}>
+                            {cust.name} <span className="text-xs text-muted-foreground ml-1">({cust.identificationNumber || cust.id})</span>
+                          </DropdownMenuItem>
+                        ))}
+                      </ScrollArea>
+                    ) : customerSearchTerm && !isLoadingCustomers ? (
+                      <DropdownMenuItem disabled>No customers found.</DropdownMenuItem>
+                    ) : null}
+                    <DropdownMenuSeparator />
+                    {activeTicket.customer_id && (
+                      <DropdownMenuItem onSelect={handleClearCustomer} className="text-destructive focus:text-destructive">
+                        <UserX className="mr-2 h-4 w-4"/>Clear Assigned Customer
+                      </DropdownMenuItem>
+                    )}
+                    <DropdownMenuItem asChild>
+                      <Link href="/customers/add" target="_blank">
+                        <UserPlus className="mr-2 h-4 w-4"/> Add New Customer
+                      </Link>
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
             </CardHeader>
             <CardContent className="flex-grow overflow-hidden p-0 sm:p-3">
               <ScrollArea className="h-full pr-0 sm:pr-3">
@@ -834,4 +835,3 @@ export default function POSPage() {
   );
 }
 
-    
