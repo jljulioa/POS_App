@@ -3,7 +3,7 @@
 
 import AppLayout from '@/components/layout/AppLayout';
 import { PageHeader } from '@/components/PageHeader';
-import type { Sale, SaleItem } from '@/lib/mockData';
+import type { Sale, SaleItem, InvoiceSettings } from '@/lib/mockData';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -27,6 +27,15 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Calendar } from "@/components/ui/calendar";
 import { cn } from "@/lib/utils";
 import { z } from 'zod';
+
+const INVOICE_SETTINGS_KEY = 'invoiceSettings'; // Same key as used in settings page
+const defaultInvoiceSettings: InvoiceSettings = {
+  companyName: 'MotoFox POS',
+  nit: 'N/A',
+  address: 'Your Store Address',
+  footerMessage: 'Thank you for your business!',
+};
+
 
 // API fetch function for sales
 const fetchSales = async (startDate?: Date, endDate?: Date): Promise<Sale[]> => {
@@ -78,101 +87,80 @@ const processReturnAPI = async (returnData: z.infer<typeof ProcessReturnSchema>)
   return response.json();
 };
 
-// Helper function to generate HTML for the sales receipt
-const generateSaleReceiptHtml = (sale: Sale | null): string => {
-  if (!sale) {
-    return `<p>No sale data available for receipt.</p>`;
+// New function to generate PDF using jsPDF
+const generatePdfReceipt = async (sale: Sale, settings: InvoiceSettings) => {
+  const { jsPDF } = await import('jspdf');
+  const autoTable = (await import('jspdf-autotable')).default; // Default import
+
+  const doc = new jsPDF();
+  let yPos = 15; // Initial Y position
+
+  // Company Details
+  doc.setFontSize(16);
+  doc.text(settings.companyName || defaultInvoiceSettings.companyName, 14, yPos);
+  yPos += 7;
+  doc.setFontSize(10);
+  doc.text(`NIT: ${settings.nit || defaultInvoiceSettings.nit}`, 14, yPos);
+  yPos += 5;
+  doc.text(settings.address || defaultInvoiceSettings.address, 14, yPos);
+  yPos += 10;
+
+  // Receipt Details
+  doc.setFontSize(12);
+  doc.text(`Receipt No: ${sale.id}`, 14, yPos);
+  doc.text(`Date: ${format(new Date(sale.date), 'PPpp')}`, 120, yPos, { align: 'left' }); // Align right might need manual x calc
+  yPos += 7;
+  doc.text(`Cashier: ${sale.cashierId || 'N/A'}`, 14, yPos);
+  if (sale.customerName) {
+    yPos += 7;
+    doc.text(`Customer: ${sale.customerName}`, 14, yPos);
+  }
+  yPos += 10;
+
+  // Items Table
+  const tableColumn = ["Product Name", "Qty", "Unit Price", "Total"];
+  const tableRows = sale.items.map(item => [
+    item.productName,
+    item.quantity.toString(),
+    `$${Number(item.unitPrice).toFixed(2)}`,
+    `$${Number(item.totalPrice).toFixed(2)}`
+  ]);
+
+  autoTable(doc, {
+    head: [tableColumn],
+    body: tableRows,
+    startY: yPos,
+    theme: 'grid',
+    headStyles: { fillColor: [220, 220, 220], textColor: 20 },
+    styles: { fontSize: 9, cellPadding: 2 },
+    columnStyles: {
+      0: { cellWidth: 'auto' }, // Product Name
+      1: { cellWidth: 15, halign: 'center' }, // Qty
+      2: { cellWidth: 25, halign: 'right' }, // Unit Price
+      3: { cellWidth: 25, halign: 'right' }, // Total
+    }
+  });
+
+  yPos = (doc as any).lastAutoTable.finalY + 10; // Get Y position after table
+
+  // Grand Total
+  doc.setFontSize(12);
+  doc.setFont(undefined, 'bold');
+  doc.text("Grand Total:", 130, yPos, {align: 'right'});
+  doc.text(`$${Number(sale.totalAmount).toFixed(2)}`, doc.internal.pageSize.getWidth() - 14, yPos, {align: 'right'});
+  yPos += 7;
+  doc.setFont(undefined, 'normal');
+  doc.setFontSize(10);
+  doc.text(`Payment Method: ${sale.paymentMethod}`, 14, yPos);
+  yPos += 10;
+
+  // Footer Message
+  if (settings.footerMessage || defaultInvoiceSettings.footerMessage) {
+    doc.setFontSize(9);
+    doc.text(settings.footerMessage || defaultInvoiceSettings.footerMessage, 14, yPos, { maxWidth: doc.internal.pageSize.getWidth() - 28 });
   }
 
-  const itemsHtml = sale.items.map(item => `
-    <tr class="item">
-      <td>${item.productName}</td>
-      <td>${item.productName}</td> 
-      <td>${item.quantity}</td>
-      <td>$${Number(item.totalPrice).toFixed(2)}</td>
-    </tr>
-  `).join('');
-
-  return `
-  <!DOCTYPE html>
-  <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-    <title>Invoice - ${sale.id}</title>
-    <style>
-      body { font-family: Arial, sans-serif; margin: 0; padding: 0; color: #333; background-color: #fff; }
-      .invoice-box { max-width: 800px; margin: 20px auto; padding: 30px; border: 1px solid #eee; box-shadow: 0 0 10px rgba(0, 0, 0, 0.15); }
-      .invoice-box table { width: 100%; line-height: inherit; text-align: left; border-collapse: collapse; }
-      .invoice-box table td { padding: 8px; vertical-align: top; }
-      .invoice-box table tr.top table td { padding-bottom: 20px; border-bottom: 2px solid #ddd; }
-      .invoice-box table tr.information table td { padding-bottom: 20px; border-bottom: 1px dashed #ccc; }
-      .invoice-box table tr.heading td { background: #eee; border-bottom: 1px solid #ddd; font-weight: bold; }
-      .invoice-box table tr.item td { border-bottom: 1px solid #eee; }
-      .invoice-box table tr.item:last-child td { border-bottom: none; }
-      .invoice-box table tr.total td:nth-child(3), .invoice-box table tr.total td:nth-child(4) { border-top: 2px solid #eee; font-weight: bold; text-align: right; }
-      .company-details { text-align: left; font-size: 1.2em; }
-      .invoice-details { text-align: right; }
-      .client-details-left { text-align: left; }
-      .client-details-right { text-align: left; } /* Adjusted to left for consistency as per example, but often client info is right */
-      .footer-note { margin-top: 30px; font-size: 0.9em; color: #666; text-align: center; }
-      @media print {
-        body { margin: 0; background-color: #fff; -webkit-print-color-adjust: exact; print-color-adjust: exact;}
-        .invoice-box { box-shadow: none; border: none; margin: 0; padding: 10px; max-width: 100%; }
-      }
-    </style>
-  </head>
-  <body>
-    <div class="invoice-box">
-      <table cellpadding="0" cellspacing="0">
-        <tr class="top">
-          <td colspan="4">
-            <table>
-              <tr>
-                <td class="company-details"><strong>MotoFox POS</strong></td>
-                <td class="invoice-details">
-                  Receipt #: ${sale.id}<br/>
-                  Date: ${format(new Date(sale.date), 'PPpp')}<br/>
-                  Cashier: ${sale.cashierId || 'N/A'}
-                </td>
-              </tr>
-            </table>
-          </td>
-        </tr>
-        ${sale.customerName ? `
-        <tr class="information">
-          <td colspan="4">
-            <table>
-              <tr>
-                <td class="client-details-left">
-                  Customer:<br/>
-                  ${sale.customerName}
-                </td>
-              </tr>
-            </table>
-          </td>
-        </tr>` : ''}
-        <tr class="heading">
-          <td>Item</td>
-          <td>Description</td>
-          <td style="text-align: center;">Qty</td>
-          <td style="text-align: right;">Total Price</td>
-        </tr>
-        ${itemsHtml}
-        <tr class="total">
-          <td colspan="2"></td>
-          <td style="text-align: right;"><strong>Total:</strong></td>
-          <td style="text-align: right;"><strong>$${Number(sale.totalAmount).toFixed(2)}</strong></td>
-        </tr>
-      </table>
-      <div class="footer-note">
-        <p>Payment Method: ${sale.paymentMethod}</p>
-        <p><strong>Thank you for your business!</strong></p>
-      </div>
-    </div>
-  </body>
-  </html>
-  `;
+  doc.save(`Receipt_${sale.id.replace(/\s+/g, '_')}.pdf`);
 };
 
 
@@ -185,18 +173,15 @@ export default function SalesPage() {
   const [isViewModalOpen, setIsViewModalOpen] = useState(false);
   const [isReturnModalOpen, setIsReturnModalOpen] = useState(false);
   const [returnItems, setReturnItems] = useState<ReturnItemFormValues>({});
-  
   const [isPrintingReceipt, setIsPrintingReceipt] = useState(false);
-  const receiptHtmlRef = useRef<HTMLDivElement>(null);
-
-
+  
   const [startDate, setStartDate] = useState<Date | undefined>(undefined);
   const [endDate, setEndDate] = useState<Date | undefined>(undefined);
 
   const { data: sales = [], isLoading, error, isError, refetch } = useQuery<Sale[], Error>({
     queryKey: ['sales', startDate, endDate],
     queryFn: () => fetchSales(startDate, endDate),
-    enabled: true, // Fetch on mount and when queryKey changes
+    enabled: true, 
     onError: (err) => {
       toast({
         variant: "destructive",
@@ -226,7 +211,7 @@ export default function SalesPage() {
       initialReturnItems[item.productId] = { quantity: 0, unitPrice: item.unitPrice, maxQuantity: item.quantity };
     });
     setReturnItems(initialReturnItems);
-    setIsViewModalOpen(false); // Close view modal before opening return modal
+    setIsViewModalOpen(false); 
     setIsReturnModalOpen(true);
   };
 
@@ -271,7 +256,7 @@ export default function SalesPage() {
       });
       queryClient.invalidateQueries({ queryKey: ['products'] });
       queryClient.invalidateQueries({ queryKey: ['sales', startDate, endDate] });
-      queryClient.invalidateQueries({ queryKey: ['todaysSales'] });
+      queryClient.invalidateQueries({ queryKey: ['todaysSales']});
       queryClient.invalidateQueries({ queryKey: ['inventoryTransactions']});
       setIsReturnModalOpen(false);
       setSelectedSale(null);
@@ -315,78 +300,39 @@ export default function SalesPage() {
   };
 
   const handlePrintSaleReceipt = async (saleToPrint: Sale | null) => {
-    if (!saleToPrint || isPrintingReceipt || !receiptHtmlRef.current) {
-      toast({ variant: 'destructive', title: 'Print Error', description: 'No sale selected, print already in progress, or print area not ready.' });
+    if (!saleToPrint) {
+      toast({ variant: 'destructive', title: 'Print Error', description: 'No sale selected for printing.' });
       return;
     }
+    if (isPrintingReceipt) return;
+
     setIsPrintingReceipt(true);
-    console.log("Printing sale:", JSON.stringify(saleToPrint));
-
-    const htmlContent = generateSaleReceiptHtml(saleToPrint);
-    console.log("Generated HTML for receipt:", htmlContent.substring(0, 300) + "...");
-
-    if (!receiptHtmlRef.current) {
-        console.error("receiptHtmlRef.current is null");
-        setIsPrintingReceipt(false);
-        return;
-    }
-    receiptHtmlRef.current.innerHTML = htmlContent;
-    console.log("receiptHtmlRef.current.innerHTML (after set):", receiptHtmlRef.current.innerHTML.substring(0, 300) + "...");
     
-    // Give the browser a moment to render the injected HTML
-    setTimeout(async () => {
-      try {
-        const elementToPrint = receiptHtmlRef.current;
-        if (!elementToPrint || elementToPrint.innerHTML.trim() === "" || !elementToPrint.hasChildNodes()) {
-          console.error("Printable element is empty or not found after timeout. Sale data for render:", JSON.stringify(saleToPrint));
-          toast({
-            variant: 'destructive',
-            title: 'Print Error',
-            description: 'Failed to prepare receipt content for printing. Please try again.',
-          });
-          if (receiptHtmlRef.current) receiptHtmlRef.current.innerHTML = ''; // Clear on error
-          setIsPrintingReceipt(false);
-          return;
+    let settings: InvoiceSettings = defaultInvoiceSettings;
+    if (typeof window !== 'undefined') {
+        const savedSettings = localStorage.getItem(INVOICE_SETTINGS_KEY);
+        if (savedSettings) {
+            try {
+                settings = JSON.parse(savedSettings);
+            } catch (e) {
+                console.error("Failed to parse invoice settings from localStorage", e);
+            }
         }
-        
-        console.log("Element to print innerHTML (before html2pdf):", elementToPrint.innerHTML.substring(0, 300) + "...");
-        const html2pdf = (await import('html2pdf.js')).default;
-        
-        const options = {
-          margin:       [2, 2, 2, 2], // mm [top, left, bottom, right]
-          filename:     `receipt_${saleToPrint.id.replace(/\s+/g, '_')}.pdf`,
-          image:        { type: 'jpeg', quality: 0.98 },
-          html2canvas:  { 
-            scale: 2, 
-            logging: true, // Enable for detailed logs from html2canvas
-            useCORS: true,
-            width: 800, // Corresponds to max-width in CSS
-            windowWidth: typeof window !== 'undefined' ? window.innerWidth : 1024,
-          },
-          jsPDF:        { 
-            unit: 'mm', 
-            format: 'a4', 
-            orientation: 'portrait' 
-          },
-        };
-        console.log("Using html2pdf options:", options);
+    }
 
-        await html2pdf().from(elementToPrint).set(options).save();
-
-      } catch (error) {
-        console.error('Error generating PDF with html2pdf.js:', error);
-        toast({
-          variant: 'destructive',
-          title: 'Print Error',
-          description: (error as Error).message || "Unknown error during PDF generation.",
-        });
-      } finally {
-        setIsPrintingReceipt(false);
-        if (receiptHtmlRef.current) {
-          receiptHtmlRef.current.innerHTML = ''; // Clear the div after printing
-        }
-      }
-    }, 300);
+    try {
+      await generatePdfReceipt(saleToPrint, settings);
+      toast({ title: 'Receipt Downloaded', description: `Receipt for sale ${saleToPrint.id} has been generated.` });
+    } catch (error) {
+      console.error('Error generating PDF receipt:', error);
+      toast({
+        variant: 'destructive',
+        title: 'Print Error',
+        description: (error as Error).message || "Unknown error during PDF generation.",
+      });
+    } finally {
+      setIsPrintingReceipt(false);
+    }
   };
 
 
@@ -396,9 +342,8 @@ export default function SalesPage() {
   };
 
   useEffect(() => {
-    // This effect is just to trigger refetch if needed when dates change
-    // The actual refetch is handled by React Query's queryKey including startDate and endDate
-  }, [startDate, endDate, refetch]);
+    // React Query handles refetching based on queryKey changes (startDate, endDate)
+  }, [startDate, endDate]);
 
 
   if (isLoading && !sales.length) {
@@ -590,7 +535,7 @@ export default function SalesPage() {
               </div>
             </div>
             <DialogFooter className="flex-col sm:flex-row sm:justify-between items-center">
-              <div className="flex gap-2 mt-2 sm:mt-0">
+               <div className="flex gap-2 mt-2 sm:mt-0 flex-wrap">
                  <Button
                   variant="outline"
                   onClick={() => handlePrintSaleReceipt(selectedSale)}
@@ -609,7 +554,7 @@ export default function SalesPage() {
                 </Button>
               </div>
               <DialogClose asChild>
-                <Button type="button" variant="secondary" className="w-full sm:w-auto">Close</Button>
+                <Button type="button" variant="secondary" className="w-full sm:w-auto mt-2 sm:mt-0">Close</Button>
               </DialogClose>
             </DialogFooter>
           </DialogContent>
@@ -621,7 +566,7 @@ export default function SalesPage() {
         <Dialog open={isReturnModalOpen} onOpenChange={(open) => {
           if (!open) {
             setIsReturnModalOpen(false);
-            setSelectedSale(null); // Clear selected sale when closing return modal
+            setSelectedSale(null); 
           }
         }}>
           <DialogContent className="sm:max-w-lg">
@@ -669,9 +614,6 @@ export default function SalesPage() {
           </DialogContent>
         </Dialog>
       )}
-      {/* Hidden div for printing receipts */}
-      <div ref={receiptHtmlRef} style={{ position: 'absolute', left: '-9999px', top: '-9999px', zIndex: -100, width: '800px', backgroundColor: 'white' }}></div>
     </AppLayout>
   );
 }
-
