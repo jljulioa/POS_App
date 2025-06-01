@@ -28,7 +28,7 @@ import { Calendar } from "@/components/ui/calendar";
 import { cn } from "@/lib/utils";
 import { z } from 'zod';
 import type { jsPDF } from 'jspdf'; // Import jsPDF type
-import { ScrollArea } from '@/components/ui/scroll-area'; // Import ScrollArea
+// Removed ScrollArea import as it's no longer directly used for this specific table
 
 // API fetch function for sales
 const fetchSales = async (startDate?: Date, endDate?: Date): Promise<Sale[]> => {
@@ -569,7 +569,7 @@ export default function SalesPage() {
             </DialogHeader>
             <div className="py-4">
               <h4 className="font-semibold mb-2">Items Sold:</h4>
-              <ScrollArea className="max-h-[300px] rounded-md border">
+              <div className="max-h-[300px] overflow-y-auto rounded-md border">
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -590,7 +590,7 @@ export default function SalesPage() {
                     ))}
                   </TableBody>
                 </Table>
-              </ScrollArea>
+              </div>
               <div className="text-right font-bold text-lg mt-4">
                 Grand Total: ${selectedSale.totalAmount.toFixed(2)}
               </div>
