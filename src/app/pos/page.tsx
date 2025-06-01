@@ -106,14 +106,18 @@ const deleteSalesTicketAPI = async (ticketId: string): Promise<{ message: string
 
 
 export default function POSPage() {
-  const [searchTerm, setSearchTerm] = useState(''); // For product search
+  const [searchTerm, setSearchTerm] = useState(''); 
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { appUser, supabaseUser } = useAuth(); 
   const [activeTicketId, setActiveTicketId] = useState<string | null>(null);
   const finalizedTicketIdRef = useRef<string | null>(null); 
   
-  const [customerSearchTerm, setCustomerSearchTerm] = useState(''); // For customer search within dropdown
+  const [customerSearchTerm, setCustomerSearchTerm] = useState(''); 
+
+  const [editableUnitPrices, setEditableUnitPrices] = useState<Record<string, string>>({});
+  const [editableDiscountPercentages, setEditableDiscountPercentages] = useState<Record<string, string>>({});
+
 
   const { data: products = [], isLoading: isLoadingProducts, error: productsError, isError: isProductsError } = useQuery<ProductType[], Error>({
     queryKey: ['products'],
@@ -257,6 +261,23 @@ export default function POSPage() {
     return salesTickets?.find(ticket => ticket.id === activeTicketId);
   }, [salesTickets, activeTicketId]);
 
+  useEffect(() => {
+    if (activeTicket?.cart_items) {
+      const newEditablePrices: Record<string, string> = {};
+      const newEditableDiscounts: Record<string, string> = {};
+      activeTicket.cart_items.forEach(item => {
+        newEditablePrices[item.productId] = item.unitPrice.toString();
+        newEditableDiscounts[item.productId] = item.discountPercentage.toString();
+      });
+      setEditableUnitPrices(newEditablePrices);
+      setEditableDiscountPercentages(newEditableDiscounts);
+    } else {
+      setEditableUnitPrices({});
+      setEditableDiscountPercentages({});
+    }
+  }, [activeTicket?.cart_items]);
+
+
   const handleSelectCustomer = (customer: Customer) => {
     if (!activeTicket) return;
     updateTicketMutation.mutate({ 
@@ -381,56 +402,36 @@ export default function POSPage() {
   const handleDiscountChange = useCallback((productId: string, discountStr: string) => {
     if (!activeTicket) return;
     
-    const discountPercentage = parseFloat(discountStr);
-    if (isNaN(discountPercentage) || discountPercentage < 0 || discountPercentage > 100) {
-      // Keep current discount if input is invalid, or reset, or show toast
-      // For now, let's assume we only update on valid numbers.
-      // To make it reactive, we'd need to update the item's discount field even if invalid to reflect in input,
-      // but calculation would use a sanitized value.
-      // For simplicity, we'll only proceed with valid discounts.
-      // If user clears field, treat as 0 discount.
-      const currentItem = activeTicket.cart_items.find(item => item.productId === productId);
-      if (!currentItem) return;
+    const currentItem = activeTicket.cart_items.find(item => item.productId === productId);
+    if (!currentItem) return;
 
-      const newDisc = discountStr === "" ? 0 : (isNaN(discountPercentage) ? currentItem.discountPercentage : Math.max(0, Math.min(100, discountPercentage)));
-      const newUnitPrice = parseFloat((currentItem.originalUnitPrice * (1 - (newDisc / 100))).toFixed(2));
+    let newDisc = currentItem.discountPercentage; // Default to current if input is invalid during typing
+    let newUnitPrice = currentItem.unitPrice;
 
-      const newCartItemsClient = activeTicket.cart_items.map(item => 
-        item.productId === productId ? {
-          ...item,
-          discountPercentage: newDisc,
-          unitPrice: newUnitPrice,
-          totalPrice: parseFloat((newUnitPrice * item.quantity).toFixed(2)),
-        } : item
-      );
-       const cartItemsForAPI = newCartItemsClient.map(item => ({
-          productId: item.productId,
-          productName: item.productName,
-          quantity: item.quantity,
-          originalUnitPrice: Number(item.originalUnitPrice) || 0,
-          unitPrice: Number(item.unitPrice) || 0,
-          costPrice: Number(item.costPrice) || 0,
-          discountPercentage: Number(item.discountPercentage) || 0,
-          totalPrice: Number(item.totalPrice) || 0,
-      }));
-      updateTicketMutation.mutate({ ticketId: activeTicket.id, data: { cart_items: cartItemsForAPI } });
-      return;
+    if (discountStr === "") {
+        newDisc = 0;
+        newUnitPrice = parseFloat(currentItem.originalUnitPrice.toFixed(2));
+    } else {
+        const parsedDiscount = parseFloat(discountStr);
+        if (!isNaN(parsedDiscount) && parsedDiscount >= 0 && parsedDiscount <= 100) {
+            newDisc = parsedDiscount;
+            newUnitPrice = parseFloat((currentItem.originalUnitPrice * (1 - (newDisc / 100))).toFixed(2));
+        } else if (!isNaN(parsedDiscount)) {
+            // Handle out of range (e.g., clamp or keep previous valid)
+            newDisc = Math.max(0, Math.min(100, parsedDiscount));
+            newUnitPrice = parseFloat((currentItem.originalUnitPrice * (1 - (newDisc / 100))).toFixed(2));
+        }
     }
 
-
-    const newCartItemsClient = activeTicket.cart_items.map(item => {
-      if (item.productId === productId) {
-        const newUnitPrice = parseFloat((item.originalUnitPrice * (1 - (discountPercentage / 100))).toFixed(2));
-        return {
-          ...item,
-          discountPercentage: discountPercentage,
-          unitPrice: newUnitPrice,
-          totalPrice: parseFloat((newUnitPrice * item.quantity).toFixed(2)),
-        };
-      }
-      return item;
-    });
-     const cartItemsForAPI = newCartItemsClient.map(item => ({
+    const newCartItemsClient = activeTicket.cart_items.map(item => 
+      item.productId === productId ? {
+        ...item,
+        discountPercentage: newDisc,
+        unitPrice: newUnitPrice,
+        totalPrice: parseFloat((newUnitPrice * item.quantity).toFixed(2)),
+      } : item
+    );
+    const cartItemsForAPI = newCartItemsClient.map(item => ({
         productId: item.productId,
         productName: item.productName,
         quantity: item.quantity,
@@ -445,53 +446,32 @@ export default function POSPage() {
 
   const handleUnitPriceChange = useCallback((productId: string, newPriceStr: string) => {
     if (!activeTicket) return;
+    
+    const currentItem = activeTicket.cart_items.find(item => item.productId === productId);
+    if (!currentItem) return;
 
-    const newUnitPriceValue = parseFloat(newPriceStr);
-     if (isNaN(newUnitPriceValue) || newUnitPriceValue < 0) {
-      // Handle invalid input - maybe revert to original price or show toast
-      // For now, if input is cleared or invalid, let's assume it will be handled by not committing change or reverting.
-      // Let's ensure that the input reflects the current state even if it's temporarily invalid.
-      // For this iteration, we'll update only if it's a valid number.
-      const currentItem = activeTicket.cart_items.find(item => item.productId === productId);
-      if(!currentItem) return;
-      // If the string is empty, we could reset the price to original and discount to 0.
-      // For now, let's proceed if it's a valid number.
-      if(newPriceStr === "") {
-          const newCartItemsClient = activeTicket.cart_items.map(item => {
-            if (item.productId === productId) {
-              return {
-                ...item,
-                unitPrice: item.originalUnitPrice,
-                discountPercentage: 0,
-                totalPrice: parseFloat((item.originalUnitPrice * item.quantity).toFixed(2)),
-              };
+    let newUnitPriceValue = currentItem.unitPrice;
+    let newDiscountPercentage = currentItem.discountPercentage;
+
+    if (newPriceStr === "") {
+        newUnitPriceValue = currentItem.originalUnitPrice;
+        newDiscountPercentage = 0;
+    } else {
+        const parsedPrice = parseFloat(newPriceStr);
+        if (!isNaN(parsedPrice) && parsedPrice >= 0) {
+            newUnitPriceValue = parsedPrice;
+            if (currentItem.originalUnitPrice > 0) {
+                newDiscountPercentage = parseFloat(
+                  (((currentItem.originalUnitPrice - newUnitPriceValue) / currentItem.originalUnitPrice) * 100).toFixed(2)
+                );
+            } else {
+                newDiscountPercentage = 0; // Avoid division by zero or negative if marked up from 0
             }
-            return item;
-          });
-          const cartItemsForAPI = newCartItemsClient.map(item => ({ /* map to API schema */ }));
-          updateTicketMutation.mutate({ ticketId: activeTicket.id, data: { cart_items: cartItemsForAPI } });
-          return;
-      }
-      if(isNaN(newUnitPriceValue) || newUnitPriceValue < 0) return; // Don't proceed with invalid numbers
+        }
     }
-
-
+    
     const newCartItemsClient = activeTicket.cart_items.map(item => {
       if (item.productId === productId) {
-        let newDiscountPercentage = 0;
-        if (item.originalUnitPrice > 0) {
-          newDiscountPercentage = parseFloat(
-            (((item.originalUnitPrice - newUnitPriceValue) / item.originalUnitPrice) * 100).toFixed(2)
-          );
-        } else if (newUnitPriceValue > 0 && item.originalUnitPrice === 0) {
-          // This case indicates a markup from zero, which means an infinite percentage.
-          // We might cap it or display it specially. For now, let's represent as -100% (as an indicator)
-          // or simply keep discount at 0 if original is 0.
-          newDiscountPercentage = 0; // Simpler: if original is 0, discount logic is less meaningful.
-        }
-        // Clamp discount between 0 and 100 if desired, otherwise it can be negative (markup)
-        // newDiscountPercentage = Math.max(0, Math.min(100, newDiscountPercentage)); 
-
         return {
           ...item,
           unitPrice: newUnitPriceValue,
@@ -863,25 +843,26 @@ export default function POSPage() {
                           </TableCell>
                           <TableCell className="text-center">
                             <Input
-                                type="number"
-                                min="0"
-                                max="100"
-                                step="0.01"
-                                value={item.discountPercentage}
-                                onChange={(e) => handleDiscountChange(item.productId, e.target.value)}
+                                type="text"
+                                value={editableDiscountPercentages[item.productId] ?? ''}
+                                onChange={(e) => setEditableDiscountPercentages(prev => ({ ...prev, [item.productId]: e.target.value }))}
+                                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleDiscountChange(item.productId, e.currentTarget.value); }}}
+                                onBlur={(e) => handleDiscountChange(item.productId, e.target.value)}
                                 className="h-7 w-16 text-center px-1 text-xs sm:text-sm"
                                 disabled={isProcessingAnyTicketAction || isProcessingSale}
+                                placeholder={item.discountPercentage.toString()}
                             />
                           </TableCell>
                           <TableCell className="text-center">
                             <Input
-                                type="number"
-                                min="0"
-                                step="0.01"
-                                value={item.unitPrice}
-                                onChange={(e) => handleUnitPriceChange(item.productId, e.target.value)}
+                                type="text"
+                                value={editableUnitPrices[item.productId] ?? ''}
+                                onChange={(e) => setEditableUnitPrices(prev => ({ ...prev, [item.productId]: e.target.value }))}
+                                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleUnitPriceChange(item.productId, e.currentTarget.value); }}}
+                                onBlur={(e) => handleUnitPriceChange(item.productId, e.target.value)}
                                 className="h-7 w-20 text-center px-1 text-xs sm:text-sm"
                                 disabled={isProcessingAnyTicketAction || isProcessingSale}
+                                placeholder={item.unitPrice.toString()}
                             />
                           </TableCell>
                           <TableCell className="text-center">
@@ -950,4 +931,3 @@ export default function POSPage() {
     </AppLayout>
   );
 }
-
