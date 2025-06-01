@@ -26,6 +26,8 @@ import {
   DialogClose,
 } from "@/components/ui/dialog";
 import { z } from 'zod';
+import type { jsPDF } from 'jspdf'; // Import jsPDF type
+import 'jspdf-autotable'; // Import jspdf-autotable for side effects
 
 // API fetch function for today's sales
 const fetchTodaysSales = async (): Promise<Sale[]> => {
@@ -72,15 +74,158 @@ const processReturnAPI = async (returnData: z.infer<typeof ProcessReturnSchema>)
   return response.json();
 };
 
+// Function to generate PDF report using jsPDF
+const generateSalesReportPdf = async (sales: Sale[], reportData: any) => {
+  const { jsPDF } = await import('jspdf');
+  const autoTable = (await import('jspdf-autotable')).default;
+
+  const doc = new jsPDF({
+    orientation: 'portrait',
+    unit: 'pt', // Use points for better control with standard letter size
+    format: 'letter'
+  });
+
+  const pageHeight = doc.internal.pageSize.height;
+  const pageWidth = doc.internal.pageSize.width;
+  const margin = 40; // 40 points margin
+  let yPos = margin;
+
+  // Report Header
+  doc.setFontSize(18);
+  doc.setFont(undefined, 'bold');
+  doc.text("Today's Sales Report", pageWidth / 2, yPos, { align: 'center' });
+  yPos += 20;
+  doc.setFontSize(12);
+  doc.setFont(undefined, 'normal');
+  doc.text(`Date: ${format(new Date(), 'PPP')}`, pageWidth / 2, yPos, { align: 'center' });
+  yPos += 30;
+
+  // Financial Summary Section
+  doc.setFontSize(14);
+  doc.setFont(undefined, 'bold');
+  doc.text("Financial Summary", margin, yPos);
+  yPos += 15;
+
+  autoTable(doc, {
+    startY: yPos,
+    head: [['Metric', 'Value']],
+    body: [
+      ['Total Revenue', `$${reportData.totalRevenue.toFixed(2)}`],
+      ['Total COGS', `$${reportData.totalCogs.toFixed(2)}`],
+      ['Gross Profit', `$${reportData.grossProfit.toFixed(2)}`],
+      ['Number of Sales', reportData.numberOfSales.toString()],
+    ],
+    theme: 'striped',
+    headStyles: { fillColor: [75, 85, 99] }, // Tailwind gray-600
+    margin: { left: margin, right: margin },
+    tableWidth: pageWidth - (margin * 2),
+  });
+  yPos = (doc as any).lastAutoTable.finalY + 20;
+
+
+  // Revenue by Category Section
+  if (Object.keys(reportData.revenueByCategory).length > 0) {
+    if (yPos + 60 > pageHeight - margin) { // Check for page break
+      doc.addPage();
+      yPos = margin;
+    }
+    doc.setFontSize(14);
+    doc.setFont(undefined, 'bold');
+    doc.text("Revenue by Category", margin, yPos);
+    yPos += 15;
+    autoTable(doc, {
+      startY: yPos,
+      head: [['Category', 'Total Revenue']],
+      body: Object.entries(reportData.revenueByCategory)
+                   .sort(([, a], [, b]) => (b as number) - (a as number))
+                   .map(([category, revenue]) => [category, `$${(revenue as number).toFixed(2)}`]),
+      theme: 'grid',
+      headStyles: { fillColor: [75, 85, 99] },
+      margin: { left: margin, right: margin },
+      tableWidth: pageWidth - (margin * 2),
+    });
+    yPos = (doc as any).lastAutoTable.finalY + 20;
+  }
+
+  // Detailed Sales Transactions Section
+  if (sales.length > 0) {
+    if (yPos + 40 > pageHeight - margin) { // Check for page break
+      doc.addPage();
+      yPos = margin;
+    }
+    doc.setFontSize(14);
+    doc.setFont(undefined, 'bold');
+    doc.text("Detailed Sales Transactions", margin, yPos);
+    yPos += 20;
+
+    sales.forEach((sale, saleIndex) => {
+      if (yPos + 80 > pageHeight - margin) { // Check space for sale header + some items
+          doc.addPage();
+          yPos = margin;
+      }
+      doc.setFontSize(11);
+      doc.setFont(undefined, 'bold');
+      doc.text(`Sale ID: ${sale.id}`, margin, yPos);
+      yPos += 15;
+      doc.setFontSize(10);
+      doc.setFont(undefined, 'normal');
+      doc.text(
+        `Date: ${format(new Date(sale.date), 'Pp')} | Customer: ${sale.customerName || 'N/A'} | Cashier: ${sale.cashierId} | Payment: ${sale.paymentMethod} | Total: $${sale.totalAmount.toFixed(2)}`,
+        margin, yPos, { maxWidth: pageWidth - (margin * 2) }
+      );
+      yPos += 15;
+
+      autoTable(doc, {
+        startY: yPos,
+        head: [['Product', 'Category', 'Qty', 'Unit Price', 'Cost', 'Total']],
+        body: sale.items.map(item => [
+          item.productName,
+          item.category || 'N/A',
+          item.quantity.toString(),
+          `$${Number(item.unitPrice).toFixed(2)}`,
+          `$${Number(item.costPrice || 0).toFixed(2)}`,
+          `$${Number(item.totalPrice).toFixed(2)}`
+        ]),
+        theme: 'striped',
+        headStyles: { fillColor: [156, 163, 175], fontSize: 9 }, // Tailwind gray-400
+        bodyStyles: { fontSize: 8 },
+        margin: { left: margin, right: margin },
+        tableWidth: pageWidth - (margin * 2),
+      });
+      yPos = (doc as any).lastAutoTable.finalY + 15; // Space after each sale's item table
+
+      if (saleIndex < sales.length - 1) {
+        if (yPos + 20 > pageHeight - margin) { // Check for page break before next sale section
+            doc.addPage();
+            yPos = margin;
+        }
+        doc.setDrawColor(200, 200, 200); // Light gray line
+        doc.line(margin, yPos, pageWidth - margin, yPos); // Horizontal line
+        yPos += 15;
+      }
+    });
+  }
+
+  // Page Footer with Page Numbers
+  const pageCount = (doc as any).internal.getNumberOfPages();
+  for (let i = 1; i <= pageCount; i++) {
+    doc.setPage(i);
+    doc.setFontSize(10);
+    doc.text(`Page ${i} of ${pageCount}`, pageWidth - margin, pageHeight - margin + 10, { align: 'right' });
+  }
+
+  doc.save(`Todays_Sales_Report_${format(new Date(), 'yyyy-MM-dd')}.pdf`);
+};
+
 
 export default function TodaysSalesReportPage() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const reportContentRef = useRef<HTMLDivElement>(null);
-
+  
   const [selectedSaleForReturn, setSelectedSaleForReturn] = useState<Sale | null>(null);
   const [isReturnModalOpen, setIsReturnModalOpen] = useState(false);
   const [returnItems, setReturnItems] = useState<ReturnItemFormValues>({});
+  const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
 
 
   const { data: sales = [], isLoading, error, isError } = useQuery<Sale[], Error>({
@@ -116,29 +261,20 @@ export default function TodaysSalesReportPage() {
   }, [sales]);
 
 
-  const handlePrint = async () => {
-    const element = reportContentRef.current;
-    if (element) {
-      try {
-        const html2pdf = (await import('html2pdf.js')).default;
-        const opt = {
-          margin:       0.5,
-          filename:     `Todays_Sales_Report_${format(new Date(), 'yyyy-MM-dd')}.pdf`,
-          image:        { type: 'jpeg', quality: 0.98 },
-          html2canvas:  { scale: 2, useCORS: true, logging: false },
-          jsPDF:        { unit: 'in', format: 'letter', orientation: 'portrait' }
-        };
-        html2pdf().from(element).set(opt).save();
-      } catch (error) {
-        console.error("Error generating PDF:", error);
-        toast({ variant: "destructive", title: "Error de Impresión", description: (error as Error).message });
-      }
-    } else {
-      toast({
-        variant: "destructive",
-        title: "Error Generating PDF",
-        description: "Report content not found.",
-      });
+  const handleGeneratePdf = async () => {
+    if (sales.length === 0) {
+      toast({ title: "No Data", description: "There are no sales to report for today." });
+      return;
+    }
+    setIsGeneratingPdf(true);
+    try {
+      await generateSalesReportPdf(sales, reportData);
+      toast({ title: "Report Generated", description: "Today's sales report PDF has been downloaded." });
+    } catch (error) {
+      console.error("Error generating PDF report:", error);
+      toast({ variant: "destructive", title: "PDF Generation Error", description: (error as Error).message });
+    } finally {
+      setIsGeneratingPdf(false);
     }
   };
 
@@ -192,6 +328,7 @@ export default function TodaysSalesReportPage() {
       });
       queryClient.invalidateQueries({ queryKey: ['products'] });
       queryClient.invalidateQueries({ queryKey: ['todaysSales'] }); 
+      queryClient.invalidateQueries({ queryKey: ['inventoryTransactions'] });
       setIsReturnModalOpen(false);
       setSelectedSaleForReturn(null);
     },
@@ -272,8 +409,9 @@ export default function TodaysSalesReportPage() {
   return (
     <AppLayout>
       <PageHeader title="Today's Sales Report" description={`Sales for ${format(new Date(), 'PPP')}`}>
-        <Button onClick={handlePrint} variant="outline">
-          <Printer className="mr-2 h-4 w-4" /> Generate PDF
+        <Button onClick={handleGeneratePdf} variant="outline" disabled={isGeneratingPdf || sales.length === 0}>
+          {isGeneratingPdf ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Printer className="mr-2 h-4 w-4" />}
+          {isGeneratingPdf ? 'Generating...' : 'Generate PDF Report'}
         </Button>
         <Button variant="outline" asChild>
           <Link href="/sales">
@@ -282,7 +420,8 @@ export default function TodaysSalesReportPage() {
         </Button>
       </PageHeader>
 
-      <div id="report-content" ref={reportContentRef}>
+      {/* This div is NOT used for PDF generation anymore, but kept for page structure consistency */}
+      <div> 
         {sales.length === 0 && (
           <Card>
             <CardContent className="p-6 text-center text-muted-foreground">
@@ -291,8 +430,9 @@ export default function TodaysSalesReportPage() {
           </Card>
         )}
 
+        {/* Display sales on the page - this part is NOT directly printed to PDF by jsPDF */}
         {sales.map((sale) => (
-          <Card key={sale.id} className="mb-6 shadow-lg break-inside-avoid-page">
+          <Card key={sale.id} className="mb-6 shadow-lg">
             <CardHeader>
               <div className="flex flex-col sm:flex-row justify-between sm:items-start">
                 <div>
@@ -361,7 +501,7 @@ export default function TodaysSalesReportPage() {
         
         {sales.length > 0 && (
           <>
-            <Card className="mt-8 shadow-xl break-inside-avoid-page">
+            <Card className="mt-8 shadow-xl">
               <CardHeader>
                 <CardTitle className="text-xl flex items-center"><PieChart className="mr-3 h-6 w-6 text-indigo-500"/>Revenue by Category (Today)</CardTitle>
               </CardHeader>
@@ -377,7 +517,7 @@ export default function TodaysSalesReportPage() {
                     </TableHeader>
                     <TableBody>
                       {Object.entries(reportData.revenueByCategory)
-                        .sort(([, a], [, b]) => b - a) // Sort by revenue descending
+                        .sort(([, a], [, b]) => (b as number) - (a as number)) // Sort by revenue descending
                         .map(([category, revenue]) => (
                         <TableRow key={category}>
                           <TableCell className="font-medium">{category}</TableCell>
@@ -393,7 +533,7 @@ export default function TodaysSalesReportPage() {
               </CardContent>
             </Card>
 
-            <Card className="mt-8 shadow-xl break-inside-avoid-page">
+            <Card className="mt-8 shadow-xl">
               <CardHeader>
                 <CardTitle className="text-xl">Today's Financial Summary</CardTitle>
                 <CardDescription>Across {reportData.numberOfSales} transaction(s).</CardDescription>
@@ -449,7 +589,7 @@ export default function TodaysSalesReportPage() {
                 <div key={item.productId} className="grid grid-cols-3 items-center gap-3 p-2 border rounded-md">
                   <div className="col-span-2">
                     <p className="font-medium text-sm">{item.productName}</p>
-                    <p className="text-xs text-muted-foreground">Purchased: {item.quantity} @ ${item.unitPrice.toFixed(2)}</p>
+                    <p className="text-xs text-muted-foreground">Purchased: {item.quantity} @ ${Number(item.unitPrice).toFixed(2)}</p>
                   </div>
                   <Input
                     type="number"
@@ -482,4 +622,3 @@ export default function TodaysSalesReportPage() {
     </AppLayout>
   );
 }
-
