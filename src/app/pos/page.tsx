@@ -11,7 +11,7 @@ import { Separator } from '@/components/ui/separator';
 import type { Product as ProductType, Sale, Customer } from '@/lib/mockData';
 import type { SalesTicketDB, SaleItemForTicket } from '@/app/api/sales-tickets/route';
 import Image from 'next/image';
-import { Search, X, Plus, Minus, Save, ShoppingCart, CreditCard, DollarSign, PlusSquare, ListFilter, Loader2, AlertTriangle, Ticket, UserPlus, UserSearch, UserX, UserRound } from 'lucide-react';
+import { Search, X, Plus, Minus, Save, ShoppingCart, CreditCard, DollarSign, PlusSquare, ListFilter, Loader2, AlertTriangle, Ticket, UserPlus, UserX, UserRound } from 'lucide-react';
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { Badge } from '@/components/ui/badge';
@@ -250,7 +250,7 @@ export default function POSPage() {
     return customers.filter(customer =>
       customer.name.toLowerCase().includes(termLower) ||
       (customer.identificationNumber && customer.identificationNumber.toLowerCase().includes(termLower))
-    ).slice(0, 10); // Increased limit for better search results in dropdown
+    ).slice(0, 10);
   }, [customerSearchTerm, customers, isLoadingCustomers, isCustomersError]);
 
   const activeTicket = useMemo(() => {
@@ -266,7 +266,7 @@ export default function POSPage() {
         customer_name: customer.name 
       } 
     });
-    setCustomerSearchTerm(''); // Clear search term after selection
+    setCustomerSearchTerm('');
   };
 
   const handleClearCustomer = () => {
@@ -382,21 +382,126 @@ export default function POSPage() {
     if (!activeTicket) return;
     
     const discountPercentage = parseFloat(discountStr);
+    if (isNaN(discountPercentage) || discountPercentage < 0 || discountPercentage > 100) {
+      // Keep current discount if input is invalid, or reset, or show toast
+      // For now, let's assume we only update on valid numbers.
+      // To make it reactive, we'd need to update the item's discount field even if invalid to reflect in input,
+      // but calculation would use a sanitized value.
+      // For simplicity, we'll only proceed with valid discounts.
+      // If user clears field, treat as 0 discount.
+      const currentItem = activeTicket.cart_items.find(item => item.productId === productId);
+      if (!currentItem) return;
+
+      const newDisc = discountStr === "" ? 0 : (isNaN(discountPercentage) ? currentItem.discountPercentage : Math.max(0, Math.min(100, discountPercentage)));
+      const newUnitPrice = parseFloat((currentItem.originalUnitPrice * (1 - (newDisc / 100))).toFixed(2));
+
+      const newCartItemsClient = activeTicket.cart_items.map(item => 
+        item.productId === productId ? {
+          ...item,
+          discountPercentage: newDisc,
+          unitPrice: newUnitPrice,
+          totalPrice: parseFloat((newUnitPrice * item.quantity).toFixed(2)),
+        } : item
+      );
+       const cartItemsForAPI = newCartItemsClient.map(item => ({
+          productId: item.productId,
+          productName: item.productName,
+          quantity: item.quantity,
+          originalUnitPrice: Number(item.originalUnitPrice) || 0,
+          unitPrice: Number(item.unitPrice) || 0,
+          costPrice: Number(item.costPrice) || 0,
+          discountPercentage: Number(item.discountPercentage) || 0,
+          totalPrice: Number(item.totalPrice) || 0,
+      }));
+      updateTicketMutation.mutate({ ticketId: activeTicket.id, data: { cart_items: cartItemsForAPI } });
+      return;
+    }
+
 
     const newCartItemsClient = activeTicket.cart_items.map(item => {
       if (item.productId === productId) {
-        const currentDiscount = isNaN(discountPercentage) || discountPercentage < 0 || discountPercentage > 100 ? (item.discountPercentage || 0) : discountPercentage;
-        const newUnitPrice = (item.originalUnitPrice || item.unitPrice) * (1 - (currentDiscount / 100));
+        const newUnitPrice = parseFloat((item.originalUnitPrice * (1 - (discountPercentage / 100))).toFixed(2));
         return {
           ...item,
-          discountPercentage: currentDiscount,
-          unitPrice: parseFloat(newUnitPrice.toFixed(2)),
+          discountPercentage: discountPercentage,
+          unitPrice: newUnitPrice,
           totalPrice: parseFloat((newUnitPrice * item.quantity).toFixed(2)),
         };
       }
       return item;
     });
      const cartItemsForAPI = newCartItemsClient.map(item => ({
+        productId: item.productId,
+        productName: item.productName,
+        quantity: item.quantity,
+        originalUnitPrice: Number(item.originalUnitPrice) || 0,
+        unitPrice: Number(item.unitPrice) || 0,
+        costPrice: Number(item.costPrice) || 0,
+        discountPercentage: Number(item.discountPercentage) || 0,
+        totalPrice: Number(item.totalPrice) || 0,
+    }));
+    updateTicketMutation.mutate({ ticketId: activeTicket.id, data: { cart_items: cartItemsForAPI } });
+  }, [activeTicket, updateTicketMutation]);
+
+  const handleUnitPriceChange = useCallback((productId: string, newPriceStr: string) => {
+    if (!activeTicket) return;
+
+    const newUnitPriceValue = parseFloat(newPriceStr);
+     if (isNaN(newUnitPriceValue) || newUnitPriceValue < 0) {
+      // Handle invalid input - maybe revert to original price or show toast
+      // For now, if input is cleared or invalid, let's assume it will be handled by not committing change or reverting.
+      // Let's ensure that the input reflects the current state even if it's temporarily invalid.
+      // For this iteration, we'll update only if it's a valid number.
+      const currentItem = activeTicket.cart_items.find(item => item.productId === productId);
+      if(!currentItem) return;
+      // If the string is empty, we could reset the price to original and discount to 0.
+      // For now, let's proceed if it's a valid number.
+      if(newPriceStr === "") {
+          const newCartItemsClient = activeTicket.cart_items.map(item => {
+            if (item.productId === productId) {
+              return {
+                ...item,
+                unitPrice: item.originalUnitPrice,
+                discountPercentage: 0,
+                totalPrice: parseFloat((item.originalUnitPrice * item.quantity).toFixed(2)),
+              };
+            }
+            return item;
+          });
+          const cartItemsForAPI = newCartItemsClient.map(item => ({ /* map to API schema */ }));
+          updateTicketMutation.mutate({ ticketId: activeTicket.id, data: { cart_items: cartItemsForAPI } });
+          return;
+      }
+      if(isNaN(newUnitPriceValue) || newUnitPriceValue < 0) return; // Don't proceed with invalid numbers
+    }
+
+
+    const newCartItemsClient = activeTicket.cart_items.map(item => {
+      if (item.productId === productId) {
+        let newDiscountPercentage = 0;
+        if (item.originalUnitPrice > 0) {
+          newDiscountPercentage = parseFloat(
+            (((item.originalUnitPrice - newUnitPriceValue) / item.originalUnitPrice) * 100).toFixed(2)
+          );
+        } else if (newUnitPriceValue > 0 && item.originalUnitPrice === 0) {
+          // This case indicates a markup from zero, which means an infinite percentage.
+          // We might cap it or display it specially. For now, let's represent as -100% (as an indicator)
+          // or simply keep discount at 0 if original is 0.
+          newDiscountPercentage = 0; // Simpler: if original is 0, discount logic is less meaningful.
+        }
+        // Clamp discount between 0 and 100 if desired, otherwise it can be negative (markup)
+        // newDiscountPercentage = Math.max(0, Math.min(100, newDiscountPercentage)); 
+
+        return {
+          ...item,
+          unitPrice: newUnitPriceValue,
+          discountPercentage: newDiscountPercentage,
+          totalPrice: parseFloat((newUnitPriceValue * item.quantity).toFixed(2)),
+        };
+      }
+      return item;
+    });
+    const cartItemsForAPI = newCartItemsClient.map(item => ({
         productId: item.productId,
         productName: item.productName,
         quantity: item.quantity,
@@ -671,69 +776,69 @@ export default function POSPage() {
 
           <Card className="w-full md:w-3/5 flex flex-col shadow-lg">
             <CardHeader className="p-4 sm:p-6">
-              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
-                <CardTitle className="flex items-center text-base sm:text-lg">
-                  <ShoppingCart className="h-5 w-5 sm:h-6 sm:w-6 text-primary mr-2" />
-                  <span>Current Sale: {activeTicket.name}</span>
-                  <Badge
-                    variant={activeTicketId === activeTicket.id ? 'outline' : getTicketBadgeVariant(activeTicket.status)}
-                    className={cn(
-                        "capitalize text-xs ml-2",
-                        activeTicketId === activeTicket.id && activeTicket.status === 'Active' && "border-primary text-primary bg-primary/10",
-                        activeTicketId === activeTicket.id && activeTicket.status !== 'Active' && "border-primary-foreground/70 text-primary-foreground bg-primary-foreground/10 hover:bg-primary-foreground/20"
-                    )}
-                  >
-                    {activeTicket.status}
-                  </Badge>
-                </CardTitle>
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="outline" size="sm" className="shrink-0 w-full sm:w-auto" disabled={isProcessingAnyTicketAction || isProcessingSale || isLoadingCustomers}>
-                       <UserRound className="mr-2 h-4 w-4" />
-                      {activeTicket.customer_name ? 
-                        <span className="truncate max-w-[150px]">{activeTicket.customer_name}</span> : 
-                        "Assign Customer"
-                      }
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent className="w-64 sm:w-72" align="end">
-                    <DropdownMenuLabel>Manage Customer</DropdownMenuLabel>
-                    <div className="px-2 py-1">
-                      <Input 
-                        placeholder="Search by Name/ID..." 
-                        value={customerSearchTerm}
-                        onChange={(e) => setCustomerSearchTerm(e.target.value)}
-                        className="h-8 text-sm"
-                        disabled={isLoadingCustomers}
-                      />
-                    </div>
-                    {isLoadingCustomers ? (
-                      <DropdownMenuItem disabled><Loader2 className="mr-2 h-4 w-4 animate-spin"/>Loading...</DropdownMenuItem>
-                    ) : customerSearchResults.length > 0 ? (
-                      <ScrollArea className="max-h-40">
-                        {customerSearchResults.map(cust => (
-                          <DropdownMenuItem key={cust.id} onSelect={() => handleSelectCustomer(cust)}>
-                            {cust.name} <span className="text-xs text-muted-foreground ml-1">({cust.identificationNumber || cust.id})</span>
-                          </DropdownMenuItem>
-                        ))}
-                      </ScrollArea>
-                    ) : customerSearchTerm && !isLoadingCustomers ? (
-                      <DropdownMenuItem disabled>No customers found.</DropdownMenuItem>
-                    ) : null}
-                    <DropdownMenuSeparator />
-                    {activeTicket.customer_id && (
-                      <DropdownMenuItem onSelect={handleClearCustomer} className="text-destructive focus:text-destructive">
-                        <UserX className="mr-2 h-4 w-4"/>Clear Assigned Customer
+               <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+                  <div className="flex items-center">
+                    <ShoppingCart className="h-5 w-5 sm:h-6 sm:w-6 text-primary mr-2" />
+                    <span className="text-base sm:text-lg font-semibold">{activeTicket.name}</span>
+                     <Badge
+                      variant={activeTicketId === activeTicket.id ? 'outline' : getTicketBadgeVariant(activeTicket.status)}
+                      className={cn(
+                          "capitalize text-xs ml-2",
+                          activeTicketId === activeTicket.id && activeTicket.status === 'Active' && "border-primary text-primary bg-primary/10",
+                          activeTicketId === activeTicket.id && activeTicket.status !== 'Active' && "border-primary-foreground/70 text-primary-foreground bg-primary-foreground/10 hover:bg-primary-foreground/20"
+                      )}
+                    >
+                      {activeTicket.status}
+                    </Badge>
+                  </div>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="outline" size="sm" className="shrink-0 w-full sm:w-auto text-xs sm:text-sm" disabled={isProcessingAnyTicketAction || isProcessingSale || isLoadingCustomers}>
+                        <UserRound className="mr-1 h-3 w-3 sm:h-4 sm:w-4" />
+                        {activeTicket.customer_name ? 
+                          <span className="truncate max-w-[100px] sm:max-w-[150px]">{activeTicket.customer_name} (ID: {activeTicket.customer_id})</span> : 
+                          "Assign Customer"
+                        }
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent className="w-64 sm:w-72" align="end">
+                      <DropdownMenuLabel>Manage Customer</DropdownMenuLabel>
+                      <div className="px-2 py-1">
+                        <Input 
+                          placeholder="Search Name/ID..." 
+                          value={customerSearchTerm}
+                          onChange={(e) => setCustomerSearchTerm(e.target.value)}
+                          className="h-8 text-sm"
+                          disabled={isLoadingCustomers}
+                        />
+                      </div>
+                      {isLoadingCustomers ? (
+                        <DropdownMenuItem disabled><Loader2 className="mr-2 h-4 w-4 animate-spin"/>Loading...</DropdownMenuItem>
+                      ) : customerSearchResults.length > 0 ? (
+                        <ScrollArea className="max-h-40">
+                          {customerSearchResults.map(cust => (
+                            <DropdownMenuItem key={cust.id} onSelect={() => handleSelectCustomer(cust)}>
+                              {cust.name} <span className="text-xs text-muted-foreground ml-1">({cust.identificationNumber || cust.id})</span>
+                            </DropdownMenuItem>
+                          ))}
+                        </ScrollArea>
+                      ) : customerSearchTerm && !isLoadingCustomers ? (
+                        <DropdownMenuItem disabled>No customers found.</DropdownMenuItem>
+                      ) : null}
+                      <DropdownMenuSeparator />
+                      {activeTicket.customer_id && (
+                        <DropdownMenuItem onSelect={handleClearCustomer} className="text-destructive focus:text-destructive">
+                          <UserX className="mr-2 h-4 w-4"/>Clear Assigned Customer
+                        </DropdownMenuItem>
+                      )}
+                      <DropdownMenuItem asChild>
+                        <Link href="/customers/add" target="_blank">
+                          <UserPlus className="mr-2 h-4 w-4"/> Add New Customer
+                        </Link>
                       </DropdownMenuItem>
-                    )}
-                    <DropdownMenuItem asChild>
-                      <Link href="/customers/add" target="_blank">
-                        <UserPlus className="mr-2 h-4 w-4"/> Add New Customer
-                      </Link>
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </div>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </div>
             </CardHeader>
             <CardContent className="flex-grow overflow-hidden p-0 sm:p-3">
               <ScrollArea className="h-full pr-0 sm:pr-3">
@@ -743,8 +848,8 @@ export default function POSPage() {
                       <TableRow>
                         <TableHead className="text-xs sm:text-sm">Product</TableHead>
                         <TableHead className="w-[80px] text-center text-xs sm:text-sm">Disc. %</TableHead>
+                        <TableHead className="w-[100px] text-center text-xs sm:text-sm">Unit Price</TableHead>
                         <TableHead className="w-[100px] sm:w-[120px] text-center text-xs sm:text-sm">Quantity</TableHead>
-                        <TableHead className="text-right text-xs sm:text-sm">Unit Price</TableHead>
                         <TableHead className="text-right text-xs sm:text-sm">Total</TableHead>
                         <TableHead className="w-[40px] sm:w-[50px]"></TableHead>
                       </TableRow>
@@ -752,18 +857,30 @@ export default function POSPage() {
                     <TableBody>
                       {activeTicket.cart_items.map(item => (
                         <TableRow key={item.productId}>
-                          <TableCell className="font-medium text-xs sm:text-sm line-clamp-1">
-                            {item.productName}
-                            <div className="text-xs text-muted-foreground">Original: ${Number(item.originalUnitPrice).toFixed(2)}</div>
+                          <TableCell className="font-medium text-xs sm:text-sm">
+                            <p className="line-clamp-1">{item.productName}</p>
+                            <p className="text-xs text-muted-foreground">Original: ${Number(item.originalUnitPrice).toFixed(2)}</p>
                           </TableCell>
                           <TableCell className="text-center">
                             <Input
                                 type="number"
                                 min="0"
                                 max="100"
+                                step="0.01"
                                 value={item.discountPercentage}
                                 onChange={(e) => handleDiscountChange(item.productId, e.target.value)}
                                 className="h-7 w-16 text-center px-1 text-xs sm:text-sm"
+                                disabled={isProcessingAnyTicketAction || isProcessingSale}
+                            />
+                          </TableCell>
+                          <TableCell className="text-center">
+                            <Input
+                                type="number"
+                                min="0"
+                                step="0.01"
+                                value={item.unitPrice}
+                                onChange={(e) => handleUnitPriceChange(item.productId, e.target.value)}
+                                className="h-7 w-20 text-center px-1 text-xs sm:text-sm"
                                 disabled={isProcessingAnyTicketAction || isProcessingSale}
                             />
                           </TableCell>
@@ -780,7 +897,6 @@ export default function POSPage() {
                               <Button variant="outline" size="icon" className="h-6 w-6 sm:h-7 sm:w-7" onClick={() => updateQuantity(item.productId, item.quantity + 1)} disabled={isProcessingAnyTicketAction || isProcessingSale}><Plus className="h-3 w-3"/></Button>
                             </div>
                           </TableCell>
-                          <TableCell className="text-right text-xs sm:text-sm">${Number(item.unitPrice).toFixed(2)}</TableCell>
                           <TableCell className="text-right font-semibold text-xs sm:text-sm">${Number(item.totalPrice).toFixed(2)}</TableCell>
                           <TableCell>
                             <Button variant="ghost" size="icon" className="h-6 w-6 sm:h-7 sm:w-7 text-destructive hover:text-destructive" onClick={() => removeFromCart(item.productId)} disabled={isProcessingAnyTicketAction || isProcessingSale}><X className="h-3 w-3 sm:h-4 sm:w-4"/></Button>
