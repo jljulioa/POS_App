@@ -28,6 +28,7 @@ import { Calendar } from "@/components/ui/calendar";
 import { cn } from "@/lib/utils";
 import { z } from 'zod';
 import type { jsPDF } from 'jspdf'; // Import jsPDF type
+import { ScrollArea } from '@/components/ui/scroll-area'; // Import ScrollArea
 
 // API fetch function for sales
 const fetchSales = async (startDate?: Date, endDate?: Date): Promise<Sale[]> => {
@@ -568,26 +569,28 @@ export default function SalesPage() {
             </DialogHeader>
             <div className="py-4">
               <h4 className="font-semibold mb-2">Items Sold:</h4>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Product</TableHead>
-                    <TableHead className="text-center">Qty</TableHead>
-                    <TableHead className="text-right">Unit Price</TableHead>
-                    <TableHead className="text-right">Total</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {selectedSale.items.map(item => (
-                    <TableRow key={item.productId}>
-                      <TableCell>{item.productName}</TableCell>
-                      <TableCell className="text-center">{item.quantity}</TableCell>
-                      <TableCell className="text-right">${Number(item.unitPrice).toFixed(2)}</TableCell>
-                      <TableCell className="text-right">${Number(item.totalPrice).toFixed(2)}</TableCell>
+              <ScrollArea className="max-h-[300px] rounded-md border">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Product</TableHead>
+                      <TableHead className="text-center">Qty</TableHead>
+                      <TableHead className="text-right">Unit Price</TableHead>
+                      <TableHead className="text-right">Total</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                  </TableHeader>
+                  <TableBody>
+                    {selectedSale.items.map(item => (
+                      <TableRow key={item.productId}>
+                        <TableCell>{item.productName}</TableCell>
+                        <TableCell className="text-center">{item.quantity}</TableCell>
+                        <TableCell className="text-right">${Number(item.unitPrice).toFixed(2)}</TableCell>
+                        <TableCell className="text-right">${Number(item.totalPrice).toFixed(2)}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </ScrollArea>
               <div className="text-right font-bold text-lg mt-4">
                 Grand Total: ${selectedSale.totalAmount.toFixed(2)}
               </div>
@@ -675,3 +678,4 @@ export default function SalesPage() {
     </AppLayout>
   );
 }
+
