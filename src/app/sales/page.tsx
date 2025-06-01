@@ -27,8 +27,9 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Calendar } from "@/components/ui/calendar";
 import { cn } from "@/lib/utils";
 import { z } from 'zod';
-import type { jsPDF } from 'jspdf'; // Import jsPDF type
-// Removed ScrollArea import as it's no longer directly used for this specific table
+import type { jsPDF } from 'jspdf'; 
+import 'jspdf-autotable';
+
 
 // API fetch function for sales
 const fetchSales = async (startDate?: Date, endDate?: Date): Promise<Sale[]> => {
@@ -104,7 +105,7 @@ const generateSaleReceiptPdf = async (sale: Sale, settings: InvoiceSettings) => 
   const doc = new jsPDF({
     orientation: 'portrait',
     unit: 'mm',
-    format: [76, 200] // Approx 3-inch width, 200mm height (can adjust)
+    format: [76, 200] 
   });
 
   let yPos = 10;
@@ -113,7 +114,6 @@ const generateSaleReceiptPdf = async (sale: Sale, settings: InvoiceSettings) => 
   const leftMargin = 5;
   const contentWidth = 76 - (leftMargin * 2);
 
-  // Company Name - Centered, Bold
   doc.setFontSize(12);
   doc.setFont(undefined, 'bold');
   const companyNameText = settings.companyName || defaultInvoiceSettings.companyName;
@@ -121,7 +121,6 @@ const generateSaleReceiptPdf = async (sale: Sale, settings: InvoiceSettings) => 
   doc.text(companyNameText, (76 - companyNameWidth) / 2, yPos);
   yPos += lineSpacing;
 
-  // Address - Centered, Smaller
   doc.setFontSize(8);
   doc.setFont(undefined, 'normal');
   const addressText = settings.address || defaultInvoiceSettings.address;
@@ -132,16 +131,14 @@ const generateSaleReceiptPdf = async (sale: Sale, settings: InvoiceSettings) => 
     yPos += smallLineSpacing;
   });
 
-  // NIT - Centered, Smaller
   const nitText = `NIT: ${settings.nit || defaultInvoiceSettings.nit}`;
   const nitWidth = doc.getTextWidth(nitText);
   doc.text(nitText, (76 - nitWidth) / 2, yPos);
   yPos += lineSpacing;
   
-  doc.text('-------------------------------------', leftMargin, yPos); // Line separator
+  doc.text('-------------------------------------', leftMargin, yPos); 
   yPos += smallLineSpacing;
 
-  // Receipt Info
   doc.text(`Receipt No: ${sale.id}`, leftMargin, yPos);
   yPos += smallLineSpacing;
   doc.text(`Date: ${format(new Date(sale.date), 'dd/MM/yyyy HH:mm')}`, leftMargin, yPos);
@@ -154,9 +151,8 @@ const generateSaleReceiptPdf = async (sale: Sale, settings: InvoiceSettings) => 
     doc.text(`Customer: ${sale.customerName}`, leftMargin, yPos);
     yPos += smallLineSpacing;
   }
-  yPos += smallLineSpacing; // Extra space before items
+  yPos += smallLineSpacing; 
 
-  // Items Table
   const tableColumn = [
     { header: 'Item', dataKey: 'name' },
     { header: 'Qty', dataKey: 'qty' },
@@ -194,10 +190,9 @@ const generateSaleReceiptPdf = async (sale: Sale, settings: InvoiceSettings) => 
 
   yPos = (doc as any).lastAutoTable.finalY + lineSpacing;
 
-  // Grand Total
   doc.setFontSize(9);
   doc.setFont(undefined, 'bold');
-  doc.text('TOTAL:', leftMargin + 35, yPos, { align: 'right' }); // Align before amount
+  doc.text('TOTAL:', leftMargin + 35, yPos, { align: 'right' }); 
   doc.text(`$${Number(sale.totalAmount).toFixed(2)}`, 76 - leftMargin, yPos, { align: 'right' });
   yPos += lineSpacing;
 
@@ -206,10 +201,9 @@ const generateSaleReceiptPdf = async (sale: Sale, settings: InvoiceSettings) => 
   doc.text(`Payment: ${sale.paymentMethod}`, leftMargin, yPos);
   yPos += lineSpacing;
 
-  doc.text('-------------------------------------', leftMargin, yPos); // Line separator
+  doc.text('-------------------------------------', leftMargin, yPos); 
   yPos += smallLineSpacing;
   
-  // Footer Message - Centered
   const footerText = settings.footerMessage || defaultInvoiceSettings.footerMessage;
   if (footerText) {
     doc.setFontSize(7.5);
@@ -253,9 +247,9 @@ export default function SalesPage() {
   });
 
   const { data: invoiceSettings, isLoading: isLoadingInvoiceSettings } = useQuery<InvoiceSettings, Error>({
-    queryKey: ['invoiceSettings'], // Use the same key as in settings page to potentially share cache
+    queryKey: ['invoiceSettings'], 
     queryFn: fetchInvoiceSettingsAPI,
-    staleTime: 10 * 60 * 1000, // Cache for 10 minutes
+    staleTime: 10 * 60 * 1000, 
   });
 
   const filteredSales = useMemo(() => {
@@ -401,7 +395,6 @@ export default function SalesPage() {
   };
 
   useEffect(() => {
-    // React Query handles refetching based on queryKey changes (startDate, endDate)
   }, [startDate, endDate]);
 
 
@@ -506,7 +499,7 @@ export default function SalesPage() {
         {isLoading && <Loader2 className="h-5 w-5 animate-spin text-primary ml-2" />}
       </div>
 
-      <div className="rounded-lg border shadow-sm bg-card">
+      <div className="rounded-lg border shadow-sm bg-card overflow-x-auto">
         <Table>
           <TableHeader>
             <TableRow>
@@ -553,7 +546,6 @@ export default function SalesPage() {
         </Table>
       </div>
 
-      {/* View Sale Details Modal */}
       {selectedSale && isViewModalOpen && (
         <Dialog open={isViewModalOpen} onOpenChange={setIsViewModalOpen}>
           <DialogContent className="sm:max-w-xl md:max-w-2xl">
@@ -622,7 +614,6 @@ export default function SalesPage() {
         </Dialog>
       )}
 
-      {/* Return Items Modal */}
       {selectedSale && isReturnModalOpen && (
         <Dialog open={isReturnModalOpen} onOpenChange={(open) => {
           if (!open) {
@@ -640,24 +631,26 @@ export default function SalesPage() {
                 Specify quantities to return. Max quantity is what was originally purchased.
               </DialogDescription>
             </DialogHeader>
-            <div className="py-4 space-y-3">
-              {selectedSale.items.map(item => (
-                <div key={item.productId} className="grid grid-cols-3 items-center gap-3 p-2 border rounded-md">
-                  <div className="col-span-2">
-                    <p className="font-medium text-sm">{item.productName}</p>
-                    <p className="text-xs text-muted-foreground">Purchased: {item.quantity} @ ${Number(item.unitPrice).toFixed(2)}</p>
+            <div className="py-4">
+              <div className="space-y-3 max-h-[400px] overflow-y-auto pr-2">
+                {selectedSale.items.map(item => (
+                  <div key={item.productId} className="grid grid-cols-3 items-center gap-3 p-2 border rounded-md">
+                    <div className="col-span-2">
+                      <p className="font-medium text-sm">{item.productName}</p>
+                      <p className="text-xs text-muted-foreground">Purchased: {item.quantity} @ ${Number(item.unitPrice).toFixed(2)}</p>
+                    </div>
+                    <Input
+                      type="number"
+                      min="0"
+                      max={item.quantity}
+                      value={returnItems[item.productId]?.quantity ?? 0}
+                      onChange={(e) => handleReturnQuantityChange(item.productId, e.target.value)}
+                      className="h-9 text-center"
+                      placeholder="Qty"
+                    />
                   </div>
-                  <Input
-                    type="number"
-                    min="0"
-                    max={item.quantity}
-                    value={returnItems[item.productId]?.quantity ?? 0}
-                    onChange={(e) => handleReturnQuantityChange(item.productId, e.target.value)}
-                    className="h-9 text-center"
-                    placeholder="Qty"
-                  />
-                </div>
-              ))}
+                ))}
+              </div>
               <div className="text-right font-semibold text-lg pt-3">
                 Total Refund Amount: ${totalReturnAmount.toFixed(2)}
               </div>
