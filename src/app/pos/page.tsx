@@ -283,7 +283,7 @@ export default function POSPage() {
     updateTicketMutation.mutate({ 
       ticketId: activeTicket.id, 
       data: { 
-        customer_id: customer.id, 
+        customer_id: customer.id, // Using customer's primary key
         customer_name: customer.name 
       } 
     });
@@ -405,7 +405,7 @@ export default function POSPage() {
     const currentItem = activeTicket.cart_items.find(item => item.productId === productId);
     if (!currentItem) return;
 
-    let newDisc = currentItem.discountPercentage; // Default to current if input is invalid during typing
+    let newDisc = currentItem.discountPercentage; 
     let newUnitPrice = currentItem.unitPrice;
 
     if (discountStr === "") {
@@ -417,7 +417,6 @@ export default function POSPage() {
             newDisc = parsedDiscount;
             newUnitPrice = parseFloat((currentItem.originalUnitPrice * (1 - (newDisc / 100))).toFixed(2));
         } else if (!isNaN(parsedDiscount)) {
-            // Handle out of range (e.g., clamp or keep previous valid)
             newDisc = Math.max(0, Math.min(100, parsedDiscount));
             newUnitPrice = parseFloat((currentItem.originalUnitPrice * (1 - (newDisc / 100))).toFixed(2));
         }
@@ -465,7 +464,7 @@ export default function POSPage() {
                   (((currentItem.originalUnitPrice - newUnitPriceValue) / currentItem.originalUnitPrice) * 100).toFixed(2)
                 );
             } else {
-                newDiscountPercentage = 0; // Avoid division by zero or negative if marked up from 0
+                newDiscountPercentage = 0; 
             }
         }
     }
@@ -839,7 +838,6 @@ export default function POSPage() {
                         <TableRow key={item.productId}>
                           <TableCell className="font-medium text-xs sm:text-sm">
                             <p className="line-clamp-1">{item.productName}</p>
-                            <p className="text-xs text-muted-foreground">Original: ${Number(item.originalUnitPrice).toFixed(2)}</p>
                           </TableCell>
                           <TableCell className="text-center">
                             <Input
