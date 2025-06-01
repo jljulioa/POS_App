@@ -8,7 +8,7 @@ import type { Product } from '@/lib/mockData';
 const ReturnItemSchema = z.object({
   productId: z.string(),
   quantity: z.number().int().min(1, "Return quantity must be at least 1."),
-  unitPrice: z.number().min(0), // Used for refund calculation, not direct DB storage in a 'returns' table for now
+  unitPrice: z.number().min(0), // Used for refund calculation on client, backend should use stored sale item price
 });
 
 const ProcessReturnSchema = z.object({
@@ -25,6 +25,7 @@ export async function POST(request: NextRequest) {
     const validation = ProcessReturnSchema.safeParse(body);
 
     if (!validation.success) {
+      client.release();
       return NextResponse.json({ message: 'Invalid return data', errors: validation.error.format() }, { status: 400 });
     }
 
@@ -32,33 +33,15 @@ export async function POST(request: NextRequest) {
 
     await client.query('BEGIN');
 
-    // Fetch original sale items to validate quantities
-    const originalSaleItemsResult = await client.query(
-      'SELECT product_id, quantity, productName FROM SaleItems WHERE sale_id = $1',
-      [saleId]
-    );
-    const originalSaleItemsMap = new Map(originalSaleItemsResult.rows.map(item => [item.product_id, { quantity: item.quantity, productName: item.productname }]));
-
-    let totalRefundAmount = 0;
+    let totalRefundAmountCalculated = 0;
 
     for (const item of itemsToReturn) {
-      const originalItem = originalSaleItemsMap.get(item.productId);
-
-      if (!originalItem) {
-        await client.query('ROLLBACK');
-        return NextResponse.json({ message: `Product ID ${item.productId} not found in original sale ${saleId}.` }, { status: 400 });
-      }
-
-      if (item.quantity > originalItem.quantity) {
-        await client.query('ROLLBACK');
-        return NextResponse.json({ message: `Cannot return ${item.quantity} of ${originalItem.productName}. Only ${originalItem.quantity} purchased in sale ${saleId}.` }, { status: 400 });
-      }
-
       // Fetch current product details for stock update and transaction log
       const productResult = await client.query('SELECT stock, name FROM Products WHERE id = $1 FOR UPDATE', [item.productId]);
       if (productResult.rowCount === 0) {
         await client.query('ROLLBACK');
-        return NextResponse.json({ message: `Product ${originalItem.productName} (ID: ${item.productId}) not found.` }, { status: 404 });
+        client.release();
+        return NextResponse.json({ message: `Product ID ${item.productId} not found.` }, { status: 404 });
       }
       const currentProduct = productResult.rows[0];
       const stockBefore = currentProduct.stock;
@@ -69,8 +52,6 @@ export async function POST(request: NextRequest) {
         'UPDATE Products SET stock = stock + $1 WHERE id = $2',
         [item.quantity, item.productId]
       );
-      
-      totalRefundAmount += item.quantity * item.unitPrice;
 
       // Log inventory transaction
       const transactionSql = `
@@ -79,25 +60,65 @@ export async function POST(request: NextRequest) {
       `;
       await client.query(transactionSql, [
         item.productId,
-        originalItem.productName, // Use product name from original sale item
+        currentProduct.name, // Use product name from DB
         'Return',
-        item.quantity, // Positive for return
+        item.quantity, // Positive for return stock adjustment
         stockBefore,
         stockAfter,
         saleId,
         `Return of ${item.quantity} units from sale ${saleId}.`
       ]);
+
+      // Fetch the original SaleItem to validate quantities and get original unit price
+      const saleItemResult = await client.query(
+        'SELECT id, quantity, unitprice FROM SaleItems WHERE sale_id = $1 AND product_id = $2',
+        [saleId, item.productId]
+      );
+
+      if (saleItemResult.rowCount === 0) {
+        await client.query('ROLLBACK');
+        client.release();
+        return NextResponse.json({ message: `Item with Product ID ${item.productId} not found in original sale ${saleId}.` }, { status: 400 });
+      }
+      const originalSaleItem = saleItemResult.rows[0];
+
+      if (item.quantity > originalSaleItem.quantity) {
+        await client.query('ROLLBACK');
+        client.release();
+        return NextResponse.json({ message: `Cannot return ${item.quantity} of ${currentProduct.name}. Only ${originalSaleItem.quantity} were originally sold in sale ${saleId}.` }, { status: 400 });
+      }
+
+      const newSaleItemQuantity = originalSaleItem.quantity - item.quantity;
+      const newSaleItemTotalPrice = newSaleItemQuantity * originalSaleItem.unitprice;
+
+      // Update the SaleItem quantity and total price
+      await client.query(
+        'UPDATE SaleItems SET quantity = $1, totalprice = $2 WHERE id = $3',
+        [newSaleItemQuantity, newSaleItemTotalPrice, originalSaleItem.id]
+      );
+      
+      // Accumulate refund amount based on the original sale item's unit price
+      totalRefundAmountCalculated += item.quantity * originalSaleItem.unitprice;
     }
 
-    // Here you might also create a 'Return' record or update the original 'Sale' record
-    // For now, we are just updating stock.
+    // After all items are processed, update the parent Sale's totalAmount
+    const updatedSaleTotalResult = await client.query(
+      'SELECT SUM(totalprice) as new_total_amount FROM SaleItems WHERE sale_id = $1',
+      [saleId]
+    );
+    const newSaleTotalAmount = updatedSaleTotalResult.rows[0]?.new_total_amount || 0;
+
+    await client.query(
+      'UPDATE Sales SET totalAmount = $1 WHERE id = $2',
+      [newSaleTotalAmount, saleId]
+    );
 
     await client.query('COMMIT');
 
-    return NextResponse.json({ message: 'Return processed successfully.', totalRefundAmount }, { status: 200 });
+    return NextResponse.json({ message: 'Return processed successfully. Sale and stock updated.', totalRefundAmount: totalRefundAmountCalculated }, { status: 200 });
 
   } catch (error) {
-    await client.query('ROLLBACK');
+    await client.query('ROLLBACK').catch(rbError => console.error("Return API: Rollback failed", rbError));
     console.error('Failed to process return:', error);
     return NextResponse.json({ message: 'Failed to process return', error: (error as Error).message }, { status: 500 });
   } finally {
