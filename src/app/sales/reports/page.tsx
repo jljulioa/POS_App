@@ -14,7 +14,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useToast } from '@/hooks/use-toast';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import Link from 'next/link';
-import { ScrollArea } from '@/components/ui/scroll-area';
+// Removed ScrollArea import as it's not used here
 import { Badge } from '@/components/ui/badge';
 import {
   Dialog,
@@ -466,7 +466,7 @@ export default function TodaysSalesReportPage() {
             <CardContent>
               <h4 className="text-md font-semibold mb-2 text-foreground">Items Sold:</h4>
               {sale.items && sale.items.length > 0 ? (
-                <ScrollArea className="rounded-md border max-h-60">
+                <div className="rounded-md border max-h-60 overflow-y-auto">
                   <Table>
                     <TableHeader>
                       <TableRow>
@@ -491,7 +491,7 @@ export default function TodaysSalesReportPage() {
                       ))}
                     </TableBody>
                   </Table>
-                </ScrollArea>
+                </div>
               ) : (
                 <p className="text-muted-foreground text-sm">No items found for this sale.</p>
               )}
@@ -507,7 +507,7 @@ export default function TodaysSalesReportPage() {
               </CardHeader>
               <CardContent>
                 {Object.keys(reportData.revenueByCategory).length > 0 ? (
-                  <div className="rounded-md border">
+                  <div className="rounded-md border overflow-x-auto">
                   <Table>
                     <TableHeader>
                       <TableRow>
@@ -585,23 +585,25 @@ export default function TodaysSalesReportPage() {
               </DialogDescription>
             </DialogHeader>
             <div className="py-4 space-y-3">
-              {selectedSaleForReturn.items.map(item => (
-                <div key={item.productId} className="grid grid-cols-3 items-center gap-3 p-2 border rounded-md">
-                  <div className="col-span-2">
-                    <p className="font-medium text-sm">{item.productName}</p>
-                    <p className="text-xs text-muted-foreground">Purchased: {item.quantity} @ ${Number(item.unitPrice).toFixed(2)}</p>
+              <div className="max-h-[400px] overflow-y-auto pr-2">
+                {selectedSaleForReturn.items.map(item => (
+                  <div key={item.productId} className="grid grid-cols-3 items-center gap-3 p-2 border rounded-md mb-2">
+                    <div className="col-span-2">
+                      <p className="font-medium text-sm">{item.productName}</p>
+                      <p className="text-xs text-muted-foreground">Purchased: {item.quantity} @ ${Number(item.unitPrice).toFixed(2)}</p>
+                    </div>
+                    <Input
+                      type="number"
+                      min="0"
+                      max={item.quantity}
+                      value={returnItems[item.productId]?.quantity ?? 0}
+                      onChange={(e) => handleReturnQuantityChange(item.productId, e.target.value)}
+                      className="h-9 text-center"
+                      placeholder="Qty"
+                    />
                   </div>
-                  <Input
-                    type="number"
-                    min="0"
-                    max={item.quantity}
-                    value={returnItems[item.productId]?.quantity ?? 0}
-                    onChange={(e) => handleReturnQuantityChange(item.productId, e.target.value)}
-                    className="h-9 text-center"
-                    placeholder="Qty"
-                  />
-                </div>
-              ))}
+                ))}
+              </div>
               <div className="text-right font-semibold text-lg pt-3">
                 Total Refund Amount: ${totalReturnAmount.toFixed(2)}
               </div>
@@ -622,3 +624,5 @@ export default function TodaysSalesReportPage() {
     </AppLayout>
   );
 }
+
+    
