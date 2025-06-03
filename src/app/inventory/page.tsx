@@ -8,7 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
-import { PlusCircle, FileDown, Edit3, Trash2, Loader2, AlertTriangle, Upload, DollarSign } from 'lucide-react';
+import { PlusCircle, FileDown, Edit3, Trash2, Loader2, AlertTriangle, Upload, DollarSign, ChevronLeft, ChevronRight } from 'lucide-react';
 import Image from 'next/image';
 import { Badge } from '@/components/ui/badge';
 import React, { useState, useMemo, useEffect } from 'react';
@@ -129,6 +129,12 @@ const stockStatusOptions: { value: StockStatusFilter; label: string }[] = [
   { value: 'out_of_stock', label: 'Out of Stock' },
 ];
 
+const itemsPerPageOptions = [
+  { value: '50', label: '50 per page' },
+  { value: '100', label: '100 per page' },
+  { value: 'all', label: 'Show All' },
+];
+
 export default function InventoryPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const searchParams = useSearchParams();
@@ -137,6 +143,10 @@ export default function InventoryPage() {
   const [filterBrand, setFilterBrand] = useState('all');
   const [filterCategoryName, setFilterCategoryName] = useState('all'); 
   const [filterStockStatus, setFilterStockStatus] = useState<StockStatusFilter>('all');
+
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState<number | 'all'>(50);
+
 
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -167,6 +177,8 @@ export default function InventoryPage() {
         description: `Product has been successfully deleted.`,
       });
       queryClient.invalidateQueries({ queryKey: ['products'] });
+      // After deletion, we might be on an empty page if it was the last item.
+      // For simplicity, current page remains, but a more advanced logic could adjust it.
     },
     onError: (error: Error) => {
       toast({
@@ -191,7 +203,7 @@ export default function InventoryPage() {
   }, [categories, isLoadingCategories]);
 
 
-  const filteredProducts = useMemo(() => {
+  const currentFilteredProducts = useMemo(() => {
     return products.filter(product => {
       const searchTermLower = searchTerm.toLowerCase();
       const matchesSearch = product.name.toLowerCase().includes(searchTermLower) ||
@@ -214,10 +226,54 @@ export default function InventoryPage() {
       return matchesSearch && matchesBrand && matchesCategory && matchesStockStatus;
     });
   }, [searchTerm, filterBrand, filterCategoryName, filterStockStatus, products]);
+  
+  const totalPages = useMemo(() => {
+    if (itemsPerPage === 'all' || currentFilteredProducts.length === 0) {
+      return 1;
+    }
+    return Math.ceil(currentFilteredProducts.length / itemsPerPage);
+  }, [currentFilteredProducts, itemsPerPage]);
+
+  const displayedProducts = useMemo(() => {
+    if (itemsPerPage === 'all') {
+      return currentFilteredProducts;
+    }
+    const numericItemsPerPage = Number(itemsPerPage); // Should always be a number here if not 'all'
+    const startIndex = (currentPage - 1) * numericItemsPerPage;
+    const endIndex = startIndex + numericItemsPerPage;
+    return currentFilteredProducts.slice(startIndex, endIndex);
+  }, [currentFilteredProducts, currentPage, itemsPerPage]);
+
+  // Reset to page 1 when filters or itemsPerPage change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, filterBrand, filterCategoryName, filterStockStatus, itemsPerPage]);
+
+  // Adjust current page if it becomes invalid after products list changes (e.g., deletion)
+  useEffect(() => {
+    if (currentPage > totalPages && totalPages > 0) {
+      setCurrentPage(totalPages);
+    } else if (totalPages === 0 && currentFilteredProducts.length > 0) { // Should be 1 if products exist
+       setCurrentPage(1);
+    }
+  }, [currentFilteredProducts.length, totalPages, currentPage]);
+
 
   const totalFilteredCogs = useMemo(() => {
-    return filteredProducts.reduce((acc, product) => acc + (product.cost * product.stock), 0);
-  }, [filteredProducts]);
+    return currentFilteredProducts.reduce((acc, product) => acc + (product.cost * product.stock), 0);
+  }, [currentFilteredProducts]);
+
+  const handleItemsPerPageChange = (value: string) => {
+    if (value === 'all') {
+      setItemsPerPage('all');
+    } else {
+      setItemsPerPage(Number(value));
+    }
+  };
+
+  const paginationStartItem = itemsPerPage === 'all' ? 1 : (currentPage - 1) * Number(itemsPerPage) + 1;
+  const paginationEndItem = itemsPerPage === 'all' ? currentFilteredProducts.length : Math.min(currentPage * Number(itemsPerPage), currentFilteredProducts.length);
+
 
   if (isLoadingProducts || isLoadingCategories) {
     return (
@@ -338,7 +394,7 @@ export default function InventoryPage() {
         <CardContent>
           <p className="text-2xl font-bold">Total COGS: ${totalFilteredCogs.toFixed(2)}</p>
           <p className="text-sm text-muted-foreground">
-            Based on {filteredProducts.length} product(s) matching current filters.
+            Based on {currentFilteredProducts.length} product(s) matching current filters.
           </p>
         </CardContent>
       </Card>
@@ -362,7 +418,7 @@ export default function InventoryPage() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {filteredProducts.map((product) => (
+            {displayedProducts.map((product) => (
               <TableRow key={product.id}>
                 <TableCell>
                   <Image src={product.imageUrl || `https://placehold.co/50x50.png?text=${product.name.substring(0,2)}`} alt={product.name} width={50} height={50} className="rounded-md object-cover" data-ai-hint={product.dataAiHint || "motorcycle part"} />
@@ -386,16 +442,64 @@ export default function InventoryPage() {
                 </TableCell>
               </TableRow>
             ))}
-             {filteredProducts.length === 0 && (
+             {displayedProducts.length === 0 && (
               <TableRow>
                 <TableCell colSpan={12} className="h-24 text-center">
-                  No products found.
+                  No products found matching your criteria.
                 </TableCell>
               </TableRow>
             )}
           </TableBody>
         </Table>
       </div>
+      
+      {/* Pagination Controls */}
+      <div className="mt-6 flex flex-col sm:flex-row items-center justify-between gap-4">
+        <div className="flex items-center gap-2">
+          <span className="text-sm text-muted-foreground">Rows per page:</span>
+          <Select
+            value={itemsPerPage.toString()}
+            onValueChange={handleItemsPerPageChange}
+          >
+            <SelectTrigger className="w-[120px] h-9">
+              <SelectValue placeholder="Items per page" />
+            </SelectTrigger>
+            <SelectContent>
+              {itemsPerPageOptions.map(option => (
+                <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="text-sm text-muted-foreground">
+          {currentFilteredProducts.length > 0 ? 
+            `Showing ${paginationStartItem}-${paginationEndItem} of ${currentFilteredProducts.length} products` :
+            "No products"
+          }
+        </div>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+            disabled={currentPage === 1 || itemsPerPage === 'all'}
+          >
+            <ChevronLeft className="h-4 w-4 mr-1" /> Previous
+          </Button>
+          <span className="text-sm text-muted-foreground">
+            Page {currentPage} of {totalPages}
+          </span>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+            disabled={currentPage === totalPages || itemsPerPage === 'all'}
+          >
+            Next <ChevronRight className="h-4 w-4 ml-1" />
+          </Button>
+        </div>
+      </div>
+
     </AppLayout>
   );
 }
