@@ -8,7 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
-import { PlusCircle, FileDown, Edit3, Trash2, Loader2, AlertTriangle, Upload } from 'lucide-react';
+import { PlusCircle, FileDown, Edit3, Trash2, Loader2, AlertTriangle, Upload, DollarSign } from 'lucide-react';
 import Image from 'next/image';
 import { Badge } from '@/components/ui/badge';
 import React, { useState, useMemo, useEffect } from 'react';
@@ -28,6 +28,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import type { ProductCategory } from '@/app/api/categories/route';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 
 
 // API fetch function
@@ -214,6 +215,10 @@ export default function InventoryPage() {
     });
   }, [searchTerm, filterBrand, filterCategoryName, filterStockStatus, products]);
 
+  const totalFilteredCogs = useMemo(() => {
+    return filteredProducts.reduce((acc, product) => acc + (product.cost * product.stock), 0);
+  }, [filteredProducts]);
+
   if (isLoadingProducts || isLoadingCategories) {
     return (
       <AppLayout>
@@ -323,6 +328,21 @@ export default function InventoryPage() {
         </Select>
       </div>
 
+      <Card className="mb-6 shadow-md">
+        <CardHeader>
+          <CardTitle className="text-lg flex items-center">
+            <DollarSign className="mr-2 h-5 w-5 text-blue-500" />
+            Filtered Inventory Value
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-2xl font-bold">Total COGS: ${totalFilteredCogs.toFixed(2)}</p>
+          <p className="text-sm text-muted-foreground">
+            Based on {filteredProducts.length} product(s) matching current filters.
+          </p>
+        </CardContent>
+      </Card>
+
       <div className="rounded-lg border shadow-sm bg-card overflow-x-auto">
         <Table>
           <TableHeader>
@@ -379,3 +399,4 @@ export default function InventoryPage() {
     </AppLayout>
   );
 }
+
