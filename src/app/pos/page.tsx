@@ -245,7 +245,7 @@ export default function POSPage() {
       product.code.toLowerCase().includes(termLower) ||
       product.reference.toLowerCase().includes(termLower) ||
       (product.barcode && product.barcode.includes(searchTerm))
-    ).slice(0, 10);
+    ).slice(0, 20);
   }, [searchTerm, products, isLoadingProducts, isProductsError]);
 
   const customerSearchResults = useMemo(() => {
