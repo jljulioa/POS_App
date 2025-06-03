@@ -2,12 +2,13 @@
 // src/app/api/sales/stats/daily-summary/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { query } from '@/lib/db';
-import { format, subDays, eachDayOfInterval, startOfDay, endOfDay, parseISO } from 'date-fns';
+import { format, subDays, eachDayOfInterval, startOfDay, endOfDay } from 'date-fns';
 
 interface DailySalesSummary {
   date: string; // Formatted date e.g., "Jul 15"
   name: string; // Day name e.g., "Mon"
   revenue: number;
+  cogs: number; // Changed from dailyCogs to cogs
   profit: number;
 }
 
@@ -53,13 +54,10 @@ export async function GET(request: NextRequest) {
       const dayName = format(day, 'EEE'); // Short day name like "Mon"
 
       let dailyRevenue = 0;
-      let dailyCogs = 0;
+      let dailyCogsValue = 0; // Renamed for clarity within the loop
 
       const salesOnThisDay = salesInRange.filter(s => {
-        // If s.date is already a Date object (common for timestamptz from pg driver),
-        // we don't need to parseISO.
-        // startOfDay directly accepts a Date object.
-        const saleDate = startOfDay(s.date); 
+        const saleDate = startOfDay(s.date); // s.date is already a Date object
         return saleDate.getTime() === day.getTime();
       });
 
@@ -67,16 +65,17 @@ export async function GET(request: NextRequest) {
         dailyRevenue += parseFloat(sale.totalamount || 0);
         const itemsForThisSale = itemsBySaleId.get(sale.id) || [];
         for (const item of itemsForThisSale) {
-          dailyCogs += (parseFloat(item.costprice || 0) * parseInt(item.quantity, 10));
+          dailyCogsValue += (parseFloat(item.costprice || 0) * parseInt(item.quantity, 10));
         }
       }
       
-      const dailyProfit = dailyRevenue - dailyCogs;
+      const dailyProfit = dailyRevenue - dailyCogsValue;
 
       dailySummaries.push({
         date: formattedDate,
         name: dayName,
         revenue: parseFloat(dailyRevenue.toFixed(2)),
+        cogs: parseFloat(dailyCogsValue.toFixed(2)), // Use cogs
         profit: parseFloat(dailyProfit.toFixed(2)),
       });
     }

@@ -89,6 +89,7 @@ interface DailySalesSummary {
   date: string; // Formatted "MMM d"
   name: string; // Formatted "EEE"
   revenue: number;
+  cogs: number; // Added COGS
   profit: number;
 }
 
@@ -106,6 +107,10 @@ const chartConfig = {
   profit: {
     label: "Profit",
     color: "hsl(var(--chart-2))",
+  },
+  cogs: { // Added COGS to chartConfig
+    label: "COGS",
+    color: "hsl(var(--chart-3))",
   },
 } satisfies ChartConfig;
 
@@ -224,7 +229,7 @@ export default function DashboardPage() {
               <TrendingUp className="mr-2 h-6 w-6 text-primary" />
               Last 5 Days Sales Performance
             </CardTitle>
-            <CardDescription>Revenue and Profit for {dailySalesSummary && dailySalesSummary.length > 0 ? `${dailySalesSummary[0].date} - ${dailySalesSummary[dailySalesSummary.length - 1].date}` : 'the last 5 days'}.</CardDescription>
+            <CardDescription>Revenue, COGS, and Profit for {dailySalesSummary && dailySalesSummary.length > 0 ? `${dailySalesSummary[0].date} - ${dailySalesSummary[dailySalesSummary.length - 1].date}` : 'the last 5 days'}.</CardDescription>
           </CardHeader>
           <CardContent>
             {isLoadingDailySummary && (
@@ -279,6 +284,7 @@ export default function DashboardPage() {
                   />
                   <ChartLegend content={<ChartLegendContent />} />
                   <Bar dataKey="revenue" fill="var(--color-revenue)" radius={4} />
+                  <Bar dataKey="cogs" fill="var(--color-cogs)" radius={4} /> 
                   <Bar dataKey="profit" fill="var(--color-profit)" radius={4} />
                 </BarChart>
               </ChartContainer>
@@ -318,3 +324,4 @@ export default function DashboardPage() {
     </AppLayout>
   );
 }
+
