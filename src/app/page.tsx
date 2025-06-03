@@ -4,9 +4,12 @@
 import AppLayout from '@/components/layout/AppLayout';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Barcode, Package, ShoppingCart, Users, ArrowRight, Loader2, AlertTriangle, FileText, Landmark, Bot, Archive } from 'lucide-react';
+import { Barcode, Package, ShoppingCart, Users, ArrowRight, Loader2, AlertTriangle, FileText, Landmark, Bot, Archive, TrendingUp } from 'lucide-react';
 import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
+import { Bar, BarChart, CartesianGrid, XAxis, YAxis, ResponsiveContainer } from 'recharts';
+import { ChartConfig, ChartContainer, ChartTooltip, ChartTooltipContent, ChartLegend, ChartLegendContent } from "@/components/ui/chart";
+import { format } from 'date-fns';
 
 interface StatCardProps {
   title: string;
@@ -82,6 +85,30 @@ const fetchOutOfStockStats = async (): Promise<{ totalOutOfStockItems: number }>
   return res.json();
 };
 
+interface DailySalesSummary {
+  date: string; // Formatted "MMM d"
+  name: string; // Formatted "EEE"
+  revenue: number;
+  profit: number;
+}
+
+const fetchDailySalesSummary = async (): Promise<DailySalesSummary[]> => {
+  const res = await fetch('/api/sales/stats/daily-summary');
+  if (!res.ok) throw new Error('Failed to fetch daily sales summary');
+  return res.json();
+};
+
+const chartConfig = {
+  revenue: {
+    label: "Revenue",
+    color: "hsl(var(--chart-1))",
+  },
+  profit: {
+    label: "Profit",
+    color: "hsl(var(--chart-2))",
+  },
+} satisfies ChartConfig;
+
 
 export default function DashboardPage() {
   const { data: productStats, isLoading: isLoadingProductStats, isError: isErrorProductStats, error: productStatsError } = useQuery({
@@ -107,6 +134,11 @@ export default function DashboardPage() {
   const { data: outOfStockStats, isLoading: isLoadingOutOfStockStats, isError: isErrorOutOfStockStats, error: outOfStockStatsError } = useQuery({
     queryKey: ['outOfStockStats'],
     queryFn: fetchOutOfStockStats,
+  });
+  
+  const { data: dailySalesSummary, isLoading: isLoadingDailySummary, isError: isErrorDailySummary, error: dailySummaryError } = useQuery<DailySalesSummary[], Error>({
+    queryKey: ['dailySalesSummary'],
+    queryFn: fetchDailySalesSummary,
   });
 
   return (
@@ -185,6 +217,74 @@ export default function DashboardPage() {
             errorMessage={(outOfStockStatsError as Error)?.message}
           />
         </div>
+
+        <Card className="shadow-lg">
+          <CardHeader>
+            <CardTitle className="flex items-center">
+              <TrendingUp className="mr-2 h-6 w-6 text-primary" />
+              Last 5 Days Sales Performance
+            </CardTitle>
+            <CardDescription>Revenue and Profit for {dailySalesSummary && dailySalesSummary.length > 0 ? `${dailySalesSummary[0].date} - ${dailySalesSummary[dailySalesSummary.length - 1].date}` : 'the last 5 days'}.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {isLoadingDailySummary && (
+              <div className="flex justify-center items-center h-[350px]">
+                <Loader2 className="h-12 w-12 animate-spin text-primary" />
+              </div>
+            )}
+            {isErrorDailySummary && (
+              <div className="flex flex-col justify-center items-center h-[350px] text-destructive">
+                <AlertTriangle className="h-10 w-10 mb-2" />
+                <p>Failed to load sales performance data.</p>
+                <p className="text-xs">{(dailySummaryError as Error)?.message}</p>
+              </div>
+            )}
+            {!isLoadingDailySummary && !isErrorDailySummary && dailySalesSummary && (
+              <ChartContainer config={chartConfig} className="h-[350px] w-full">
+                <BarChart accessibilityLayer data={dailySalesSummary} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
+                  <CartesianGrid vertical={false} strokeDasharray="3 3" />
+                  <XAxis
+                    dataKey="name" // Use day name "Mon", "Tue" for X-axis ticks
+                    tickLine={false}
+                    tickMargin={10}
+                    axisLine={false}
+                    tickFormatter={(value, index) => {
+                      const item = dailySalesSummary[index];
+                      return item ? item.name : value; // Display day name
+                    }}
+                  />
+                  <YAxis 
+                    tickFormatter={(value) => `$${value / 1000}k`}
+                    tickLine={false}
+                    axisLine={false}
+                    tickMargin={5}
+                  />
+                   <ChartTooltip
+                    cursor={false}
+                    content={
+                      <ChartTooltipContent
+                        labelFormatter={(label, payload) => {
+                           // Find the original item to get the full date for the tooltip
+                           const item = dailySalesSummary.find(d => d.name === label);
+                           return item ? `${item.date} (${item.name})` : label;
+                        }}
+                        formatter={(value, name) => (
+                          <div className="flex items-center">
+                            <span className="mr-2 h-2.5 w-2.5 rounded-full" style={{ backgroundColor: chartConfig[name as keyof typeof chartConfig]?.color }} />
+                            <span>{chartConfig[name as keyof typeof chartConfig]?.label}: ${Number(value).toLocaleString()}</span>
+                          </div>
+                        )}
+                      />
+                    }
+                  />
+                  <ChartLegend content={<ChartLegendContent />} />
+                  <Bar dataKey="revenue" fill="var(--color-revenue)" radius={4} />
+                  <Bar dataKey="profit" fill="var(--color-profit)" radius={4} />
+                </BarChart>
+              </ChartContainer>
+            )}
+          </CardContent>
+        </Card>
 
         <Card className="shadow-lg">
           <CardHeader>
