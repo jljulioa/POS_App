@@ -12,7 +12,7 @@ import { LogOut, Loader2 } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { ThemeToggle } from "@/components/ThemeToggle";
-import { Breadcrumbs } from '@/components/Breadcrumbs'; // Import Breadcrumbs
+import { Breadcrumbs } from '@/components/Breadcrumbs';
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isLoading, logout, appUser, supabaseUser } = useAuth();
@@ -73,13 +73,16 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           {/* User profile / logout button could go here */}
         </SidebarFooter>
       </Sidebar>
-      <div className="flex flex-col flex-1 min-h-screen">
-        <header className="sticky top-0 z-10 flex h-16 items-center justify-between bg-background px-4 sm:px-6 border-b border-border"> {/* Added border-b for visual separation */}
-          <div className="flex items-center gap-2 sm:gap-4">
-             <SidebarTrigger className="md:hidden" /> {/* Only show on mobile */}
-             <Breadcrumbs />
+      {/* This is the main layout container that sits beside the sidebar */}
+      <div className="flex flex-col flex-1 min-h-screen overflow-x-hidden">
+        <header className="sticky top-0 z-10 flex h-16 items-center justify-between bg-background px-4 sm:px-6 border-b border-border">
+          {/* Left side of header: Ensure this div can shrink and its content (breadcrumbs) can truncate */}
+          <div className="flex items-center gap-2 sm:gap-4 flex-shrink-1 min-w-0 overflow-hidden">
+             <SidebarTrigger className="md:hidden shrink-0" /> {/* shrink-0 for trigger */}
+             <Breadcrumbs /> {/* Breadcrumbs will be a flex item, ensure it truncates if needed */}
           </div>
-          <div className="flex items-center gap-2 sm:gap-3">
+          {/* Right side of header: Theme toggle and User menu */}
+          <div className="flex items-center gap-2 sm:gap-3 shrink-0"> {/* shrink-0 for right content */}
             <ThemeToggle />
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -108,7 +111,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             </DropdownMenu>
           </div>
         </header>
-        <main className="flex-1 overflow-y-auto overflow-x-hidden p-4 sm:p-6 bg-background"> {/* Added overflow-x-hidden */}
+        <main className="flex-1 overflow-y-auto p-4 sm:p-6 bg-background"> 
           {children}
         </main>
       </div>
