@@ -56,7 +56,10 @@ export async function GET(request: NextRequest) {
       let dailyCogs = 0;
 
       const salesOnThisDay = salesInRange.filter(s => {
-        const saleDate = startOfDay(parseISO(s.date)); // Compare start of day
+        // If s.date is already a Date object (common for timestamptz from pg driver),
+        // we don't need to parseISO.
+        // startOfDay directly accepts a Date object.
+        const saleDate = startOfDay(s.date); 
         return saleDate.getTime() === day.getTime();
       });
 
@@ -85,3 +88,4 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ message: 'Failed to fetch daily sales summary', error: (error as Error).message }, { status: 500 });
   }
 }
+
