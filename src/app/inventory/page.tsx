@@ -119,6 +119,14 @@ function ProductRowActions({ product, deleteMutation }: ProductRowActionsProps) 
   );
 }
 
+type StockStatusFilter = 'all' | 'in_stock' | 'low_stock' | 'out_of_stock';
+
+const stockStatusOptions: { value: StockStatusFilter; label: string }[] = [
+  { value: 'all', label: 'All Statuses' },
+  { value: 'in_stock', label: 'In Stock' },
+  { value: 'low_stock', label: 'Low Stock' },
+  { value: 'out_of_stock', label: 'Out of Stock' },
+];
 
 export default function InventoryPage() {
   const [searchTerm, setSearchTerm] = useState('');
@@ -127,6 +135,7 @@ export default function InventoryPage() {
   
   const [filterBrand, setFilterBrand] = useState('all');
   const [filterCategoryName, setFilterCategoryName] = useState('all'); 
+  const [filterStockStatus, setFilterStockStatus] = useState<StockStatusFilter>('all');
 
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -144,6 +153,9 @@ export default function InventoryPage() {
   useEffect(() => {
     const urlCategoryFilter = searchParams.get('category');
     setFilterCategoryName(urlCategoryFilter || 'all');
+    
+    const urlStatusFilter = searchParams.get('status') as StockStatusFilter | null;
+    setFilterStockStatus(urlStatusFilter || 'all');
   }, [searchParams]);
 
   const deleteMutation = useMutation< { message: string }, Error, string>({
@@ -170,7 +182,7 @@ export default function InventoryPage() {
     if (isLoadingCategories || !categories) return [{ value: 'all', label: 'All Categories' }];
     const options = [{ value: 'all', label: 'All Categories' }];
     categories.forEach(cat => {
-      if (cat.name) { // Ensure category name exists
+      if (cat.name) { 
         options.push({ value: cat.name, label: cat.name });
       }
     });
@@ -186,11 +198,21 @@ export default function InventoryPage() {
                             product.reference.toLowerCase().includes(searchTermLower) ||
                             (product.barcode && product.barcode.toLowerCase().includes(searchTermLower));
       const matchesBrand = filterBrand === 'all' || product.brand === filterBrand;
-      const currentProductCategory = product.category || 'N/A'; // Handle cases where product.category might be null/undefined
+      const currentProductCategory = product.category || 'N/A'; 
       const matchesCategory = filterCategoryName === 'all' || currentProductCategory === filterCategoryName;
-      return matchesSearch && matchesBrand && matchesCategory;
+
+      let matchesStockStatus = true;
+      if (filterStockStatus === 'in_stock') {
+        matchesStockStatus = product.stock > 0 && product.stock >= product.minStock;
+      } else if (filterStockStatus === 'low_stock') {
+        matchesStockStatus = product.stock > 0 && product.stock < product.minStock;
+      } else if (filterStockStatus === 'out_of_stock') {
+        matchesStockStatus = product.stock === 0;
+      }
+      
+      return matchesSearch && matchesBrand && matchesCategory && matchesStockStatus;
     });
-  }, [searchTerm, filterBrand, filterCategoryName, products]);
+  }, [searchTerm, filterBrand, filterCategoryName, filterStockStatus, products]);
 
   if (isLoadingProducts || isLoadingCategories) {
     return (
@@ -236,15 +258,15 @@ export default function InventoryPage() {
         </Button>
       </PageHeader>
 
-      <div className="mb-6 flex flex-col sm:flex-row gap-4">
+      <div className="mb-6 flex flex-col sm:flex-row flex-wrap gap-2 sm:gap-4">
         <Input
           placeholder="Search by name, code, reference, barcode..."
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
-          className="w-full sm:max-w-xs md:max-w-sm"
+          className="w-full sm:flex-1 md:flex-none md:max-w-xs lg:max-w-sm"
         />
         <Select value={filterBrand} onValueChange={setFilterBrand}>
-          <SelectTrigger className="w-full sm:w-[180px]">
+          <SelectTrigger className="w-full sm:w-auto md:w-[180px]">
             <SelectValue placeholder="Filter by brand" />
           </SelectTrigger>
           <SelectContent>
@@ -267,11 +289,34 @@ export default function InventoryPage() {
           }}
           disabled={isLoadingCategories}
         >
-          <SelectTrigger className="w-full sm:w-[180px]">
+          <SelectTrigger className="w-full sm:w-auto md:w-[180px]">
             <SelectValue placeholder={isLoadingCategories ? "Loading..." : "Filter by category"} />
           </SelectTrigger>
           <SelectContent>
             {categoryFilterOptions.map(opt => (
+              <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select 
+          value={filterStockStatus} 
+          onValueChange={(value) => {
+            const newStatus = value as StockStatusFilter;
+            setFilterStockStatus(newStatus);
+            const newQuery = new URLSearchParams(searchParams.toString());
+            if (newStatus === 'all') {
+              newQuery.delete('status');
+            } else {
+              newQuery.set('status', newStatus);
+            }
+            router.push(`/inventory?${newQuery.toString()}`, { scroll: false });
+          }}
+        >
+          <SelectTrigger className="w-full sm:w-auto md:w-[180px]">
+            <SelectValue placeholder="Filter by stock status" />
+          </SelectTrigger>
+          <SelectContent>
+            {stockStatusOptions.map(opt => (
               <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
             ))}
           </SelectContent>
