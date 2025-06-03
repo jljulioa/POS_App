@@ -5,7 +5,7 @@ import React from 'react';
 import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
 import { cn } from '@/lib/utils';
-import { LayoutDashboard, Package, ShoppingCart, Users, Barcode, Bot, Settings, FileText, Tag, ArrowRightLeft, Landmark, UserCog, Archive } from 'lucide-react';
+import { LayoutDashboard, Package, ShoppingCart, Users, Barcode, Bot, Settings, FileText, Tag, ArrowRightLeft, Landmark, UserCog, Archive, BarChart3 } from 'lucide-react'; // Added BarChart3
 import { SidebarMenu, SidebarMenuItem, SidebarMenuButton, SidebarMenuSub, SidebarMenuSubItem, SidebarMenuSubButton } from '@/components/ui/sidebar';
 
 const mainNavItems = [
@@ -15,24 +15,12 @@ const mainNavItems = [
   { href: '/transactions', label: 'Transactions', icon: ArrowRightLeft },
   { href: '/categories', label: 'Manage Categories', icon: Tag },
   { href: '/sales', label: 'Sales Records', icon: ShoppingCart },
-  { href: '/sales/reports', label: "Today's Report", icon: FileText},
+  // { href: '/sales/reports', label: "Today's Report", icon: FileText}, // Removed
   { href: '/customers', label: 'Customers', icon: Users },
   { href: '/purchase-invoices', label: 'Purchase Invoices', icon: FileText },
   { href: '/expenses', label: 'Expenses', icon: Landmark },
   { href: '/reordering', label: 'Smart Reordering', icon: Bot },
-  // { href: '/users', label: 'Manage Users', icon: UserCog }, // Removed from main nav
 ];
-
-// Example categories - in a real app, these might be fetched or configured
-const exampleCategories = [
-  { name: "Engine Parts", icon: Settings }, // Using Settings as a generic icon
-  { name: "Lubricants", icon: FileText }, // Example icon
-  { name: "Brakes", icon: Package }, // Example icon
-  { name: "Riding Gear", icon: Users }, // Example icon
-  { name: "Filters", icon: Archive },
-  { name: "Electrical", icon: Barcode},
-];
-
 
 export function SidebarNav() {
   const pathname = usePathname();
@@ -42,6 +30,7 @@ export function SidebarNav() {
   const isInventoryPathActive = pathname === '/inventory';
   const isCategoriesPathActive = pathname.startsWith('/categories');
   const isSettingsPathActive = pathname.startsWith('/settings');
+  const isReportsPathActive = pathname.startsWith('/reports'); // Added for Reports section
 
   return (
     <SidebarMenu>
@@ -66,9 +55,23 @@ export function SidebarNav() {
         );
       })}
 
+      {/* Reports Menu */}
+      <SidebarMenuItem>
+        <Link href="/reports/sales-summary">
+          <SidebarMenuButton
+            isActive={isReportsPathActive}
+            className="justify-start"
+            tooltip={{ children: 'Reports', side: 'right', align: 'center' }}
+          >
+            <BarChart3 className="h-5 w-5" />
+            <span className="group-data-[collapsible=icon]:hidden">Reports</span>
+          </SidebarMenuButton>
+        </Link>
+      </SidebarMenuItem>
+
       {/* Settings Menu */}
       <SidebarMenuItem>
-        <Link href="/settings"> {/* Main Settings link now points to /settings hub page */}
+        <Link href="/settings">
           <SidebarMenuButton
             isActive={isSettingsPathActive}
             className="justify-start"

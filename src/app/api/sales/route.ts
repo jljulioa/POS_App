@@ -4,7 +4,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getPool, query as executeQuery } from '@/lib/db';
 import { z } from 'zod';
 import type { Sale, SaleItem, Product } from '@/lib/mockData';
-import { format, isValid, parseISO } from 'date-fns';
+import { format, isValid, parseISO, startOfDay, endOfDay } from 'date-fns';
 
 // Helper to parse Sale and SaleItem from DB
 const parseSaleFromDB = (dbSale: any, items: SaleItem[]): Sale => {
@@ -28,13 +28,13 @@ const parseSaleItemFromDB = (dbItem: any): SaleItem => {
     productName: dbItem.productname,
     quantity: parseInt(dbItem.quantity, 10),
     unitPrice: parseFloat(dbItem.unitprice),
-    costPrice: dbItem.costprice !== null ? parseFloat(dbItem.costprice) : 0, // Ensure costPrice is parsed
+    costPrice: dbItem.costprice !== null ? parseFloat(dbItem.costprice) : 0,
     totalPrice: parseFloat(dbItem.totalprice),
-    category: dbItem.category, // This will be pc.name from the join
+    category: dbItem.category,
   };
 };
 
-// GET handler to fetch sales with their items
+// GET handler to fetch sales with their items, supports date range and period filters
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const period = searchParams.get('period');
@@ -46,23 +46,52 @@ export async function GET(request: NextRequest) {
   let paramIndex = 1;
 
   if (period === 'today') {
-    const today = format(new Date(), 'yyyy-MM-dd');
-    dateFilterClauses.push(`DATE(s.date) = $${paramIndex++}`);
-    queryParams.push(today);
+    const todayStart = format(startOfDay(new Date()), "yyyy-MM-dd'T'HH:mm:ss.SSSXXX");
+    const todayEnd = format(endOfDay(new Date()), "yyyy-MM-dd'T'HH:mm:ss.SSSXXX");
+    dateFilterClauses.push(`s.date >= $${paramIndex++}`);
+    queryParams.push(todayStart);
+    dateFilterClauses.push(`s.date <= $${paramIndex++}`);
+    queryParams.push(todayEnd);
   } else if (startDateParam && endDateParam) {
-    const startDate = parseISO(startDateParam);
-    const endDate = parseISO(endDateParam);
-
-    if (isValid(startDate) && isValid(endDate)) {
-      const formattedEndDate = format(endDate, 'yyyy-MM-dd') + 'T23:59:59.999Z';
-      dateFilterClauses.push(`s.date >= $${paramIndex++}`);
-      queryParams.push(format(startDate, 'yyyy-MM-dd') + 'T00:00:00.000Z');
-      dateFilterClauses.push(`s.date <= $${paramIndex++}`);
-      queryParams.push(formattedEndDate);
-    } else {
+    try {
+      const startDate = startOfDay(parseISO(startDateParam));
+      const endDate = endOfDay(parseISO(endDateParam));
+      if (isValid(startDate) && isValid(endDate)) {
+        dateFilterClauses.push(`s.date >= $${paramIndex++}`);
+        queryParams.push(format(startDate, "yyyy-MM-dd'T'HH:mm:ss.SSSXXX"));
+        dateFilterClauses.push(`s.date <= $${paramIndex++}`);
+        queryParams.push(format(endDate, "yyyy-MM-dd'T'HH:mm:ss.SSSXXX"));
+      } else {
         console.warn("Invalid date parameters received:", { startDateParam, endDateParam });
+      }
+    } catch (e) {
+        console.error("Error parsing date parameters for sales GET:", e);
+        return NextResponse.json({ message: 'Invalid date format in query parameters.', error: (e as Error).message }, { status: 400 });
+    }
+  } else if (startDateParam) { // Only start date provided
+    try {
+        const startDate = startOfDay(parseISO(startDateParam));
+        if (isValid(startDate)) {
+            dateFilterClauses.push(`s.date >= $${paramIndex++}`);
+            queryParams.push(format(startDate, "yyyy-MM-dd'T'HH:mm:ss.SSSXXX"));
+        }
+    } catch (e) {
+         console.error("Error parsing start date parameter for sales GET:", e);
+         return NextResponse.json({ message: 'Invalid start date format in query parameter.', error: (e as Error).message }, { status: 400 });
+    }
+  } else if (endDateParam) { // Only end date provided
+    try {
+        const endDate = endOfDay(parseISO(endDateParam));
+        if (isValid(endDate)) {
+            dateFilterClauses.push(`s.date <= $${paramIndex++}`);
+            queryParams.push(format(endDate, "yyyy-MM-dd'T'HH:mm:ss.SSSXXX"));
+        }
+    } catch (e) {
+         console.error("Error parsing end date parameter for sales GET:", e);
+         return NextResponse.json({ message: 'Invalid end date format in query parameter.', error: (e as Error).message }, { status: 400 });
     }
   }
+
 
   const whereClause = dateFilterClauses.length > 0 ? `WHERE ${dateFilterClauses.join(' AND ')}` : '';
 
@@ -82,22 +111,16 @@ export async function GET(request: NextRequest) {
         const itemPlaceholders = saleIds.map((_, index) => `$${index + 1}`).join(',');
         const itemsSql = `
             SELECT
-                si.sale_id,
-                si.product_id,
-                si.productName,
-                si.quantity,
-                si.unitPrice,
-                si.costprice,
-                si.totalPrice,
-                pc.name AS category -- Get category name from ProductCategories
+                si.sale_id, si.product_id, si.productName, si.quantity,
+                si.unitPrice, si.costprice, si.totalPrice,
+                pc.name AS category
             FROM SaleItems si
             LEFT JOIN Products p ON si.product_id = p.id
-            LEFT JOIN ProductCategories pc ON p.category_id = pc.id -- Join ProductCategories
+            LEFT JOIN ProductCategories pc ON p.category_id = pc.id
             WHERE si.sale_id IN (${itemPlaceholders})
         `;
         saleItemsResults = await executeQuery(itemsSql, saleIds);
     }
-
 
     const itemsBySaleId = new Map<string, SaleItem[]>();
     saleItemsResults.forEach(dbItem => {
@@ -125,9 +148,8 @@ const SaleItemSchema = z.object({
   productName: z.string(),
   quantity: z.number().int().min(1),
   unitPrice: z.number().min(0),
-  costPrice: z.number().min(0), // costPrice is required
+  costPrice: z.number().min(0),
   totalPrice: z.number().min(0),
-  // category is not part of SaleItem input, it's derived
 });
 
 // Zod schema for the entire sale creation request
@@ -157,7 +179,7 @@ export async function POST(request: NextRequest) {
 
     const { items, totalAmount, customerId, customerName, paymentMethod, cashierId } = validation.data;
     const saleId = `S${Date.now()}${Math.random().toString(36).substring(2, 7)}`;
-    const saleDate = new Date(); // Handled by DEFAULT CURRENT_TIMESTAMP for createdat/updatedat
+    const saleDate = new Date();
 
     await client.query('BEGIN');
 
@@ -180,7 +202,6 @@ export async function POST(request: NextRequest) {
       const saleItemInsertParams = [saleId, item.productId, item.productName, item.quantity, item.unitPrice, item.costPrice, item.totalPrice];
       const saleItemResult = await client.query(saleItemInsertSql, saleItemInsertParams);
       
-      // Fetch product name for transaction log
       const productInfoResult = await client.query('SELECT name, stock FROM Products WHERE id = $1 FOR UPDATE', [item.productId]);
       if (productInfoResult.rowCount === 0) {
           await client.query('ROLLBACK');
@@ -190,7 +211,6 @@ export async function POST(request: NextRequest) {
       const productInfo = productInfoResult.rows[0];
       const stockBefore = productInfo.stock;
 
-
       if (stockBefore < item.quantity) {
         await client.query('ROLLBACK');
         client.release();
@@ -198,31 +218,17 @@ export async function POST(request: NextRequest) {
       }
 
       const stockAfter = stockBefore - item.quantity;
-      const updateStockSql = `
-        UPDATE Products
-        SET stock = $1
-        WHERE id = $2;
-      `;
+      const updateStockSql = `UPDATE Products SET stock = $1 WHERE id = $2;`;
       await client.query(updateStockSql, [stockAfter, item.productId]);
 
-      // Log inventory transaction
       const transactionSql = `
         INSERT INTO InventoryTransactions (product_id, product_name, transaction_type, quantity_change, stock_before, stock_after, related_document_id, notes)
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
       `;
       await client.query(transactionSql, [
-        item.productId,
-        productInfo.name, // Use fresh product name from DB
-        'Sale',
-        -item.quantity,
-        stockBefore,
-        stockAfter,
-        saleId,
-        `Sale of ${item.quantity} units.`
+        item.productId, productInfo.name, 'Sale', -item.quantity, stockBefore, stockAfter, saleId, `Sale of ${item.quantity} units.`
       ]);
       
-      // To get category for the returned SaleItem object, we'd need to join ProductCategories here too
-      // For simplicity for now, parseSaleItemFromDB will handle category if fetched
       const saleItemDb = saleItemResult.rows[0];
       const createdSaleItemResult = await client.query(`
         SELECT si.*, pc.name as category 

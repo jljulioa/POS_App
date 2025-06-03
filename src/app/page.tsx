@@ -89,7 +89,7 @@ interface DailySalesSummary {
   date: string; // Formatted "MMM d"
   name: string; // Formatted "EEE"
   revenue: number;
-  cogs: number; // Added COGS
+  cogs: number; 
   profit: number;
 }
 
@@ -108,7 +108,7 @@ const chartConfig = {
     label: "Profit",
     color: "hsl(var(--chart-2))",
   },
-  cogs: { // Added COGS to chartConfig
+  cogs: { 
     label: "COGS",
     color: "hsl(var(--chart-3))",
   },
@@ -178,7 +178,7 @@ export default function DashboardPage() {
             value={`$${(salesStats?.totalSalesAmount ?? 0).toFixed(2)}`}
             icon={ShoppingCart}
             description={`${salesStats?.totalSalesCount ?? 0} transactions today`}
-            ctaLink="/sales/reports"
+            ctaLink="/reports/sales-summary?period=today"
             ctaText="View Today's Report"
             colorClass="text-purple-500"
             isLoading={isLoadingSalesStats}
@@ -249,13 +249,13 @@ export default function DashboardPage() {
                 <BarChart accessibilityLayer data={dailySalesSummary} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
                   <CartesianGrid vertical={false} strokeDasharray="3 3" />
                   <XAxis
-                    dataKey="name" // Use day name "Mon", "Tue" for X-axis ticks
+                    dataKey="name" 
                     tickLine={false}
                     tickMargin={10}
                     axisLine={false}
                     tickFormatter={(value, index) => {
                       const item = dailySalesSummary[index];
-                      return item ? item.name : value; // Display day name
+                      return item ? item.name : value; 
                     }}
                   />
                   <YAxis 
@@ -269,7 +269,6 @@ export default function DashboardPage() {
                     content={
                       <ChartTooltipContent
                         labelFormatter={(label, payload) => {
-                           // Find the original item to get the full date for the tooltip
                            const item = dailySalesSummary.find(d => d.name === label);
                            return item ? `${item.date} (${item.name})` : label;
                         }}
@@ -309,7 +308,7 @@ export default function DashboardPage() {
               </Link>
             </Button>
              <Button asChild variant="outline" className="py-4 sm:py-6 text-sm sm:text-base">
-              <Link href="/sales/reports">
+              <Link href="/reports/sales-summary">
                 <FileText className="mr-2 h-4 w-4 sm:h-5 sm:w-5" /> Sales Report
               </Link>
             </Button>
@@ -324,4 +323,3 @@ export default function DashboardPage() {
     </AppLayout>
   );
 }
-
