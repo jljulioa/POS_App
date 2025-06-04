@@ -13,10 +13,7 @@ const parseSaleFromDB = (dbSale: any, items: SaleItem[]): Sale => {
     date: new Date(dbSale.date).toISOString(),
     items: items,
     totalAmount: parseFloat(dbSale.totalamount),
-    // subtotal and taxAmount from DB might be present but won't be actively used by new logic
-    // These can be defaulted if needed:
-    // subtotal: parseFloat(dbSale.subtotal || dbSale.totalamount || 0), 
-    // taxAmount: parseFloat(dbSale.taxamount || 0),
+    // subtotal and taxAmount are no longer fetched or used
     customerId: dbSale.customerid,
     customerName: dbSale.customername,
     paymentMethod: dbSale.paymentmethod,
@@ -101,7 +98,7 @@ export async function GET(request: NextRequest) {
 
   try {
     const salesSql = `
-      SELECT s.id, s.date, s.totalamount, s.subtotal, s.taxamount, s.customerid, s.customername, s.paymentmethod, s.cashierid, s.createdat, s.updatedat
+      SELECT s.id, s.date, s.totalamount, s.customerid, s.customername, s.paymentmethod, s.cashierid, s.createdat, s.updatedat
       FROM Sales s
       ${whereClause}
       ORDER BY s.date DESC
