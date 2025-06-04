@@ -29,7 +29,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import type { ProductCategory } from '@/app/api/categories/route';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-
+import { useCurrency } from '@/contexts/CurrencyContext'; // Import useCurrency
 
 // API fetch function
 const fetchProducts = async (): Promise<Product[]> => {
@@ -139,6 +139,7 @@ export default function InventoryPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const searchParams = useSearchParams();
   const router = useRouter();
+  const { formatCurrency } = useCurrency(); // Use currency context
   
   const [filterBrand, setFilterBrand] = useState('all');
   const [filterCategoryName, setFilterCategoryName] = useState('all'); 
@@ -177,8 +178,6 @@ export default function InventoryPage() {
         description: `Product has been successfully deleted.`,
       });
       queryClient.invalidateQueries({ queryKey: ['products'] });
-      // After deletion, we might be on an empty page if it was the last item.
-      // For simplicity, current page remains, but a more advanced logic could adjust it.
     },
     onError: (error: Error) => {
       toast({
@@ -238,22 +237,20 @@ export default function InventoryPage() {
     if (itemsPerPage === 'all') {
       return currentFilteredProducts;
     }
-    const numericItemsPerPage = Number(itemsPerPage); // Should always be a number here if not 'all'
+    const numericItemsPerPage = Number(itemsPerPage);
     const startIndex = (currentPage - 1) * numericItemsPerPage;
     const endIndex = startIndex + numericItemsPerPage;
     return currentFilteredProducts.slice(startIndex, endIndex);
   }, [currentFilteredProducts, currentPage, itemsPerPage]);
 
-  // Reset to page 1 when filters or itemsPerPage change
   useEffect(() => {
     setCurrentPage(1);
   }, [searchTerm, filterBrand, filterCategoryName, filterStockStatus, itemsPerPage]);
 
-  // Adjust current page if it becomes invalid after products list changes (e.g., deletion)
   useEffect(() => {
     if (currentPage > totalPages && totalPages > 0) {
       setCurrentPage(totalPages);
-    } else if (totalPages === 0 && currentFilteredProducts.length > 0) { // Should be 1 if products exist
+    } else if (totalPages === 0 && currentFilteredProducts.length > 0) { 
        setCurrentPage(1);
     }
   }, [currentFilteredProducts.length, totalPages, currentPage]);
@@ -392,7 +389,7 @@ export default function InventoryPage() {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <p className="text-2xl font-bold">Total COGS: ${totalFilteredCogs.toFixed(2)}</p>
+          <p className="text-2xl font-bold">Total COGS: {formatCurrency(totalFilteredCogs)}</p>
           <p className="text-sm text-muted-foreground">
             Based on {currentFilteredProducts.length} product(s) matching current filters.
           </p>
@@ -429,9 +426,9 @@ export default function InventoryPage() {
                 <TableCell className="hidden md:table-cell">{product.brand}</TableCell>
                 <TableCell>{product.category || 'N/A'}</TableCell>
                 <TableCell className="text-right">{product.stock}</TableCell>
-                <TableCell className="text-right hidden sm:table-cell">${Number(product.cost).toFixed(2)}</TableCell>
-                <TableCell className="text-right">${Number(product.price).toFixed(2)}</TableCell>
-                <TableCell className="text-right font-semibold text-green-600 hidden sm:table-cell">${(Number(product.price) - Number(product.cost)).toFixed(2)}</TableCell>
+                <TableCell className="text-right hidden sm:table-cell">{formatCurrency(product.cost)}</TableCell>
+                <TableCell className="text-right">{formatCurrency(product.price)}</TableCell>
+                <TableCell className="text-right font-semibold text-green-600 hidden sm:table-cell">{formatCurrency(product.price - product.cost)}</TableCell>
                 <TableCell className="text-center hidden sm:table-cell">
                   {product.stock === 0 ? <Badge variant="destructive">Out of Stock</Badge> :
                    product.stock < product.minStock ? <Badge variant="outline" className="border-yellow-500 text-yellow-600">Low Stock</Badge> :
@@ -453,7 +450,6 @@ export default function InventoryPage() {
         </Table>
       </div>
       
-      {/* Pagination Controls */}
       <div className="mt-6 flex flex-col sm:flex-row items-center justify-between gap-4">
         <div className="flex items-center gap-2">
           <span className="text-sm text-muted-foreground">Rows per page:</span>
@@ -503,4 +499,3 @@ export default function InventoryPage() {
     </AppLayout>
   );
 }
-

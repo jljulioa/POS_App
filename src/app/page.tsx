@@ -10,6 +10,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Bar, BarChart, CartesianGrid, XAxis, YAxis, ResponsiveContainer } from 'recharts';
 import { ChartConfig, ChartContainer, ChartTooltip, ChartTooltipContent, ChartLegend, ChartLegendContent } from "@/components/ui/chart";
 import { format } from 'date-fns';
+import { useCurrency } from '@/contexts/CurrencyContext'; // Import useCurrency
 
 interface StatCardProps {
   title: string;
@@ -116,6 +117,8 @@ const chartConfig = {
 
 
 export default function DashboardPage() {
+  const { formatCurrency } = useCurrency(); // Use currency context
+
   const { data: productStats, isLoading: isLoadingProductStats, isError: isErrorProductStats, error: productStatsError } = useQuery({
     queryKey: ['productStats'],
     queryFn: fetchProductStats,
@@ -175,7 +178,7 @@ export default function DashboardPage() {
           />
           <StatCard 
             title="Today's Sales" 
-            value={`$${(salesStats?.totalSalesAmount ?? 0).toFixed(2)}`}
+            value={salesStats?.totalSalesAmount !== undefined ? formatCurrency(salesStats.totalSalesAmount) : 'N/A'}
             icon={ShoppingCart}
             description={`${salesStats?.totalSalesCount ?? 0} transactions today`}
             ctaLink="/reports/sales-summary?period=today"
@@ -259,7 +262,7 @@ export default function DashboardPage() {
                     }}
                   />
                   <YAxis 
-                    tickFormatter={(value) => `$${value / 1000}k`}
+                    tickFormatter={(value) => formatCurrency(value).replace(/\.\d{2}$/, '')} // Basic strip decimals
                     tickLine={false}
                     axisLine={false}
                     tickMargin={5}
@@ -275,7 +278,7 @@ export default function DashboardPage() {
                         formatter={(value, name) => (
                           <div className="flex items-center">
                             <span className="mr-2 h-2.5 w-2.5 rounded-full" style={{ backgroundColor: chartConfig[name as keyof typeof chartConfig]?.color }} />
-                            <span>{chartConfig[name as keyof typeof chartConfig]?.label}: ${Number(value).toLocaleString()}</span>
+                            <span>{chartConfig[name as keyof typeof chartConfig]?.label}: {formatCurrency(Number(value))}</span>
                           </div>
                         )}
                       />

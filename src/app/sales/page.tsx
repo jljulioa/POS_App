@@ -3,11 +3,11 @@
 
 import AppLayout from '@/components/layout/AppLayout';
 import { PageHeader } from '@/components/PageHeader';
-import type { Sale, SaleItem, InvoiceSettings } from '@/lib/mockData';
+import type { Sale, SaleItem, InvoiceSettings, TaxSetting } from '@/lib/mockData';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { FileDown, Eye, Loader2, AlertTriangle, ShoppingCart, Calendar as CalendarIcon, FilterX, CornerDownLeft, Printer } from 'lucide-react';
+import { FileDown, Eye, Loader2, AlertTriangle, ShoppingCart, Calendar as CalendarIcon, FilterX, CornerDownLeft, Printer, Percent } from 'lucide-react';
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { format, parseISO } from 'date-fns';
 import { Badge } from '@/components/ui/badge';
@@ -29,6 +29,7 @@ import { cn } from "@/lib/utils";
 import { z } from 'zod';
 import type { jsPDF } from 'jspdf'; 
 import 'jspdf-autotable';
+import { useCurrency } from '@/contexts/CurrencyContext';
 
 
 // API fetch function for sales
@@ -90,6 +91,17 @@ const fetchInvoiceSettingsAPI = async (): Promise<InvoiceSettings> => {
   return response.json();
 };
 
+// API fetch function for tax settings
+const fetchTaxSettingsAPI = async (): Promise<TaxSetting> => {
+  const response = await fetch('/api/settings/taxes');
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({ message: 'Failed to fetch tax settings' }));
+    throw new Error(errorData.message || 'Failed to fetch tax settings');
+  }
+  return response.json();
+};
+
+
 const defaultInvoiceSettings: InvoiceSettings = {
   companyName: 'MotoFox POS',
   nit: 'N/A',
@@ -98,14 +110,14 @@ const defaultInvoiceSettings: InvoiceSettings = {
 };
 
 // Function to generate PDF receipt using jsPDF
-const generateSaleReceiptPdf = async (sale: Sale, settings: InvoiceSettings) => {
+const generateSaleReceiptPdf = async (sale: Sale, settings: InvoiceSettings, taxSettings: TaxSetting | null, formatCurrencyFn: (value: number, currencyCode?: string) => string, globalCurrencyCode: string) => {
   const { jsPDF } = await import('jspdf');
   const autoTable = (await import('jspdf-autotable')).default;
 
   const doc = new jsPDF({
     orientation: 'portrait',
     unit: 'mm',
-    format: [76, 200] 
+    format: [76, 210] 
   });
 
   let yPos = 10;
@@ -156,14 +168,16 @@ const generateSaleReceiptPdf = async (sale: Sale, settings: InvoiceSettings) => 
   const tableColumn = [
     { header: 'Item', dataKey: 'name' },
     { header: 'Qty', dataKey: 'qty' },
-    { header: 'Price', dataKey: 'unit' },
-    { header: 'Total', dataKey: 'total' },
+    { header: 'Price', dataKey: 'unit' }, // This should be the price based on how it was entered (incl/excl tax)
+    { header: 'Total', dataKey: 'total' }, // This should be the line total based on how it was entered
   ];
   const tableRows = sale.items.map(item => ({
     name: item.productName,
     qty: item.quantity.toString(),
-    unit: Number(item.unitPrice).toFixed(2),
-    total: Number(item.totalPrice).toFixed(2),
+    // For item.unitPrice and item.totalPrice, we use the values as stored
+    // as they reflect Product.price (which is either tax-inclusive or tax-exclusive based on catalog entry)
+    unit: formatCurrencyFn(item.unitPrice, globalCurrencyCode).replace(globalCurrencyCode, '').trim(),
+    total: formatCurrencyFn(item.totalPrice, globalCurrencyCode).replace(globalCurrencyCode, '').trim(),
   }));
 
   autoTable(doc, {
@@ -189,11 +203,27 @@ const generateSaleReceiptPdf = async (sale: Sale, settings: InvoiceSettings) => 
   });
 
   yPos = (doc as any).lastAutoTable.finalY + lineSpacing;
+  
+  doc.setFontSize(8);
+  doc.setFont(undefined, 'normal');
+  doc.text('Subtotal:', leftMargin + 35, yPos, { align: 'right' });
+  doc.text(formatCurrencyFn(sale.subtotal, globalCurrencyCode).replace(globalCurrencyCode, '').trim(), 76 - leftMargin, yPos, { align: 'right' });
+  yPos += smallLineSpacing;
+
+  if (taxSettings && sale.taxAmount > 0) {
+    doc.text(`${taxSettings.taxName || 'Tax'} (${taxSettings.taxPercentage}%):`, leftMargin + 35, yPos, { align: 'right' });
+    doc.text(formatCurrencyFn(sale.taxAmount, globalCurrencyCode).replace(globalCurrencyCode, '').trim(), 76 - leftMargin, yPos, { align: 'right' });
+    yPos += smallLineSpacing;
+  }
+  
+  doc.text('-------------------------------------', leftMargin + 30, yPos, {align: 'right'});
+  yPos += smallLineSpacing;
+
 
   doc.setFontSize(9);
   doc.setFont(undefined, 'bold');
   doc.text('TOTAL:', leftMargin + 35, yPos, { align: 'right' }); 
-  doc.text(`$${Number(sale.totalAmount).toFixed(2)}`, 76 - leftMargin, yPos, { align: 'right' });
+  doc.text(formatCurrencyFn(sale.totalAmount, globalCurrencyCode), 76 - leftMargin, yPos, { align: 'right' });
   yPos += lineSpacing;
 
   doc.setFontSize(8);
@@ -223,6 +253,7 @@ export default function SalesPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { formatCurrency, currency: globalCurrency } = useCurrency();
 
   const [selectedSale, setSelectedSale] = useState<Sale | null>(null);
   const [isViewModalOpen, setIsViewModalOpen] = useState(false);
@@ -251,6 +282,13 @@ export default function SalesPage() {
     queryFn: fetchInvoiceSettingsAPI,
     staleTime: 10 * 60 * 1000, 
   });
+  
+  const { data: taxSettings, isLoading: isLoadingTaxSettings } = useQuery<TaxSetting, Error>({
+    queryKey: ['taxSettings'],
+    queryFn: fetchTaxSettingsAPI,
+    staleTime: 10 * 60 * 1000,
+  });
+
 
   const filteredSales = useMemo(() => {
     return sales.filter(sale =>
@@ -313,7 +351,7 @@ export default function SalesPage() {
     onSuccess: (data) => {
       toast({
         title: "Return Processed Successfully",
-        description: `${data.message}. Total Refund: $${data.totalRefundAmount.toFixed(2)}`,
+        description: `${data.message}. Total Refund: ${formatCurrency(data.totalRefundAmount)}`,
       });
       queryClient.invalidateQueries({ queryKey: ['products'] });
       queryClient.invalidateQueries({ queryKey: ['sales', startDate, endDate] });
@@ -366,16 +404,17 @@ export default function SalesPage() {
       return;
     }
     if (isPrintingReceipt) return;
-    if (isLoadingInvoiceSettings) {
-        toast({ variant: 'outline', title: 'Please wait', description: 'Loading invoice settings...' });
+    if (isLoadingInvoiceSettings || isLoadingTaxSettings) {
+        toast({ variant: 'outline', title: 'Please wait', description: 'Loading settings...' });
         return;
     }
 
     setIsPrintingReceipt(true);
     const settingsToUse = invoiceSettings || defaultInvoiceSettings;
+    const taxSettingsToUse = taxSettings || null;
 
     try {
-      await generateSaleReceiptPdf(saleToPrint, settingsToUse);
+      await generateSaleReceiptPdf(saleToPrint, settingsToUse, taxSettingsToUse, formatCurrency, globalCurrency);
       toast({ title: 'Receipt Downloaded', description: `Receipt for sale ${saleToPrint.id} has been generated.` });
     } catch (error) {
       console.error('Error generating PDF receipt:', error);
@@ -507,6 +546,8 @@ export default function SalesPage() {
               <TableHead className="hidden sm:table-cell">Date</TableHead>
               <TableHead>Customer</TableHead>
               <TableHead className="hidden md:table-cell">Items</TableHead>
+              <TableHead className="text-right">Subtotal</TableHead>
+              <TableHead className="text-right">Tax</TableHead>
               <TableHead className="text-right">Total</TableHead>
               <TableHead className="text-center hidden sm:table-cell">Payment</TableHead>
               <TableHead className="text-center">Actions</TableHead>
@@ -519,7 +560,9 @@ export default function SalesPage() {
                 <TableCell className="hidden sm:table-cell text-xs sm:text-sm">{format(parseISO(sale.date), 'PPp')}</TableCell>
                 <TableCell className="text-xs sm:text-sm">{sale.customerName || 'N/A'}</TableCell>
                 <TableCell className="hidden md:table-cell text-xs">{sale.items.length}</TableCell>
-                <TableCell className="text-right font-semibold">${Number(sale.totalAmount).toFixed(2)}</TableCell>
+                <TableCell className="text-right">{formatCurrency(sale.subtotal)}</TableCell>
+                <TableCell className="text-right">{formatCurrency(sale.taxAmount)}</TableCell>
+                <TableCell className="text-right font-semibold">{formatCurrency(sale.totalAmount)}</TableCell>
                 <TableCell className="text-center hidden sm:table-cell">
                   <Badge variant={
                     sale.paymentMethod === 'Card' ? 'default' :
@@ -537,7 +580,7 @@ export default function SalesPage() {
             ))}
             {filteredSales.length === 0 && (
               <TableRow>
-                <TableCell colSpan={7} className="h-24 text-center">
+                <TableCell colSpan={9} className="h-24 text-center">
                   No sales records found for the selected criteria.
                 </TableCell>
               </TableRow>
@@ -576,15 +619,17 @@ export default function SalesPage() {
                       <TableRow key={item.productId}>
                         <TableCell>{item.productName}</TableCell>
                         <TableCell className="text-center">{item.quantity}</TableCell>
-                        <TableCell className="text-right">${Number(item.unitPrice).toFixed(2)}</TableCell>
-                        <TableCell className="text-right">${Number(item.totalPrice).toFixed(2)}</TableCell>
+                        <TableCell className="text-right">{formatCurrency(item.unitPrice)}</TableCell>
+                        <TableCell className="text-right">{formatCurrency(item.totalPrice)}</TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
                 </Table>
               </div>
-              <div className="text-right font-bold text-lg mt-4">
-                Grand Total: ${selectedSale.totalAmount.toFixed(2)}
+              <div className="mt-4 space-y-1 text-right">
+                <p className="text-sm text-muted-foreground">Subtotal: {formatCurrency(selectedSale.subtotal)}</p>
+                <p className="text-sm text-muted-foreground">Tax: {formatCurrency(selectedSale.taxAmount)}</p>
+                <p className="font-bold text-lg">Grand Total: {formatCurrency(selectedSale.totalAmount)}</p>
               </div>
             </div>
             <DialogFooter className="flex-col sm:flex-row sm:justify-between items-center">
@@ -592,10 +637,10 @@ export default function SalesPage() {
                  <Button
                   variant="outline"
                   onClick={() => handlePrintSaleReceipt(selectedSale)}
-                  disabled={isPrintingReceipt || !selectedSale || isLoadingInvoiceSettings}
+                  disabled={isPrintingReceipt || !selectedSale || isLoadingInvoiceSettings || isLoadingTaxSettings}
                   className="w-full sm:w-auto"
                 >
-                  {isPrintingReceipt || isLoadingInvoiceSettings ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Printer className="mr-2 h-4 w-4" />}
+                  {isPrintingReceipt || isLoadingInvoiceSettings || isLoadingTaxSettings ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Printer className="mr-2 h-4 w-4" />}
                   Print Receipt
                 </Button>
                 <Button
@@ -637,7 +682,7 @@ export default function SalesPage() {
                   <div key={item.productId} className="grid grid-cols-3 items-center gap-3 p-2 border rounded-md">
                     <div className="col-span-2">
                       <p className="font-medium text-sm">{item.productName}</p>
-                      <p className="text-xs text-muted-foreground">Purchased: {item.quantity} @ ${Number(item.unitPrice).toFixed(2)}</p>
+                      <p className="text-xs text-muted-foreground">Purchased: {item.quantity} @ {formatCurrency(item.unitPrice)}</p>
                     </div>
                     <Input
                       type="number"
@@ -652,7 +697,7 @@ export default function SalesPage() {
                 ))}
               </div>
               <div className="text-right font-semibold text-lg pt-3">
-                Total Refund Amount: ${totalReturnAmount.toFixed(2)}
+                Total Refund Amount: {formatCurrency(totalReturnAmount)}
               </div>
             </div>
             <DialogFooter>
@@ -671,4 +716,3 @@ export default function SalesPage() {
     </AppLayout>
   );
 }
-

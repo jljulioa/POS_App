@@ -20,9 +20,10 @@ import { useToast } from '@/hooks/use-toast';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { format, parseISO, isValid } from 'date-fns';
 import type { DailyExpense, ExpenseCategoryEnum } from '@/lib/mockData';
-import { expenseCategories } from '@/lib/mockData'; // Import predefined categories
+import { expenseCategories } from '@/lib/mockData'; 
 import React, { useState, useEffect, useMemo } from 'react';
 import { cn } from "@/lib/utils";
+import { useCurrency } from '@/contexts/CurrencyContext'; // Import useCurrency
 
 const ExpenseCategoryEnumSchema = z.enum(expenseCategories as [ExpenseCategoryEnum, ...ExpenseCategoryEnum[]]);
 
@@ -53,10 +54,6 @@ const fetchExpensesAPI = async (startDate?: Date, endDate?: Date): Promise<Daily
   if (endDate) {
     params.append('endDate', format(endDate, 'yyyy-MM-dd'));
   }
-  // If no dates, API fetches all. If only one, API logic should handle (or we enforce both for range)
-  // Current API fetches all if no date params, or specific date if `date=` is used.
-  // If only startDate, it will fetch all. If only endDate, it will fetch all.
-  // We will ensure both are present for range, or none for all.
 
   const res = await fetch(`/api/expenses?${params.toString()}`);
   if (!res.ok) {
@@ -87,6 +84,7 @@ const addExpenseAPI = async (newExpense: ExpenseFormValues): Promise<DailyExpens
 export default function ExpensesPage() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { formatCurrency } = useCurrency(); // Use currency context
   const [startDate, setStartDate] = useState<Date | undefined>(undefined);
   const [endDate, setEndDate] = useState<Date | undefined>(undefined);
 
@@ -109,7 +107,6 @@ export default function ExpensesPage() {
     mutationFn: addExpenseAPI,
     onSuccess: (data) => {
       toast({ title: "Expense Added", description: `${data.description} has been successfully recorded.` });
-      // Invalidate all expense queries to refresh list which might include the new one
       queryClient.invalidateQueries({ queryKey: ['expenses'] });
       form.reset(defaultFormValues);
     },
@@ -275,7 +272,7 @@ export default function ExpensesPage() {
                     name="amount"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Amount ($) *</FormLabel>
+                        <FormLabel>Amount *</FormLabel>
                         <FormControl>
                           <Input type="number" step="0.01" placeholder="e.g., 75.50" {...field} />
                         </FormControl>
@@ -313,7 +310,7 @@ export default function ExpensesPage() {
             <CardHeader>
               <CardTitle className="flex items-center justify-between">
                 <span className="flex items-center"><DollarSign className="mr-2 h-5 w-5 text-primary"/>{pageTitle}</span>
-                <span className="text-lg font-semibold text-primary">Total: ${totalFilteredExpenses.toFixed(2)}</span>
+                <span className="text-lg font-semibold text-primary">Total: {formatCurrency(totalFilteredExpenses)}</span>
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -347,7 +344,7 @@ export default function ExpensesPage() {
                           <TableCell className="text-sm">{format(parseISO(expense.expenseDate), 'MMM d, yyyy')}</TableCell>
                           <TableCell className="font-medium">{expense.description}</TableCell>
                           <TableCell>{expense.category}</TableCell>
-                          <TableCell className="text-right">${expense.amount.toFixed(2)}</TableCell>
+                          <TableCell className="text-right">{formatCurrency(expense.amount)}</TableCell>
                           <TableCell className="text-sm text-muted-foreground max-w-xs truncate">{expense.notes || 'N/A'}</TableCell>
                            <TableCell className="text-sm">{format(parseISO(expense.createdAt), 'p')}</TableCell>
                         </TableRow>

@@ -8,10 +8,10 @@ import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/componen
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
-import type { Product as ProductType, Sale, Customer } from '@/lib/mockData';
+import type { Product as ProductType, Sale, Customer, TaxSetting } from '@/lib/mockData';
 import type { SalesTicketDB, SaleItemForTicket } from '@/app/api/sales-tickets/route';
 import Image from 'next/image';
-import { Search, X, Plus, Minus, Save, ShoppingCart, CreditCard, DollarSign, PlusSquare, ListFilter, Loader2, AlertTriangle, Ticket, UserPlus, UserX, UserRound } from 'lucide-react';
+import { Search, X, Plus, Minus, Save, ShoppingCart, CreditCard, DollarSign, PlusSquare, ListFilter, Loader2, AlertTriangle, Ticket, UserPlus, UserX, UserRound, Percent } from 'lucide-react';
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { Badge } from '@/components/ui/badge';
@@ -27,6 +27,7 @@ import { cn } from '@/lib/utils';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/hooks/useAuth';
 import Link from 'next/link'; 
+import { useCurrency } from '@/contexts/CurrencyContext';
 
 // API fetch function for products
 const fetchProducts = async (): Promise<ProductType[]> => {
@@ -47,6 +48,17 @@ const fetchCustomers = async (): Promise<Customer[]> => {
   }
   return res.json();
 };
+
+// API fetch function for tax settings
+const fetchTaxSettingsAPI = async (): Promise<TaxSetting> => {
+  const response = await fetch('/api/settings/taxes');
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({ message: 'Failed to fetch tax settings' }));
+    throw new Error(errorData.message || 'Failed to fetch tax settings');
+  }
+  return response.json();
+};
+
 
 // API mutation function to create a sale
 const createSaleAPI = async (saleData: Omit<Sale, 'id' | 'date'> ): Promise<Sale> => {
@@ -110,6 +122,7 @@ export default function POSPage() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { appUser, supabaseUser } = useAuth(); 
+  const { formatCurrency } = useCurrency();
   const [activeTicketId, setActiveTicketId] = useState<string | null>(null);
   const finalizedTicketIdRef = useRef<string | null>(null); 
   
@@ -132,6 +145,11 @@ export default function POSPage() {
   const { data: salesTickets = [], isLoading: isLoadingSalesTickets, refetch: refetchSalesTickets } = useQuery<SalesTicketDB[], Error>({
     queryKey: ['salesTickets'],
     queryFn: fetchSalesTickets,
+  });
+
+  const { data: taxSettings, isLoading: isLoadingTaxSettings, error: taxSettingsError, isError: isTaxSettingsError } = useQuery<TaxSetting, Error>({
+    queryKey: ['taxSettings'],
+    queryFn: fetchTaxSettingsAPI,
   });
   
   const createTicketMutation = useMutation<SalesTicketDB, Error, Pick<SalesTicketDB, 'name' | 'cart_items' | 'status' | 'customer_id' | 'customer_name'>>({
@@ -283,7 +301,7 @@ export default function POSPage() {
     updateTicketMutation.mutate({ 
       ticketId: activeTicket.id, 
       data: { 
-        customer_id: customer.id, // Using customer's primary key
+        customer_id: customer.id,
         customer_name: customer.name 
       } 
     });
@@ -510,9 +528,34 @@ export default function POSPage() {
     updateTicketMutation.mutate({ ticketId: activeTicket.id, data: { cart_items: cartItemsForAPI } });
   };
 
-  const cartTotal = useMemo(() => {
-    return activeTicket?.cart_items.reduce((sum, item) => sum + item.totalPrice, 0) || 0;
-  }, [activeTicket]);
+  const cartCalculations = useMemo(() => {
+    if (!activeTicket || !taxSettings) {
+      return { subtotal: 0, taxAmount: 0, grandTotal: 0, taxName: '', taxPercentage: 0 };
+    }
+    const rawCartTotal = activeTicket.cart_items.reduce((sum, item) => sum + item.totalPrice, 0);
+    let subtotal = 0;
+    let taxAmount = 0;
+    let grandTotal = 0;
+
+    const taxRate = taxSettings.taxPercentage / 100;
+
+    if (taxSettings.pricesEnteredWithTax === 'inclusive') {
+      grandTotal = rawCartTotal;
+      subtotal = rawCartTotal / (1 + taxRate);
+      taxAmount = grandTotal - subtotal;
+    } else { // 'exclusive'
+      subtotal = rawCartTotal;
+      taxAmount = subtotal * taxRate;
+      grandTotal = subtotal + taxAmount;
+    }
+    return { 
+        subtotal: parseFloat(subtotal.toFixed(2)), 
+        taxAmount: parseFloat(taxAmount.toFixed(2)), 
+        grandTotal: parseFloat(grandTotal.toFixed(2)),
+        taxName: taxSettings.taxName,
+        taxPercentage: taxSettings.taxPercentage 
+    };
+  }, [activeTicket, taxSettings]);
 
 
   const switchTicket = (ticketId: string) => {
@@ -540,7 +583,7 @@ export default function POSPage() {
     onSuccess: (completedSale) => {
         toast({
             title: "Sale Processed Successfully",
-            description: `Sale ID: ${completedSale.id} completed. Total: $${completedSale.totalAmount.toFixed(2)}.`,
+            description: `Sale ID: ${completedSale.id} completed. Total: ${formatCurrency(completedSale.totalAmount)}.`,
         });
         queryClient.invalidateQueries({ queryKey: ['products'] });
         queryClient.invalidateQueries({ queryKey: ['sales'] }); 
@@ -568,6 +611,10 @@ export default function POSPage() {
       toast({ variant: "destructive", title: "Empty Cart", description: "Please add items to the cart before processing." });
       return;
     }
+    if (isLoadingTaxSettings || !taxSettings) {
+      toast({ variant: "destructive", title: "Tax Settings Error", description: "Tax settings are not loaded. Please try again." });
+      return;
+    }
     finalizedTicketIdRef.current = activeTicket.id; 
 
     const currentCashierName = appUser?.full_name || supabaseUser?.email || 'System';
@@ -581,7 +628,9 @@ export default function POSPage() {
           costPrice: Number(item.costPrice) || 0, 
           totalPrice: Number(item.totalPrice) || 0, 
       })),
-      totalAmount: cartTotal,
+      subtotal: cartCalculations.subtotal,
+      taxAmount: cartCalculations.taxAmount,
+      totalAmount: cartCalculations.grandTotal, // This is the grand total
       customerId: activeTicket.customer_id || null, 
       customerName: activeTicket.customer_name || null,
       paymentMethod: paymentMethod,
@@ -601,7 +650,7 @@ export default function POSPage() {
 
   const isProcessingAnyTicketAction = createTicketMutation.isPending || updateTicketMutation.isPending || deleteTicketMutation.isPending;
   const isProcessingSale = saleApiMutation.isPending;
-  const isCurrentlyLoadingData = isLoadingSalesTickets || isLoadingProducts || isLoadingCustomers;
+  const isCurrentlyLoadingData = isLoadingSalesTickets || isLoadingProducts || isLoadingCustomers || isLoadingTaxSettings;
 
 
   if (isCurrentlyLoadingData && (!salesTickets || salesTickets.length === 0) && !createTicketMutation.isPending && !activeTicketId ) {
@@ -733,7 +782,7 @@ export default function POSPage() {
                           <Image src={product.imageUrl || `https://placehold.co/40x40.png?text=${product.name.substring(0,2)}`} alt={product.name} width={40} height={40} className="rounded-sm object-cover" data-ai-hint={product.dataAiHint || "motorcycle part"}/>
                           <div className="flex-grow">
                             <p className="font-medium text-xs sm:text-sm line-clamp-1">{product.name}</p>
-                            <p className="text-xs text-muted-foreground">Stock: {product.stock} | Price: ${Number(product.price).toFixed(2)}</p>
+                            <p className="text-xs text-muted-foreground">Stock: {product.stock} | Price: {formatCurrency(product.price)}</p>
                           </div>
                         </div>
                         <Button size="sm" onClick={() => addToCart(product)} disabled={product.stock === 0 || isProcessingAnyTicketAction || isProcessingSale} className="w-full sm:w-auto text-xs sm:text-sm">
@@ -860,7 +909,7 @@ export default function POSPage() {
                                 onBlur={(e) => handleUnitPriceChange(item.productId, e.target.value)}
                                 className="h-7 w-20 text-center px-1 text-xs sm:text-sm"
                                 disabled={isProcessingAnyTicketAction || isProcessingSale}
-                                placeholder={item.unitPrice.toString()}
+                                placeholder={Number(item.unitPrice).toFixed(2)}
                             />
                           </TableCell>
                           <TableCell className="text-center">
@@ -876,7 +925,7 @@ export default function POSPage() {
                               <Button variant="outline" size="icon" className="h-6 w-6 sm:h-7 sm:w-7" onClick={() => updateQuantity(item.productId, item.quantity + 1)} disabled={isProcessingAnyTicketAction || isProcessingSale}><Plus className="h-3 w-3"/></Button>
                             </div>
                           </TableCell>
-                          <TableCell className="text-right font-semibold text-xs sm:text-sm">${Number(item.totalPrice).toFixed(2)}</TableCell>
+                          <TableCell className="text-right font-semibold text-xs sm:text-sm">{formatCurrency(item.totalPrice)}</TableCell>
                           <TableCell>
                             <Button variant="ghost" size="icon" className="h-6 w-6 sm:h-7 sm:w-7 text-destructive hover:text-destructive" onClick={() => removeFromCart(item.productId)} disabled={isProcessingAnyTicketAction || isProcessingSale}><X className="h-3 w-3 sm:h-4 sm:w-4"/></Button>
                           </TableCell>
@@ -890,26 +939,44 @@ export default function POSPage() {
               </ScrollArea>
             </CardContent>
             <Separator />
-            <CardFooter className="flex flex-col gap-3 sm:gap-4 pt-4 sm:pt-6 p-3 sm:p-6">
+            <CardFooter className="flex flex-col gap-2 sm:gap-3 pt-3 sm:pt-4 p-3 sm:p-6">
+              <div className="w-full text-sm text-muted-foreground space-y-0.5">
+                <div className="flex justify-between items-center">
+                  <span>Subtotal:</span>
+                  <span>{formatCurrency(cartCalculations.subtotal)}</span>
+                </div>
+                {taxSettings && taxSettings.taxPercentage > 0 && (
+                <div className="flex justify-between items-center">
+                  <span>{taxSettings.taxName || 'Tax'} ({cartCalculations.taxPercentage}%):</span>
+                  <span>{formatCurrency(cartCalculations.taxAmount)}</span>
+                </div>
+                )}
+              </div>
               <div className="flex justify-between items-center w-full text-lg sm:text-xl font-bold">
                 <span>Total:</span>
-                <span>${cartTotal.toFixed(2)}</span>
+                <span>{formatCurrency(cartCalculations.grandTotal)}</span>
               </div>
+              {isLoadingTaxSettings && (
+                <div className="text-xs text-muted-foreground flex items-center"><Loader2 className="mr-1 h-3 w-3 animate-spin"/>Loading tax settings...</div>
+              )}
+              {isTaxSettingsError && (
+                <div className="text-xs text-destructive flex items-center"><AlertTriangle className="mr-1 h-3 w-3"/>Error loading tax settings. Calculations may be incorrect.</div>
+              )}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-3 w-full">
                  <Button
                     size="lg"
                     variant="outline"
                     className="text-xs sm:text-base py-3 sm:py-6"
                     onClick={() => activeTicket && handleUpdateTicketStatus(activeTicket.id, 'On Hold')}
-                    disabled={!activeTicket || activeTicket.status === 'On Hold' || activeTicket.cart_items.length === 0 || isProcessingAnyTicketAction || isProcessingSale}
+                    disabled={!activeTicket || activeTicket.status === 'On Hold' || activeTicket.cart_items.length === 0 || isProcessingAnyTicketAction || isProcessingSale || isLoadingTaxSettings}
                   >
                   <Save className="mr-2 h-4 w-4 sm:h-5 sm:w-5" /> Hold Ticket
                 </Button>
-                <Button size="lg" className="bg-green-600 hover:bg-green-700 text-xs sm:text-base py-3 sm:py-6 col-span-1 sm:col-span-1" onClick={() => handleProcessSale('Cash')}  disabled={!activeTicket || activeTicket.cart_items.length === 0 || isProcessingAnyTicketAction || isProcessingSale}>
+                <Button size="lg" className="bg-green-600 hover:bg-green-700 text-xs sm:text-base py-3 sm:py-6 col-span-1 sm:col-span-1" onClick={() => handleProcessSale('Cash')}  disabled={!activeTicket || activeTicket.cart_items.length === 0 || isProcessingAnyTicketAction || isProcessingSale || isLoadingTaxSettings}>
                   {isProcessingSale && saleApiMutation.variables?.paymentMethod === 'Cash' ? <Loader2 className="mr-2 h-4 w-4 sm:h-5 sm:w-5 animate-spin" /> : <DollarSign className="mr-2 h-4 w-4 sm:h-5 sm:w-5" />}
                   {isProcessingSale && saleApiMutation.variables?.paymentMethod === 'Cash' ? 'Processing...' : 'Cash'}
                 </Button>
-                <Button size="lg" className="text-xs sm:text-base py-3 sm:py-6 col-span-1 sm:col-span-1" onClick={() => handleProcessSale('Card')}  disabled={!activeTicket || activeTicket.cart_items.length === 0 || isProcessingAnyTicketAction || isProcessingSale}>
+                <Button size="lg" className="text-xs sm:text-base py-3 sm:py-6 col-span-1 sm:col-span-1" onClick={() => handleProcessSale('Card')}  disabled={!activeTicket || activeTicket.cart_items.length === 0 || isProcessingAnyTicketAction || isProcessingSale || isLoadingTaxSettings}>
                   {isProcessingSale && saleApiMutation.variables?.paymentMethod === 'Card' ? <Loader2 className="mr-2 h-4 w-4 sm:h-5 sm:w-5 animate-spin" /> : <CreditCard className="mr-2 h-4 w-4 sm:h-5 sm:w-5" />}
                   {isProcessingSale && saleApiMutation.variables?.paymentMethod === 'Card' ? 'Processing...' : 'Card'}
                 </Button>
@@ -919,7 +986,7 @@ export default function POSPage() {
         </div>
       ) : (
         <div className="flex items-center justify-center h-[calc(100vh-4rem-3rem-10rem)]"> 
-          {isLoadingSalesTickets || createTicketMutation.isPending ? (
+          {isLoadingSalesTickets || createTicketMutation.isPending || isLoadingTaxSettings ? (
             <Loader2 className="h-10 w-10 animate-spin text-primary" />
           ) : (
             <p className="text-lg sm:text-xl text-muted-foreground">No active ticket selected. Please create or select a ticket.</p>

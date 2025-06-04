@@ -3,7 +3,7 @@
 
 import AppLayout from '@/components/layout/AppLayout';
 import { PageHeader } from '@/components/PageHeader';
-import type { PurchaseInvoice } from '@/lib/mockData'; // Keep type
+import type { PurchaseInvoice } from '@/lib/mockData'; 
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -23,8 +23,9 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogTrigger, // Added AlertDialogTrigger here
+  AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import { useCurrency } from '@/contexts/CurrencyContext'; // Import useCurrency
 
 // API fetch function for purchase invoices
 const fetchPurchaseInvoices = async (): Promise<PurchaseInvoice[]> => {
@@ -115,6 +116,7 @@ export default function PurchaseInvoicesPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { formatCurrency } = useCurrency(); // Use currency context
 
   const { data: invoices = [], isLoading, error, isError } = useQuery<PurchaseInvoice[], Error>({
     queryKey: ['purchaseInvoices'],
@@ -205,7 +207,7 @@ export default function PurchaseInvoicesPage() {
                 <TableCell className="font-medium text-xs sm:text-sm">{invoice.invoiceNumber}</TableCell>
                 <TableCell className="hidden sm:table-cell text-xs sm:text-sm">{format(new Date(invoice.invoiceDate), 'MMM d, yyyy')}</TableCell>
                 <TableCell className="text-xs sm:text-sm">{invoice.supplierName}</TableCell>
-                <TableCell className="text-right hidden md:table-cell">${invoice.totalAmount.toFixed(2)}</TableCell>
+                <TableCell className="text-right hidden md:table-cell">{formatCurrency(invoice.totalAmount)}</TableCell>
                 <TableCell className="hidden md:table-cell">
                   <Badge variant={invoice.paymentTerms === 'Credit' ? 'outline' : 'secondary'}>
                     {invoice.paymentTerms}

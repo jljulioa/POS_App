@@ -12,6 +12,8 @@ const parseSaleFromDB = (dbSale: any, items: SaleItem[]): Sale => {
     id: dbSale.id,
     date: new Date(dbSale.date).toISOString(),
     items: items,
+    subtotal: parseFloat(dbSale.subtotal || 0), // Added
+    taxAmount: parseFloat(dbSale.taxamount || 0), // Added (note db column name)
     totalAmount: parseFloat(dbSale.totalamount),
     customerId: dbSale.customerid,
     customerName: dbSale.customername,
@@ -68,7 +70,7 @@ export async function GET(request: NextRequest) {
         console.error("Error parsing date parameters for sales GET:", e);
         return NextResponse.json({ message: 'Invalid date format in query parameters.', error: (e as Error).message }, { status: 400 });
     }
-  } else if (startDateParam) { // Only start date provided
+  } else if (startDateParam) { 
     try {
         const startDate = startOfDay(parseISO(startDateParam));
         if (isValid(startDate)) {
@@ -79,7 +81,7 @@ export async function GET(request: NextRequest) {
          console.error("Error parsing start date parameter for sales GET:", e);
          return NextResponse.json({ message: 'Invalid start date format in query parameter.', error: (e as Error).message }, { status: 400 });
     }
-  } else if (endDateParam) { // Only end date provided
+  } else if (endDateParam) { 
     try {
         const endDate = endOfDay(parseISO(endDateParam));
         if (isValid(endDate)) {
@@ -97,7 +99,7 @@ export async function GET(request: NextRequest) {
 
   try {
     const salesSql = `
-      SELECT s.id, s.date, s.totalamount, s.customerid, s.customername, s.paymentmethod, s.cashierid, s.createdat, s.updatedat
+      SELECT s.id, s.date, s.subtotal, s.taxamount, s.totalamount, s.customerid, s.customername, s.paymentmethod, s.cashierid, s.createdat, s.updatedat
       FROM Sales s
       ${whereClause}
       ORDER BY s.date DESC
@@ -155,7 +157,9 @@ const SaleItemSchema = z.object({
 // Zod schema for the entire sale creation request
 const CreateSaleSchema = z.object({
   items: z.array(SaleItemSchema).min(1, { message: "Sale must have at least one item." }),
-  totalAmount: z.number().min(0),
+  subtotal: z.number().min(0),         // Added
+  taxAmount: z.number().min(0),        // Added
+  totalAmount: z.number().min(0),      // This is now the grand total
   customerId: z.string().optional().nullable(),
   customerName: z.string().optional().nullable(),
   paymentMethod: z.enum(['Cash', 'Card', 'Transfer', 'Combined']),
@@ -177,18 +181,18 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ message: 'Invalid sale data', errors: validation.error.format() }, { status: 400 });
     }
 
-    const { items, totalAmount, customerId, customerName, paymentMethod, cashierId } = validation.data;
+    const { items, subtotal, taxAmount, totalAmount, customerId, customerName, paymentMethod, cashierId } = validation.data;
     const saleId = `S${Date.now()}${Math.random().toString(36).substring(2, 7)}`;
     const saleDate = new Date();
 
     await client.query('BEGIN');
 
     const saleInsertSql = `
-      INSERT INTO Sales (id, date, totalAmount, customerId, customerName, paymentMethod, cashierId)
-      VALUES ($1, $2, $3, $4, $5, $6, $7)
+      INSERT INTO Sales (id, date, subtotal, taxamount, totalAmount, customerId, customerName, paymentMethod, cashierId)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
       RETURNING *
     `;
-    const saleInsertParams = [saleId, saleDate, totalAmount, customerId || null, customerName || null, paymentMethod, cashierId];
+    const saleInsertParams = [saleId, saleDate, subtotal, taxAmount, totalAmount, customerId || null, customerName || null, paymentMethod, cashierId];
     const saleResult = await client.query(saleInsertSql, saleInsertParams);
     const newSaleDb = saleResult.rows[0];
 

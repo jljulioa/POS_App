@@ -14,12 +14,13 @@ import { useToast } from '@/hooks/use-toast';
 import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { useCurrency } from '@/contexts/CurrencyContext'; // Import useCurrency
 
 interface ProcessedItem extends Omit<PurchaseInvoiceItem, 'productId' | 'productName' | 'totalCost'> {
-  productId: string; // original product id
+  productId: string; 
   productName: string;
   totalCost: number;
-  newSellingPrice?: number; // Optional new selling price
+  newSellingPrice?: number; 
 }
 
 // API fetch function for a single purchase invoice
@@ -32,7 +33,7 @@ const fetchPurchaseInvoice = async (invoiceId: string): Promise<PurchaseInvoice>
   return response.json();
 };
 
-// API fetch function for products (to search/select for invoice items)
+// API fetch function for products
 const fetchProducts = async (): Promise<Product[]> => {
   const res = await fetch('/api/products');
   if (!res.ok) throw new Error('Failed to fetch products');
@@ -59,6 +60,7 @@ export default function ProcessPurchaseInvoicePage() {
   const router = useRouter();
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { formatCurrency } = useCurrency(); // Use currency context
   const invoiceId = params.invoiceId as string;
 
   const [itemsToProcess, setItemsToProcess] = useState<ProcessedItem[]>([]);
@@ -134,9 +136,9 @@ export default function ProcessPurchaseInvoicePage() {
         const updatedItems = [...prev];
         const existingItem = updatedItems[existingItemIndex];
         existingItem.quantity += newItem.quantity;
-        existingItem.costPrice = newItem.costPrice; // Update cost price to latest entry for this product
+        existingItem.costPrice = newItem.costPrice; 
         existingItem.totalCost = existingItem.quantity * existingItem.costPrice;
-        if (newItem.newSellingPrice !== undefined) { // Update selling price if new one is provided
+        if (newItem.newSellingPrice !== undefined) { 
             existingItem.newSellingPrice = newItem.newSellingPrice;
         }
         return updatedItems;
@@ -226,7 +228,7 @@ export default function ProcessPurchaseInvoicePage() {
                       <TableRow key={item.productId}>
                         <TableCell>{item.productName}</TableCell>
                         <TableCell className="text-center">{item.quantity}</TableCell>
-                        <TableCell className="text-right">${item.costPrice.toFixed(2)}</TableCell>
+                        <TableCell className="text-right">{formatCurrency(item.costPrice)}</TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
@@ -252,7 +254,7 @@ export default function ProcessPurchaseInvoicePage() {
     <AppLayout>
       <PageHeader 
         title={`Process Invoice: ${invoice.invoiceNumber}`} 
-        description={`Supplier: ${invoice.supplierName} | Invoice Total: $${invoice.totalAmount.toFixed(2)}`}
+        description={`Supplier: ${invoice.supplierName} | Invoice Total: ${formatCurrency(invoice.totalAmount)}`}
       >
         <Button onClick={() => router.push('/purchase-invoices')} variant="outline">
           <ArrowLeft className="mr-2 h-4 w-4" /> Cancel
@@ -304,8 +306,8 @@ export default function ProcessPurchaseInvoicePage() {
                     <Button variant="link" size="sm" className="p-0 h-auto text-xs text-destructive" onClick={() => {setSelectedProductDetails(null); setCostPrice(""); setNewSellingPriceInput(""); setQuantity(1); }}>Clear</Button>
                 </div>
                 <p className="text-xs text-muted-foreground">Current Stock: {selectedProductDetails.stock}</p>
-                <p className="text-xs text-muted-foreground">Current Cost: ${selectedProductDetails.cost.toFixed(2)}</p>
-                <p className="text-xs text-muted-foreground">Current Price: ${selectedProductDetails.price.toFixed(2)}</p>
+                <p className="text-xs text-muted-foreground">Current Cost: {formatCurrency(selectedProductDetails.cost)}</p>
+                <p className="text-xs text-muted-foreground">Current Price: {formatCurrency(selectedProductDetails.price)}</p>
               </Card>
             )}
 
@@ -321,7 +323,7 @@ export default function ProcessPurchaseInvoicePage() {
                 </div>
                  <div>
                   <label htmlFor="newSellingPrice" className="block text-sm font-medium text-foreground mb-1">New Selling Price (optional)</label>
-                  <Input id="newSellingPrice" type="number" value={newSellingPriceInput} onChange={e => setNewSellingPriceInput(e.target.value)} placeholder={`Current: $${selectedProductDetails.price.toFixed(2)}`} step="0.01" min="0"/>
+                  <Input id="newSellingPrice" type="number" value={newSellingPriceInput} onChange={e => setNewSellingPriceInput(e.target.value)} placeholder={`Current: ${formatCurrency(selectedProductDetails.price)}`} step="0.01" min="0"/>
                 </div>
                 <Button onClick={handleAddItemToProcess} className="w-full">
                   <ShoppingBag className="mr-2 h-4 w-4"/> Add Item
@@ -336,7 +338,7 @@ export default function ProcessPurchaseInvoicePage() {
             <CardTitle>Items to Process for this Invoice</CardTitle>
             <CardDescription>
               Review items before finalizing. Stock levels, product costs, and optionally selling prices will be updated.
-              Items Total: <span className="font-bold">${totalCostOfItems.toFixed(2)}</span>
+              Items Total: <span className="font-bold">{formatCurrency(totalCostOfItems)}</span>
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -358,9 +360,9 @@ export default function ProcessPurchaseInvoicePage() {
                       <TableRow key={item.productId + index}>
                         <TableCell className="font-medium text-sm">{item.productName}</TableCell>
                         <TableCell className="text-center">{item.quantity}</TableCell>
-                        <TableCell className="text-right">${item.costPrice.toFixed(2)}</TableCell>
-                        <TableCell className="text-right">{item.newSellingPrice ? `$${item.newSellingPrice.toFixed(2)}` : 'N/A'}</TableCell>
-                        <TableCell className="text-right font-semibold">${item.totalCost.toFixed(2)}</TableCell>
+                        <TableCell className="text-right">{formatCurrency(item.costPrice)}</TableCell>
+                        <TableCell className="text-right">{item.newSellingPrice ? formatCurrency(item.newSellingPrice) : 'N/A'}</TableCell>
+                        <TableCell className="text-right font-semibold">{formatCurrency(item.totalCost)}</TableCell>
                         <TableCell className="text-center">
                           <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive h-8 w-8" onClick={() => handleRemoveItem(index)}>
                             <Trash2 className="h-4 w-4"/>

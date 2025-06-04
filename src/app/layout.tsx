@@ -6,6 +6,7 @@ import { AuthProvider } from '@/contexts/AuthContext';
 import { Toaster } from '@/components/ui/toaster';
 import QueryProvider from '@/components/QueryProvider';
 import { ThemeProvider } from "@/components/ThemeProvider";
+import { CurrencyProvider } from '@/contexts/CurrencyContext'; // Import CurrencyProvider
 
 const geistSans = Geist({
   variable: '--font-geist-sans',
@@ -36,12 +37,14 @@ export default function RootLayout({
           enableSystem
           disableTransitionOnChange
         >
-          <QueryProvider>
-            <AuthProvider>
-              {children}
-              <Toaster />
-            </AuthProvider>
-          </QueryProvider>
+          <CurrencyProvider> {/* Add CurrencyProvider here */}
+            <QueryProvider>
+              <AuthProvider>
+                {children}
+                <Toaster />
+              </AuthProvider>
+            </QueryProvider>
+          </CurrencyProvider>
         </ThemeProvider>
       </body>
     </html>
