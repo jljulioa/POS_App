@@ -12,9 +12,11 @@ const parseSaleFromDB = (dbSale: any, items: SaleItem[]): Sale => {
     id: dbSale.id,
     date: new Date(dbSale.date).toISOString(),
     items: items,
-    subtotal: parseFloat(dbSale.subtotal || 0), // Added
-    taxAmount: parseFloat(dbSale.taxamount || 0), // Added (note db column name)
     totalAmount: parseFloat(dbSale.totalamount),
+    // subtotal and taxAmount from DB might be present but won't be actively used by new logic
+    // These can be defaulted if needed:
+    // subtotal: parseFloat(dbSale.subtotal || dbSale.totalamount || 0), 
+    // taxAmount: parseFloat(dbSale.taxamount || 0),
     customerId: dbSale.customerid,
     customerName: dbSale.customername,
     paymentMethod: dbSale.paymentmethod,
@@ -99,7 +101,7 @@ export async function GET(request: NextRequest) {
 
   try {
     const salesSql = `
-      SELECT s.id, s.date, s.subtotal, s.taxamount, s.totalamount, s.customerid, s.customername, s.paymentmethod, s.cashierid, s.createdat, s.updatedat
+      SELECT s.id, s.date, s.totalamount, s.subtotal, s.taxamount, s.customerid, s.customername, s.paymentmethod, s.cashierid, s.createdat, s.updatedat
       FROM Sales s
       ${whereClause}
       ORDER BY s.date DESC
@@ -157,9 +159,7 @@ const SaleItemSchema = z.object({
 // Zod schema for the entire sale creation request
 const CreateSaleSchema = z.object({
   items: z.array(SaleItemSchema).min(1, { message: "Sale must have at least one item." }),
-  subtotal: z.number().min(0),         // Added
-  taxAmount: z.number().min(0),        // Added
-  totalAmount: z.number().min(0),      // This is now the grand total
+  totalAmount: z.number().min(0), // This is the grand total
   customerId: z.string().optional().nullable(),
   customerName: z.string().optional().nullable(),
   paymentMethod: z.enum(['Cash', 'Card', 'Transfer', 'Combined']),
@@ -181,18 +181,19 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ message: 'Invalid sale data', errors: validation.error.format() }, { status: 400 });
     }
 
-    const { items, subtotal, taxAmount, totalAmount, customerId, customerName, paymentMethod, cashierId } = validation.data;
+    const { items, totalAmount, customerId, customerName, paymentMethod, cashierId } = validation.data;
     const saleId = `S${Date.now()}${Math.random().toString(36).substring(2, 7)}`;
     const saleDate = new Date();
 
     await client.query('BEGIN');
 
     const saleInsertSql = `
-      INSERT INTO Sales (id, date, subtotal, taxamount, totalAmount, customerId, customerName, paymentMethod, cashierId)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+      INSERT INTO Sales (id, date, totalAmount, customerId, customerName, paymentMethod, cashierId)
+      VALUES ($1, $2, $3, $4, $5, $6, $7)
       RETURNING *
     `;
-    const saleInsertParams = [saleId, saleDate, subtotal, taxAmount, totalAmount, customerId || null, customerName || null, paymentMethod, cashierId];
+    // subtotal and taxamount are removed from params
+    const saleInsertParams = [saleId, saleDate, totalAmount, customerId || null, customerName || null, paymentMethod, cashierId];
     const saleResult = await client.query(saleInsertSql, saleInsertParams);
     const newSaleDb = saleResult.rows[0];
 

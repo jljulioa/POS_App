@@ -99,13 +99,7 @@ export default function SettingsPage() {
               link="/settings/currency"
               linkText="Configure Currency"
             />
-            <SettingsOptionCard
-              title="Tax Configuration"
-              description="Set default tax rates and how they are applied."
-              icon={Percent}
-              link="/settings/taxes"
-              linkText="Configure Taxes"
-            />
+            {/* Tax Configuration card removed */}
           </div>
         </div>
 

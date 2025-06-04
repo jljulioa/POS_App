@@ -23,9 +23,9 @@ export interface SaleItem {
   productId: string;
   productName: string;
   quantity: number;
-  unitPrice: number; // Effective price after discount, consistent with Product.price (inclusive/exclusive)
+  unitPrice: number;
   costPrice: number; // Cost of the item at time of sale
-  totalPrice: number; // quantity * unitPrice, consistent with Product.price
+  totalPrice: number;
   category?: string; // Product category name
 }
 
@@ -33,9 +33,7 @@ export interface Sale {
   id: string;
   date: string; // ISO string
   items: SaleItem[];
-  subtotal: number; // Pre-tax total
-  taxAmount: number; // Calculated tax amount
-  totalAmount: number; // Grand total (subtotal + taxAmount)
+  totalAmount: number; // Grand total
   customerId?: string | null;
   customerName?: string | null;
   paymentMethod: 'Cash' | 'Card' | 'Transfer' | 'Combined';
@@ -50,7 +48,7 @@ export interface Customer {
   email?: string | null;
   phone?: string | null;
   address?: string | null;
-  identificationNumber?: string | null; // Added new field
+  identificationNumber?: string | null;
   purchaseHistoryCount: number;
   totalSpent: number;
   creditLimit?: number | null;
@@ -135,11 +133,4 @@ export interface InvoiceSettings {
   footerMessage: string;
   updatedAt?: string;
 }
-
-export interface TaxSetting {
-  id?: number; // Typically 1 for a single global setting row
-  taxName: string;
-  taxPercentage: number; // Stored as 19.00 for 19%
-  pricesEnteredWithTax: 'inclusive' | 'exclusive';
-  updatedAt?: string;
-}
+// TaxSetting interface removed

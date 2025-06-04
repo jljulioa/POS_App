@@ -3,11 +3,11 @@
 
 import AppLayout from '@/components/layout/AppLayout';
 import { PageHeader } from '@/components/PageHeader';
-import type { Sale, SaleItem, TaxSetting } from '@/lib/mockData'; // Added TaxSetting
+import type { Sale, SaleItem, InvoiceSettings } from '@/lib/mockData'; // TaxSetting removed
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { ArrowLeft, Printer, Loader2, AlertTriangle, ShoppingCart, TrendingUp, TrendingDown, DollarSign, PieChart, FilterX, Calendar as CalendarIcon, Percent } from 'lucide-react';
+import { ArrowLeft, Printer, Loader2, AlertTriangle, ShoppingCart, TrendingUp, TrendingDown, DollarSign, PieChart, FilterX, Calendar as CalendarIcon } from 'lucide-react';
 import React, { useMemo, useState, useEffect } from 'react';
 import { format, parseISO, isValid, startOfDay, endOfDay } from 'date-fns';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -44,18 +44,18 @@ const fetchSalesSummaryData = async (startDate?: Date, endDate?: Date, period?: 
   return res.json();
 };
 
-// API fetch function for tax settings
-const fetchTaxSettingsAPI = async (): Promise<TaxSetting> => {
-  const response = await fetch('/api/settings/taxes');
+// API fetch function for invoice settings (still needed for PDF company details)
+const fetchInvoiceSettingsAPI = async (): Promise<InvoiceSettings> => {
+  const response = await fetch('/api/settings/invoice');
   if (!response.ok) {
-    const errorData = await response.json().catch(() => ({ message: 'Failed to fetch tax settings' }));
-    throw new Error(errorData.message || 'Failed to fetch tax settings');
+    const errorData = await response.json().catch(() => ({ message: 'Failed to fetch invoice settings' }));
+    throw new Error(errorData.message || 'Failed to fetch invoice settings');
   }
   return response.json();
 };
 
 // Function to generate PDF report using jsPDF
-const generateSalesReportPdf = async (sales: Sale[], reportData: any, taxSettings: TaxSetting | null, formatCurrencyFn: (value: number, currencyCode?: string) => string, globalCurrencyCode: string, startDate?: Date, endDate?: Date) => {
+const generateSalesReportPdf = async (sales: Sale[], reportData: any, invoiceSettings: InvoiceSettings | null, formatCurrencyFn: (value: number, currencyCode?: string) => string, globalCurrencyCode: string, startDate?: Date, endDate?: Date) => {
   const { jsPDF } = await import('jspdf');
   const autoTable = (await import('jspdf-autotable')).default;
 
@@ -98,17 +98,11 @@ const generateSalesReportPdf = async (sales: Sale[], reportData: any, taxSetting
   yPos += 15;
 
   const financialSummaryBody = [
-      ['Total Pre-Tax Revenue', formatCurrencyFn(reportData.totalPreTaxRevenue, globalCurrencyCode)],
-      ['Total Tax Collected', formatCurrencyFn(reportData.totalTaxCollected, globalCurrencyCode)],
-      ['Total Revenue (Incl. Tax)', formatCurrencyFn(reportData.totalRevenue, globalCurrencyCode)],
+      ['Total Revenue', formatCurrencyFn(reportData.totalRevenue, globalCurrencyCode)],
       ['Total COGS', formatCurrencyFn(reportData.totalCogs, globalCurrencyCode)],
-      ['Gross Profit (Pre-Tax Revenue - COGS)', formatCurrencyFn(reportData.grossProfit, globalCurrencyCode)],
+      ['Gross Profit (Revenue - COGS)', formatCurrencyFn(reportData.grossProfit, globalCurrencyCode)],
       ['Number of Sales', reportData.numberOfSales.toString()],
     ];
-  if (taxSettings && taxSettings.taxPercentage > 0) {
-    financialSummaryBody.splice(1,0, [`${taxSettings.taxName || 'Tax'} Rate Applied`, `${taxSettings.taxPercentage}%`]);
-  }
-
 
   autoTable(doc, {
     startY: yPos,
@@ -128,11 +122,11 @@ const generateSalesReportPdf = async (sales: Sale[], reportData: any, taxSetting
     }
     doc.setFontSize(14);
     doc.setFont(undefined, 'bold');
-    doc.text("Pre-Tax Revenue by Category", margin, yPos);
+    doc.text("Revenue by Category", margin, yPos);
     yPos += 15;
     autoTable(doc, {
       startY: yPos,
-      head: [['Category', 'Total Pre-Tax Revenue']],
+      head: [['Category', 'Total Revenue']],
       body: Object.entries(reportData.revenueByCategory)
                    .sort(([, a], [, b]) => (b as number) - (a as number))
                    .map(([category, revenue]) => [category, formatCurrencyFn(revenue as number, globalCurrencyCode)]),
@@ -153,9 +147,10 @@ const generateSalesReportPdf = async (sales: Sale[], reportData: any, taxSetting
     doc.setFont(undefined, 'bold');
     doc.text("Detailed Sales Transactions", margin, yPos);
     yPos += 20;
+    const smallLineSpacing = 3.5;
 
     sales.forEach((sale, saleIndex) => {
-      if (yPos + 80 > pageHeight - margin) {
+      if (yPos + 80 > pageHeight - margin) { // Rough estimate for sale header + 1 item
           doc.addPage();
           yPos = margin;
       }
@@ -171,21 +166,21 @@ const generateSalesReportPdf = async (sales: Sale[], reportData: any, taxSetting
       );
       yPos += smallLineSpacing;
       doc.text(
-        `Subtotal: ${formatCurrencyFn(sale.subtotal, globalCurrencyCode)} | Tax: ${formatCurrencyFn(sale.taxAmount, globalCurrencyCode)} | Total: ${formatCurrencyFn(sale.totalAmount, globalCurrencyCode)}`,
+        `Total: ${formatCurrencyFn(sale.totalAmount, globalCurrencyCode)}`, // Removed subtotal/tax breakdown
         margin, yPos, { maxWidth: pageWidth - (margin * 2)}
       );
       yPos += 15;
 
       autoTable(doc, {
         startY: yPos,
-        head: [['Product', 'Category', 'Qty', 'Unit Price', 'Item COGS', 'Line Total (Pre-Tax)']],
+        head: [['Product', 'Category', 'Qty', 'Unit Price', 'Item COGS', 'Line Total']],
         body: sale.items.map(item => [
           item.productName,
           item.category || 'N/A',
           item.quantity.toString(),
           formatCurrencyFn(item.unitPrice, globalCurrencyCode),
           formatCurrencyFn(item.costPrice || 0, globalCurrencyCode),
-          formatCurrencyFn(item.totalPrice, globalCurrencyCode) // totalPrice on SaleItem is pre-tax
+          formatCurrencyFn(item.totalPrice, globalCurrencyCode)
         ]),
         theme: 'striped',
         headStyles: { fillColor: [156, 163, 175], fontSize: 9 },
@@ -264,25 +259,21 @@ export default function SalesSummaryReportPage() {
     }
   });
 
-  const { data: taxSettings, isLoading: isLoadingTaxSettings } = useQuery<TaxSetting, Error>({
-    queryKey: ['taxSettings'],
-    queryFn: fetchTaxSettingsAPI,
+  const { data: invoiceSettings, isLoading: isLoadingInvoiceSettings } = useQuery<InvoiceSettings, Error>({
+    queryKey: ['invoiceSettings'],
+    queryFn: fetchInvoiceSettingsAPI,
+    staleTime: 10 * 60 * 1000, 
   });
 
   const reportData = useMemo(() => {
-    let totalRevenue = 0; // This will be Grand Total (tax-inclusive)
-    let totalPreTaxRevenue = 0;
-    let totalTaxCollected = 0;
+    let totalRevenue = 0;
     let totalCogs = 0;
-    const revenueByCategory: { [key: string]: number } = {}; // Based on item.totalPrice (pre-tax)
+    const revenueByCategory: { [key: string]: number } = {};
 
     sales.forEach(sale => {
       totalRevenue += sale.totalAmount;
-      totalPreTaxRevenue += sale.subtotal;
-      totalTaxCollected += sale.taxAmount;
       sale.items.forEach(item => {
         totalCogs += (item.costPrice || 0) * item.quantity;
-        // item.totalPrice on SaleItem is pre-tax line total
         if (item.category) {
           revenueByCategory[item.category] = (revenueByCategory[item.category] || 0) + item.totalPrice;
         } else {
@@ -290,8 +281,8 @@ export default function SalesSummaryReportPage() {
         }
       });
     });
-    const grossProfit = totalPreTaxRevenue - totalCogs;
-    return { totalRevenue, totalPreTaxRevenue, totalTaxCollected, totalCogs, grossProfit, numberOfSales: sales.length, revenueByCategory };
+    const grossProfit = totalRevenue - totalCogs;
+    return { totalRevenue, totalCogs, grossProfit, numberOfSales: sales.length, revenueByCategory };
   }, [sales]);
 
 
@@ -302,7 +293,8 @@ export default function SalesSummaryReportPage() {
     }
     setIsGeneratingPdf(true);
     try {
-      await generateSalesReportPdf(sales, reportData, taxSettings || null, formatCurrency, globalCurrency, startDate, endDate);
+      // Pass null for taxSettings as it's removed
+      await generateSalesReportPdf(sales, reportData, invoiceSettings || null, formatCurrency, globalCurrency, startDate, endDate);
       toast({ title: "Report Generated", description: "Sales summary report PDF has been downloaded." });
     } catch (error) {
       console.error("Error generating PDF report:", error);
@@ -336,7 +328,7 @@ export default function SalesSummaryReportPage() {
   }, [startDate, endDate]);
 
 
-  if ((isLoading || isLoadingTaxSettings) && sales.length === 0) {
+  if (isLoading && sales.length === 0) {
     return (
       <AppLayout>
         <PageHeader title="Sales Summary Report" description="Loading sales data..." />
@@ -381,16 +373,16 @@ export default function SalesSummaryReportPage() {
               </PopoverTrigger>
               <PopoverContent className="w-auto p-0"><Calendar mode="single" selected={endDate} onSelect={setEndDate} disabled={startDate ? { before: startDate } : undefined} initialFocus /></PopoverContent>
             </Popover>
-            <Button onClick={handleFilterApply} disabled={isLoading || isLoadingTaxSettings}>
-                {(isLoading || isLoadingTaxSettings) ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null} Apply Filters
+            <Button onClick={handleFilterApply} disabled={isLoading}>
+                {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null} Apply Filters
             </Button>
             {(startDate || endDate) && (
               <Button variant="ghost" size="icon" onClick={handleClearFilters} className="text-muted-foreground hover:text-destructive">
                 <FilterX className="h-5 w-5" /><span className="sr-only">Clear Filters</span>
               </Button>
             )}
-            <Button onClick={handleGeneratePdf} variant="outline" disabled={isGeneratingPdf || sales.length === 0 || isLoadingTaxSettings}>
-              {isGeneratingPdf || isLoadingTaxSettings ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Printer className="mr-2 h-4 w-4" />}
+            <Button onClick={handleGeneratePdf} variant="outline" disabled={isGeneratingPdf || sales.length === 0 || isLoadingInvoiceSettings}>
+              {isGeneratingPdf || isLoadingInvoiceSettings ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Printer className="mr-2 h-4 w-4" />}
               {isGeneratingPdf ? 'Generating...' : 'PDF Report'}
             </Button>
         </div>
@@ -422,8 +414,7 @@ export default function SalesSummaryReportPage() {
                    <Badge variant={sale.paymentMethod === 'Card' ? 'default' : sale.paymentMethod === 'Cash' ? 'secondary' : 'outline'} className="text-sm mb-1">
                       {sale.paymentMethod}
                     </Badge>
-                  <p className="text-xs text-muted-foreground">Subtotal: {formatCurrency(sale.subtotal)}</p>
-                  <p className="text-xs text-muted-foreground">Tax: {formatCurrency(sale.taxAmount)}</p>
+                  {/* Subtotal and Tax display removed from here */}
                   <p className="text-2xl font-bold text-primary">{formatCurrency(sale.totalAmount)}</p>
                 </div>
               </div>
@@ -433,7 +424,7 @@ export default function SalesSummaryReportPage() {
               {sale.items && sale.items.length > 0 ? (
                 <div className="rounded-md border max-h-60 overflow-y-auto">
                   <Table>
-                    <TableHeader><TableRow><TableHead>Product Name</TableHead><TableHead>Category</TableHead><TableHead className="text-center">Qty</TableHead><TableHead className="text-right">Unit Price</TableHead><TableHead className="text-right">Item COGS</TableHead><TableHead className="text-right">Line Total (Pre-Tax)</TableHead></TableRow></TableHeader>
+                    <TableHeader><TableRow><TableHead>Product Name</TableHead><TableHead>Category</TableHead><TableHead className="text-center">Qty</TableHead><TableHead className="text-right">Unit Price</TableHead><TableHead className="text-right">Item COGS</TableHead><TableHead className="text-right">Line Total</TableHead></TableRow></TableHeader>
                     <TableBody>
                       {sale.items.map((item: SaleItem, index: number) => (
                         <TableRow key={item.productId + index}>
@@ -458,12 +449,12 @@ export default function SalesSummaryReportPage() {
         {sales.length > 0 && (
           <>
             <Card className="mt-8 shadow-xl">
-              <CardHeader><CardTitle className="text-xl flex items-center"><PieChart className="mr-3 h-6 w-6 text-indigo-500"/>Revenue by Category (Pre-Tax)</CardTitle></CardHeader>
+              <CardHeader><CardTitle className="text-xl flex items-center"><PieChart className="mr-3 h-6 w-6 text-indigo-500"/>Revenue by Category</CardTitle></CardHeader>
               <CardContent>
                 {Object.keys(reportData.revenueByCategory).length > 0 ? (
                   <div className="rounded-md border overflow-x-auto">
                   <Table>
-                    <TableHeader><TableRow><TableHead>Category</TableHead><TableHead className="text-right">Total Pre-Tax Revenue</TableHead></TableRow></TableHeader>
+                    <TableHeader><TableRow><TableHead>Category</TableHead><TableHead className="text-right">Total Revenue</TableHead></TableRow></TableHeader>
                     <TableBody>
                       {Object.entries(reportData.revenueByCategory).sort(([, a], [, b]) => (b as number) - (a as number)).map(([category, revenue]) => (
                         <TableRow key={category}><TableCell className="font-medium">{category}</TableCell><TableCell className="text-right font-semibold">{formatCurrency(revenue as number)}</TableCell></TableRow>
@@ -477,13 +468,9 @@ export default function SalesSummaryReportPage() {
             <Card className="mt-8 shadow-xl">
               <CardHeader><CardTitle className="text-xl">Financial Summary</CardTitle><CardDescription>Across {reportData.numberOfSales} transaction(s) for the selected period.</CardDescription></CardHeader>
               <CardContent className="space-y-4">
-                <div className="flex items-center justify-between p-3 rounded-md border bg-muted/30"><div className="flex items-center"><DollarSign className="mr-3 h-6 w-6 text-blue-500" /><span className="font-medium">Total Pre-Tax Revenue</span></div><span className="text-xl font-semibold text-blue-600">{formatCurrency(reportData.totalPreTaxRevenue)}</span></div>
-                {taxSettings && taxSettings.taxPercentage > 0 && (
-                  <div className="flex items-center justify-between p-3 rounded-md border bg-muted/30"><div className="flex items-center"><Percent className="mr-3 h-6 w-6 text-orange-500" /><span className="font-medium">Total {taxSettings.taxName || 'Tax'} Collected ({taxSettings.taxPercentage}%)</span></div><span className="text-xl font-semibold text-orange-600">{formatCurrency(reportData.totalTaxCollected)}</span></div>
-                )}
-                <div className="flex items-center justify-between p-3 rounded-md border bg-muted/30"><div className="flex items-center"><DollarSign className="mr-3 h-6 w-6 text-green-500" /><span className="font-medium">Total Revenue (Incl. Tax)</span></div><span className="text-2xl font-bold text-green-600">{formatCurrency(reportData.totalRevenue)}</span></div>
+                <div className="flex items-center justify-between p-3 rounded-md border bg-muted/30"><div className="flex items-center"><DollarSign className="mr-3 h-6 w-6 text-green-500" /><span className="font-medium">Total Revenue</span></div><span className="text-2xl font-bold text-green-600">{formatCurrency(reportData.totalRevenue)}</span></div>
                 <div className="flex items-center justify-between p-3 rounded-md border bg-muted/30"><div className="flex items-center"><TrendingDown className="mr-3 h-6 w-6 text-red-500" /><span className="font-medium">Total Cost of Goods Sold (COGS)</span></div><span className="text-xl font-semibold text-red-600">{formatCurrency(reportData.totalCogs)}</span></div>
-                <div className="flex items-center justify-between p-3 rounded-md border bg-muted/30"><div className="flex items-center"><TrendingUp className="mr-3 h-6 w-6 text-teal-500" /><span className="font-medium">Gross Profit (Pre-Tax Revenue - COGS)</span></div><span className="text-2xl font-bold text-teal-600">{formatCurrency(reportData.grossProfit)}</span></div>
+                <div className="flex items-center justify-between p-3 rounded-md border bg-muted/30"><div className="flex items-center"><TrendingUp className="mr-3 h-6 w-6 text-teal-500" /><span className="font-medium">Gross Profit (Revenue - COGS)</span></div><span className="text-2xl font-bold text-teal-600">{formatCurrency(reportData.grossProfit)}</span></div>
               </CardContent>
             </Card>
           </>
