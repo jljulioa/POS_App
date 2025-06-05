@@ -11,7 +11,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Calendar as CalendarIcon, DollarSign, PlusCircle, Save, Loader2, AlertTriangle, FilterX } from 'lucide-react';
+import { Calendar as CalendarIcon, DollarSign, PlusCircle, Save, Loader2, AlertTriangle, FilterX, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Calendar } from "@/components/ui/calendar";
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -87,13 +87,17 @@ export default function ExpensesPage() {
   const { formatCurrency } = useCurrency(); // Use currency context
   const [startDate, setStartDate] = useState<Date | undefined>(undefined);
   const [endDate, setEndDate] = useState<Date | undefined>(undefined);
+  const [searchTerm, setSearchTerm] = useState(''); // For filtering expenses client-side after fetch
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState<number | 'all'>(20);
+
 
   const queryKeyParams = [
     startDate ? format(startDate, 'yyyy-MM-dd') : 'all',
     endDate ? format(endDate, 'yyyy-MM-dd') : 'all',
   ];
 
-  const { data: expenses = [], isLoading: isLoadingExpenses, error: expensesError, refetch: refetchExpenses } = useQuery<DailyExpense[], Error>({
+  const { data: fetchedExpenses = [], isLoading: isLoadingExpenses, error: expensesError, refetch: refetchExpenses } = useQuery<DailyExpense[], Error>({
     queryKey: ['expenses', ...queryKeyParams],
     queryFn: () => fetchExpensesAPI(startDate, endDate),
   });
@@ -119,13 +123,60 @@ export default function ExpensesPage() {
     addMutation.mutate(data);
   };
 
-  const totalFilteredExpenses = useMemo(() => {
-    return expenses.reduce((sum, expense) => sum + expense.amount, 0);
-  }, [expenses]);
+  const filteredExpenses = useMemo(() => {
+    if (!fetchedExpenses) return [];
+    const termLower = searchTerm.toLowerCase();
+    return fetchedExpenses.filter(expense =>
+      expense.description.toLowerCase().includes(termLower) ||
+      expense.category.toLowerCase().includes(termLower) ||
+      (expense.notes && expense.notes.toLowerCase().includes(termLower))
+    );
+  }, [searchTerm, fetchedExpenses]);
+  
+  const totalFilteredExpensesAmount = useMemo(() => {
+    return filteredExpenses.reduce((sum, expense) => sum + expense.amount, 0);
+  }, [filteredExpenses]);
+
+
+  const totalPages = useMemo(() => {
+    if (itemsPerPage === 'all' || filteredExpenses.length === 0) return 1;
+    return Math.ceil(filteredExpenses.length / Number(itemsPerPage));
+  }, [filteredExpenses, itemsPerPage]);
+
+  const displayedExpenses = useMemo(() => {
+    if (itemsPerPage === 'all') return filteredExpenses;
+    const numericItemsPerPage = Number(itemsPerPage);
+    const startIndex = (currentPage - 1) * numericItemsPerPage;
+    const endIndex = startIndex + numericItemsPerPage;
+    return filteredExpenses.slice(startIndex, endIndex);
+  }, [filteredExpenses, currentPage, itemsPerPage]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [startDate, endDate, searchTerm, itemsPerPage]);
+
+  useEffect(() => {
+    if (currentPage > totalPages && totalPages > 0) setCurrentPage(totalPages);
+    else if (totalPages === 0 && filteredExpenses.length > 0) setCurrentPage(1);
+  }, [filteredExpenses.length, totalPages, currentPage]);
+
+  const handleItemsPerPageChange = (value: string) => {
+    setItemsPerPage(value === 'all' ? 'all' : Number(value));
+  };
+
+  const paginationStartItem = itemsPerPage === 'all' || filteredExpenses.length === 0 ? (filteredExpenses.length > 0 ? 1 : 0) : (currentPage - 1) * Number(itemsPerPage) + 1;
+  const paginationEndItem = itemsPerPage === 'all' ? filteredExpenses.length : Math.min(currentPage * Number(itemsPerPage), filteredExpenses.length);
+
+  const itemsPerPageOptions = [
+    { value: '20', label: '20 per page' },
+    { value: '40', label: '40 per page' },
+    { value: 'all', label: 'Show All' },
+  ];
 
   const handleClearFilters = () => {
     setStartDate(undefined);
     setEndDate(undefined);
+    // setSearchTerm(''); // Optionally clear search term as well
   };
 
   const pageTitle = useMemo(() => {
@@ -308,10 +359,16 @@ export default function ExpensesPage() {
         <div className="md:col-span-2">
           <Card className="shadow-lg">
             <CardHeader>
-              <CardTitle className="flex items-center justify-between">
-                <span className="flex items-center"><DollarSign className="mr-2 h-5 w-5 text-primary"/>{pageTitle}</span>
-                <span className="text-lg font-semibold text-primary">Total: {formatCurrency(totalFilteredExpenses)}</span>
-              </CardTitle>
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+                  <CardTitle className="flex items-center"><DollarSign className="mr-2 h-5 w-5 text-primary"/>{pageTitle}</CardTitle>
+                  <span className="text-base sm:text-lg font-semibold text-primary">Total: {formatCurrency(totalFilteredExpensesAmount)}</span>
+              </div>
+               <Input
+                  placeholder="Filter displayed expenses by description, category, notes..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="mt-2"
+                />
             </CardHeader>
             <CardContent>
               {isLoadingExpenses && (
@@ -322,10 +379,10 @@ export default function ExpensesPage() {
                   <AlertTriangle className="mr-2 h-5 w-5 inline-block" /> Failed to load expenses: {expensesError?.message}
                 </div>
               )}
-              {!isLoadingExpenses && !expensesError && expenses.length === 0 && (
+              {!isLoadingExpenses && !expensesError && displayedExpenses.length === 0 && (
                 <p className="text-muted-foreground text-center py-4">No expenses recorded for the selected criteria.</p>
               )}
-              {!isLoadingExpenses && !expensesError && expenses.length > 0 && (
+              {!isLoadingExpenses && !expensesError && displayedExpenses.length > 0 && (
                 <div className="rounded-md border">
                   <Table>
                     <TableHeader>
@@ -339,7 +396,7 @@ export default function ExpensesPage() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {expenses.map((expense) => (
+                      {displayedExpenses.map((expense) => (
                         <TableRow key={expense.id}>
                           <TableCell className="text-sm">{format(parseISO(expense.expenseDate), 'MMM d, yyyy')}</TableCell>
                           <TableCell className="font-medium">{expense.description}</TableCell>
@@ -354,9 +411,27 @@ export default function ExpensesPage() {
                 </div>
               )}
             </CardContent>
+             {(!isLoadingExpenses && !expensesError && filteredExpenses.length > 0) && (
+                <CardFooter className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-4 border-t">
+                     <div className="flex items-center gap-2">
+                        <span className="text-sm text-muted-foreground">Rows per page:</span>
+                        <Select value={itemsPerPage.toString()} onValueChange={handleItemsPerPageChange}>
+                            <SelectTrigger className="w-[120px] h-9"><SelectValue placeholder="Items per page" /></SelectTrigger>
+                            <SelectContent>{itemsPerPageOptions.map(option => (<SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>))}</SelectContent>
+                        </Select>
+                    </div>
+                    <div className="text-sm text-muted-foreground">{filteredExpenses.length > 0 ? `Showing ${paginationStartItem}-${paginationEndItem} of ${filteredExpenses.length} expenses` : "No expenses"}</div>
+                    <div className="flex items-center gap-2">
+                        <Button variant="outline" size="sm" onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))} disabled={currentPage === 1 || itemsPerPage === 'all'}><ChevronLeft className="h-4 w-4 mr-1" /> Previous</Button>
+                        <span className="text-sm text-muted-foreground">Page {currentPage} of {totalPages}</span>
+                        <Button variant="outline" size="sm" onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))} disabled={currentPage === totalPages || itemsPerPage === 'all'}>Next <ChevronRight className="h-4 w-4 ml-1" /></Button>
+                    </div>
+                </CardFooter>
+            )}
           </Card>
         </div>
       </div>
     </AppLayout>
   );
 }
+

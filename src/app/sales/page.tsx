@@ -7,7 +7,8 @@ import type { Sale, SaleItem, InvoiceSettings } from '@/lib/mockData'; // TaxSet
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { FileDown, Eye, Loader2, AlertTriangle, ShoppingCart, Calendar as CalendarIcon, FilterX, CornerDownLeft, Printer } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { FileDown, Eye, Loader2, AlertTriangle, ShoppingCart, Calendar as CalendarIcon, FilterX, CornerDownLeft, Printer, ChevronLeft, ChevronRight } from 'lucide-react';
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { format, parseISO } from 'date-fns';
 import { Badge } from '@/components/ui/badge';
@@ -239,6 +240,9 @@ export default function SalesPage() {
   const [startDate, setStartDate] = useState<Date | undefined>(undefined);
   const [endDate, setEndDate] = useState<Date | undefined>(undefined);
 
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState<number | 'all'>(20);
+
   const { data: sales = [], isLoading, error, isError, refetch } = useQuery<Sale[], Error>({
     queryKey: ['sales', startDate, endDate],
     queryFn: () => fetchSales(startDate, endDate),
@@ -265,6 +269,29 @@ export default function SalesPage() {
       sale.items.some(item => item.productName.toLowerCase().includes(searchTerm.toLowerCase()))
     );
   }, [searchTerm, sales]);
+
+  const totalPages = useMemo(() => {
+    if (itemsPerPage === 'all' || filteredSales.length === 0) return 1;
+    return Math.ceil(filteredSales.length / Number(itemsPerPage));
+  }, [filteredSales, itemsPerPage]);
+
+  const displayedSales = useMemo(() => {
+    if (itemsPerPage === 'all') return filteredSales;
+    const numericItemsPerPage = Number(itemsPerPage);
+    const startIndex = (currentPage - 1) * numericItemsPerPage;
+    const endIndex = startIndex + numericItemsPerPage;
+    return filteredSales.slice(startIndex, endIndex);
+  }, [filteredSales, currentPage, itemsPerPage]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, startDate, endDate, itemsPerPage]);
+
+  useEffect(() => {
+    if (currentPage > totalPages && totalPages > 0) setCurrentPage(totalPages);
+    else if (totalPages === 0 && filteredSales.length > 0) setCurrentPage(1);
+  }, [filteredSales.length, totalPages, currentPage]);
+
 
   const handleViewSale = (sale: Sale) => {
     setSelectedSale(sale);
@@ -400,6 +427,19 @@ export default function SalesPage() {
     setEndDate(undefined);
   };
 
+  const handleItemsPerPageChange = (value: string) => {
+    setItemsPerPage(value === 'all' ? 'all' : Number(value));
+  };
+
+  const paginationStartItem = itemsPerPage === 'all' || filteredSales.length === 0 ? (filteredSales.length > 0 ? 1 : 0) : (currentPage - 1) * Number(itemsPerPage) + 1;
+  const paginationEndItem = itemsPerPage === 'all' ? filteredSales.length : Math.min(currentPage * Number(itemsPerPage), filteredSales.length);
+
+  const itemsPerPageOptions = [
+    { value: '20', label: '20 per page' },
+    { value: '40', label: '40 per page' },
+    { value: 'all', label: 'Show All' },
+  ];
+
   useEffect(() => {
   }, [startDate, endDate]);
 
@@ -520,7 +560,7 @@ export default function SalesPage() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {filteredSales.map((sale) => (
+            {displayedSales.map((sale) => (
               <TableRow key={sale.id}>
                 <TableCell className="font-medium text-xs sm:text-sm">{sale.id}</TableCell>
                 <TableCell className="hidden sm:table-cell text-xs sm:text-sm">{format(parseISO(sale.date), 'PPp')}</TableCell>
@@ -543,7 +583,7 @@ export default function SalesPage() {
                 </TableCell>
               </TableRow>
             ))}
-            {filteredSales.length === 0 && (
+            {displayedSales.length === 0 && (
               <TableRow>
                 <TableCell colSpan={7} className="h-24 text-center"> {/* Adjusted colSpan */}
                   No sales records found for the selected criteria.
@@ -552,6 +592,22 @@ export default function SalesPage() {
             )}
           </TableBody>
         </Table>
+      </div>
+
+      <div className="mt-6 flex flex-col sm:flex-row items-center justify-between gap-4">
+        <div className="flex items-center gap-2">
+          <span className="text-sm text-muted-foreground">Rows per page:</span>
+          <Select value={itemsPerPage.toString()} onValueChange={handleItemsPerPageChange}>
+            <SelectTrigger className="w-[120px] h-9"><SelectValue placeholder="Items per page" /></SelectTrigger>
+            <SelectContent>{itemsPerPageOptions.map(option => (<SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>))}</SelectContent>
+          </Select>
+        </div>
+        <div className="text-sm text-muted-foreground">{filteredSales.length > 0 ? `Showing ${paginationStartItem}-${paginationEndItem} of ${filteredSales.length} sales` : "No sales"}</div>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))} disabled={currentPage === 1 || itemsPerPage === 'all'}><ChevronLeft className="h-4 w-4 mr-1" /> Previous</Button>
+          <span className="text-sm text-muted-foreground">Page {currentPage} of {totalPages}</span>
+          <Button variant="outline" size="sm" onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))} disabled={currentPage === totalPages || itemsPerPage === 'all'}>Next <ChevronRight className="h-4 w-4 ml-1" /></Button>
+        </div>
       </div>
 
       {selectedSale && isViewModalOpen && (
@@ -680,3 +736,4 @@ export default function SalesPage() {
     </AppLayout>
   );
 }
+

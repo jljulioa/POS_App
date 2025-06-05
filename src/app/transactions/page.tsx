@@ -7,8 +7,9 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { ArrowRightLeft, Package, Search, Loader2, AlertTriangle } from 'lucide-react';
-import React, { useState, useMemo } from 'react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { ArrowRightLeft, Package, Search, Loader2, AlertTriangle, ChevronLeft, ChevronRight } from 'lucide-react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { format } from 'date-fns';
 import type { InventoryTransactionDB } from '@/app/api/inventory-transactions/route'; // Using DB type from API
@@ -24,6 +25,8 @@ const fetchInventoryTransactions = async (): Promise<InventoryTransactionDB[]> =
 
 export default function InventoryTransactionsPage() {
   const [searchTerm, setSearchTerm] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState<number | 'all'>(20);
 
   const { data: transactions = [], isLoading, error, isError } = useQuery<InventoryTransactionDB[], Error>({
     queryKey: ['inventoryTransactions'],
@@ -41,6 +44,36 @@ export default function InventoryTransactionsPage() {
     );
   }, [searchTerm, transactions]);
 
+  const totalPages = useMemo(() => {
+    if (itemsPerPage === 'all' || filteredTransactions.length === 0) return 1;
+    return Math.ceil(filteredTransactions.length / Number(itemsPerPage));
+  }, [filteredTransactions, itemsPerPage]);
+
+  const displayedTransactions = useMemo(() => {
+    if (itemsPerPage === 'all') return filteredTransactions;
+    const numericItemsPerPage = Number(itemsPerPage);
+    const startIndex = (currentPage - 1) * numericItemsPerPage;
+    const endIndex = startIndex + numericItemsPerPage;
+    return filteredTransactions.slice(startIndex, endIndex);
+  }, [filteredTransactions, currentPage, itemsPerPage]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, itemsPerPage]);
+
+  useEffect(() => {
+    if (currentPage > totalPages && totalPages > 0) setCurrentPage(totalPages);
+    else if (totalPages === 0 && filteredTransactions.length > 0) setCurrentPage(1);
+  }, [filteredTransactions.length, totalPages, currentPage]);
+
+  const handleItemsPerPageChange = (value: string) => {
+    setItemsPerPage(value === 'all' ? 'all' : Number(value));
+  };
+
+  const paginationStartItem = itemsPerPage === 'all' || filteredTransactions.length === 0 ? (filteredTransactions.length > 0 ? 1 : 0) : (currentPage - 1) * Number(itemsPerPage) + 1;
+  const paginationEndItem = itemsPerPage === 'all' ? filteredTransactions.length : Math.min(currentPage * Number(itemsPerPage), filteredTransactions.length);
+
+
   const getBadgeVariant = (type: InventoryTransactionDB['transaction_type']): "default" | "secondary" | "destructive" | "outline" => {
     switch (type) {
       case 'Sale': return 'destructive'; // Stock decreases
@@ -50,6 +83,13 @@ export default function InventoryTransactionsPage() {
       default: return 'outline';
     }
   };
+
+  const itemsPerPageOptions = [
+    { value: '20', label: '20 per page' },
+    { value: '40', label: '40 per page' },
+    { value: 'all', label: 'Show All' },
+  ];
+
 
   if (isLoading) {
     return (
@@ -77,13 +117,15 @@ export default function InventoryTransactionsPage() {
   return (
     <AppLayout>
       <PageHeader title="Inventory Transactions" description="View all product stock movements.">
-        <Input
-          placeholder="Search by Product Name, ID, Document, Type..."
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-          className="max-w-sm"
-          icon={<Search className="h-4 w-4 text-muted-foreground" />}
-        />
+        <div className="relative w-full max-w-sm">
+            <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              placeholder="Search by Product Name, ID, Document, Type..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="pl-8" 
+            />
+        </div>
       </PageHeader>
 
       <div className="rounded-lg border shadow-sm bg-card">
@@ -102,7 +144,7 @@ export default function InventoryTransactionsPage() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {filteredTransactions.map((transaction) => (
+            {displayedTransactions.map((transaction) => (
               <TableRow key={transaction.id}>
                 <TableCell>{format(new Date(transaction.transaction_date), 'PPpp')}</TableCell>
                 <TableCell>{transaction.product_id}</TableCell>
@@ -121,7 +163,7 @@ export default function InventoryTransactionsPage() {
                 <TableCell className="text-xs text-muted-foreground">{transaction.notes || 'N/A'}</TableCell>
               </TableRow>
             ))}
-            {filteredTransactions.length === 0 && (
+            {displayedTransactions.length === 0 && (
               <TableRow>
                 <TableCell colSpan={9} className="h-24 text-center">
                   No inventory transactions found.
@@ -131,6 +173,22 @@ export default function InventoryTransactionsPage() {
           </TableBody>
         </Table>
       </div>
+      <div className="mt-6 flex flex-col sm:flex-row items-center justify-between gap-4">
+        <div className="flex items-center gap-2">
+          <span className="text-sm text-muted-foreground">Rows per page:</span>
+          <Select value={itemsPerPage.toString()} onValueChange={handleItemsPerPageChange}>
+            <SelectTrigger className="w-[120px] h-9"><SelectValue placeholder="Items per page" /></SelectTrigger>
+            <SelectContent>{itemsPerPageOptions.map(option => (<SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>))}</SelectContent>
+          </Select>
+        </div>
+        <div className="text-sm text-muted-foreground">{filteredTransactions.length > 0 ? `Showing ${paginationStartItem}-${paginationEndItem} of ${filteredTransactions.length} transactions` : "No transactions"}</div>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))} disabled={currentPage === 1 || itemsPerPage === 'all'}><ChevronLeft className="h-4 w-4 mr-1" /> Previous</Button>
+          <span className="text-sm text-muted-foreground">Page {currentPage} of {totalPages}</span>
+          <Button variant="outline" size="sm" onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))} disabled={currentPage === totalPages || itemsPerPage === 'all'}>Next <ChevronRight className="h-4 w-4 ml-1" /></Button>
+        </div>
+      </div>
     </AppLayout>
   );
 }
+

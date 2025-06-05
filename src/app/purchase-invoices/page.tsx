@@ -7,8 +7,9 @@ import type { PurchaseInvoice } from '@/lib/mockData';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { PlusCircle, FileDown, Settings2, Loader2, AlertTriangle, Trash2 } from 'lucide-react';
-import React, { useState, useMemo } from 'react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { PlusCircle, FileDown, Settings2, Loader2, AlertTriangle, Trash2, ChevronLeft, ChevronRight } from 'lucide-react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { format } from 'date-fns';
 import { Badge } from '@/components/ui/badge';
 import Link from 'next/link';
@@ -117,6 +118,9 @@ export default function PurchaseInvoicesPage() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { formatCurrency } = useCurrency(); // Use currency context
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState<number | 'all'>(20);
+
 
   const { data: invoices = [], isLoading, error, isError } = useQuery<PurchaseInvoice[], Error>({
     queryKey: ['purchaseInvoices'],
@@ -141,6 +145,41 @@ export default function PurchaseInvoicesPage() {
       invoice.supplierName.toLowerCase().includes(searchTerm.toLowerCase())
     );
   }, [searchTerm, invoices]);
+
+  const totalPages = useMemo(() => {
+    if (itemsPerPage === 'all' || filteredInvoices.length === 0) return 1;
+    return Math.ceil(filteredInvoices.length / Number(itemsPerPage));
+  }, [filteredInvoices, itemsPerPage]);
+
+  const displayedInvoices = useMemo(() => {
+    if (itemsPerPage === 'all') return filteredInvoices;
+    const numericItemsPerPage = Number(itemsPerPage);
+    const startIndex = (currentPage - 1) * numericItemsPerPage;
+    const endIndex = startIndex + numericItemsPerPage;
+    return filteredInvoices.slice(startIndex, endIndex);
+  }, [filteredInvoices, currentPage, itemsPerPage]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, itemsPerPage]);
+
+  useEffect(() => {
+    if (currentPage > totalPages && totalPages > 0) setCurrentPage(totalPages);
+    else if (totalPages === 0 && filteredInvoices.length > 0) setCurrentPage(1);
+  }, [filteredInvoices.length, totalPages, currentPage]);
+
+  const handleItemsPerPageChange = (value: string) => {
+    setItemsPerPage(value === 'all' ? 'all' : Number(value));
+  };
+
+  const paginationStartItem = itemsPerPage === 'all' || filteredInvoices.length === 0 ? (filteredInvoices.length > 0 ? 1 : 0) : (currentPage - 1) * Number(itemsPerPage) + 1;
+  const paginationEndItem = itemsPerPage === 'all' ? filteredInvoices.length : Math.min(currentPage * Number(itemsPerPage), filteredInvoices.length);
+
+  const itemsPerPageOptions = [
+    { value: '20', label: '20 per page' },
+    { value: '40', label: '40 per page' },
+    { value: 'all', label: 'Show All' },
+  ];
 
 
   if (isLoading) {
@@ -202,7 +241,7 @@ export default function PurchaseInvoicesPage() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {filteredInvoices.map((invoice) => (
+            {displayedInvoices.map((invoice) => (
               <TableRow key={invoice.id}>
                 <TableCell className="font-medium text-xs sm:text-sm">{invoice.invoiceNumber}</TableCell>
                 <TableCell className="hidden sm:table-cell text-xs sm:text-sm">{format(new Date(invoice.invoiceDate), 'MMM d, yyyy')}</TableCell>
@@ -223,7 +262,7 @@ export default function PurchaseInvoicesPage() {
                 </TableCell>
               </TableRow>
             ))}
-            {filteredInvoices.length === 0 && (
+            {displayedInvoices.length === 0 && (
               <TableRow>
                 <TableCell colSpan={7} className="h-24 text-center">
                   No purchase invoices found.
@@ -233,6 +272,22 @@ export default function PurchaseInvoicesPage() {
           </TableBody>
         </Table>
       </div>
+      <div className="mt-6 flex flex-col sm:flex-row items-center justify-between gap-4">
+        <div className="flex items-center gap-2">
+          <span className="text-sm text-muted-foreground">Rows per page:</span>
+          <Select value={itemsPerPage.toString()} onValueChange={handleItemsPerPageChange}>
+            <SelectTrigger className="w-[120px] h-9"><SelectValue placeholder="Items per page" /></SelectTrigger>
+            <SelectContent>{itemsPerPageOptions.map(option => (<SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>))}</SelectContent>
+          </Select>
+        </div>
+        <div className="text-sm text-muted-foreground">{filteredInvoices.length > 0 ? `Showing ${paginationStartItem}-${paginationEndItem} of ${filteredInvoices.length} invoices` : "No invoices"}</div>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))} disabled={currentPage === 1 || itemsPerPage === 'all'}><ChevronLeft className="h-4 w-4 mr-1" /> Previous</Button>
+          <span className="text-sm text-muted-foreground">Page {currentPage} of {totalPages}</span>
+          <Button variant="outline" size="sm" onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))} disabled={currentPage === totalPages || itemsPerPage === 'all'}>Next <ChevronRight className="h-4 w-4 ml-1" /></Button>
+        </div>
+      </div>
     </AppLayout>
   );
 }
+
