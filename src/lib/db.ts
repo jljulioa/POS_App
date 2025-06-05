@@ -5,7 +5,7 @@ import { Pool, type PoolConfig } from 'pg';
 let pool: Pool | null = null;
 let poolInitializationError: Error | null = null;
 
-console.log("POSTGRES_URL:", process.env.POSTGRES_URL);
+console.log("POSTGRES_URL:", process.env.NEXT_PUBLIC_POSTGRES_URL);
 
 async function initializePool(): Promise<Pool> {
   console.log("Attempting to initialize PostgreSQL pool (initializePool function called).");
