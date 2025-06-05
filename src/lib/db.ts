@@ -23,7 +23,7 @@ async function initializePool(): Promise<Pool> {
   console.log("PostgreSQL Pool: process.env object is available.");
 
   // Log the value of process.env.POSTGRES_URL directly
-  const directPostgresUrl = process.env.POSTGRES_URL;
+  const directPostgresUrl = process.env.DB_HOST;
   console.log(`PostgreSQL Pool: Value of process.env.POSTGRES_URL: '${directPostgresUrl}' (Type: ${typeof directPostgresUrl})`);
 
   // Check for secrets object and its POSTGRES_URL
@@ -36,7 +36,7 @@ async function initializePool(): Promise<Pool> {
     console.log("PostgreSQL Pool: process.env.secrets object does not exist or is not an object.");
   }
 
-  const connectionString = directPostgresUrl || secretsPostgresUrl;
+  const connectionString = process.env.DB_HOST;
 
   if (poolInitializationError && poolInitializationError.message.includes('Failed to connect to PostgreSQL database during pool initialization')) {
     console.error("PostgreSQL Pool: Persistent critical error from previous initialization attempt. Aborting.", poolInitializationError);
