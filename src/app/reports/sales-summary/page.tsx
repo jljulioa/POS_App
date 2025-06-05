@@ -3,17 +3,15 @@
 
 import AppLayout from '@/components/layout/AppLayout';
 import { PageHeader } from '@/components/PageHeader';
-import type { Sale, SaleItem, InvoiceSettings } from '@/lib/mockData'; // TaxSetting removed
+import type { Sale, SaleItem, InvoiceSettings } from '@/lib/mockData';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { ArrowLeft, Printer, Loader2, AlertTriangle, ShoppingCart, TrendingUp, TrendingDown, DollarSign, PieChart, FilterX, Calendar as CalendarIcon } from 'lucide-react';
-import React, { useMemo, useState, useEffect } from 'react';
+import { Printer, Loader2, AlertTriangle, ShoppingCart, TrendingUp, TrendingDown, DollarSign, PieChart, FilterX, Calendar as CalendarIcon } from 'lucide-react';
+import React, { useMemo, useState, useEffect, Suspense } from 'react';
 import { format, parseISO, isValid, startOfDay, endOfDay } from 'date-fns';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useToast } from '@/hooks/use-toast';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import Link from 'next/link';
 import { Badge } from '@/components/ui/badge';
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
@@ -22,6 +20,7 @@ import { useSearchParams, useRouter } from 'next/navigation';
 import type { jsPDF } from 'jspdf';
 import 'jspdf-autotable';
 import { useCurrency } from '@/contexts/CurrencyContext';
+import { Skeleton } from '@/components/ui/skeleton';
 
 // API fetch function for sales with date range
 const fetchSalesSummaryData = async (startDate?: Date, endDate?: Date, period?: string): Promise<Sale[]> => {
@@ -44,7 +43,7 @@ const fetchSalesSummaryData = async (startDate?: Date, endDate?: Date, period?: 
   return res.json();
 };
 
-// API fetch function for invoice settings (still needed for PDF company details)
+// API fetch function for invoice settings
 const fetchInvoiceSettingsAPI = async (): Promise<InvoiceSettings> => {
   const response = await fetch('/api/settings/invoice');
   if (!response.ok) {
@@ -54,7 +53,6 @@ const fetchInvoiceSettingsAPI = async (): Promise<InvoiceSettings> => {
   return response.json();
 };
 
-// Function to generate PDF report using jsPDF
 const generateSalesReportPdf = async (sales: Sale[], reportData: any, invoiceSettings: InvoiceSettings | null, formatCurrencyFn: (value: number, currencyCode?: string) => string, globalCurrencyCode: string, startDate?: Date, endDate?: Date) => {
   const { jsPDF } = await import('jspdf');
   const autoTable = (await import('jspdf-autotable')).default;
@@ -150,7 +148,7 @@ const generateSalesReportPdf = async (sales: Sale[], reportData: any, invoiceSet
     const smallLineSpacing = 3.5;
 
     sales.forEach((sale, saleIndex) => {
-      if (yPos + 80 > pageHeight - margin) { // Rough estimate for sale header + 1 item
+      if (yPos + 80 > pageHeight - margin) { 
           doc.addPage();
           yPos = margin;
       }
@@ -166,7 +164,7 @@ const generateSalesReportPdf = async (sales: Sale[], reportData: any, invoiceSet
       );
       yPos += smallLineSpacing;
       doc.text(
-        `Total: ${formatCurrencyFn(sale.totalAmount, globalCurrencyCode)}`, // Removed subtotal/tax breakdown
+        `Total: ${formatCurrencyFn(sale.totalAmount, globalCurrencyCode)}`,
         margin, yPos, { maxWidth: pageWidth - (margin * 2)}
       );
       yPos += 15;
@@ -213,7 +211,37 @@ const generateSalesReportPdf = async (sales: Sale[], reportData: any, invoiceSet
   doc.save(`${reportTitleSafe}.pdf`);
 };
 
-export default function SalesSummaryReportPage() {
+function SalesSummaryReportContentLoading() {
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-col sm:flex-row flex-wrap items-center gap-2">
+        <Skeleton className="h-10 w-[180px]" />
+        <Skeleton className="h-10 w-[180px]" />
+        <Skeleton className="h-10 w-[120px]" />
+        <Skeleton className="h-10 w-10 rounded-full" />
+        <Skeleton className="h-10 w-[150px]" />
+      </div>
+      <Card className="shadow-lg">
+        <CardHeader><Skeleton className="h-8 w-3/4" /><Skeleton className="h-4 w-1/2 mt-2" /></CardHeader>
+        <CardContent><Skeleton className="h-40 w-full" /></CardContent>
+      </Card>
+      <Card className="shadow-xl">
+        <CardHeader><Skeleton className="h-7 w-1/2" /></CardHeader>
+        <CardContent><Skeleton className="h-24 w-full" /></CardContent>
+      </Card>
+      <Card className="shadow-xl">
+        <CardHeader><Skeleton className="h-7 w-1/3" /><Skeleton className="h-4 w-2/3 mt-1" /></CardHeader>
+        <CardContent className="space-y-4">
+          <Skeleton className="h-12 w-full" />
+          <Skeleton className="h-12 w-full" />
+          <Skeleton className="h-12 w-full" />
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+function SalesSummaryReportContent() {
   const { toast } = useToast();
   const router = useRouter();
   const searchParamsHook = useSearchParams();
@@ -221,11 +249,17 @@ export default function SalesSummaryReportPage() {
 
   const [startDate, setStartDate] = useState<Date | undefined>(() => {
     const period = searchParamsHook.get('period');
-    return period === 'today' ? startOfDay(new Date()) : undefined;
+    const urlStartDate = searchParamsHook.get('startDate');
+    if (period === 'today') return startOfDay(new Date());
+    if (urlStartDate && isValid(parseISO(urlStartDate))) return startOfDay(parseISO(urlStartDate));
+    return undefined;
   });
   const [endDate, setEndDate] = useState<Date | undefined>(() => {
     const period = searchParamsHook.get('period');
-    return period === 'today' ? endOfDay(new Date()) : undefined;
+    const urlEndDate = searchParamsHook.get('endDate');
+    if (period === 'today') return endOfDay(new Date());
+    if (urlEndDate && isValid(parseISO(urlEndDate))) return endOfDay(parseISO(urlEndDate));
+    return undefined;
   });
   
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
@@ -236,16 +270,23 @@ export default function SalesSummaryReportPage() {
       const today = new Date();
       setStartDate(startOfDay(today));
       setEndDate(endOfDay(today));
+    } else {
+        const urlStartDate = searchParamsHook.get('startDate');
+        const urlEndDate = searchParamsHook.get('endDate');
+        if (urlStartDate && isValid(parseISO(urlStartDate))) setStartDate(startOfDay(parseISO(urlStartDate)));
+        else setStartDate(undefined);
+        if (urlEndDate && isValid(parseISO(urlEndDate))) setEndDate(endOfDay(parseISO(urlEndDate)));
+        else setEndDate(undefined);
     }
   }, [searchParamsHook]);
 
   const queryKey = useMemo(() => ['salesSummary', startDate, endDate, searchParamsHook.get('period')], [startDate, endDate, searchParamsHook]);
 
-  const { data: sales = [], isLoading, error, isError, refetch } = useQuery<Sale[], Error>({
+  const { data: sales = [], isLoading, error, isError } = useQuery<Sale[], Error>({
     queryKey: queryKey,
     queryFn: () => {
         const period = searchParamsHook.get('period');
-        if (period === 'today' && !startDate && !endDate) {
+        if (period === 'today' && !startDate && !endDate) { // If period=today is in URL but state not set yet
              return fetchSalesSummaryData(startOfDay(new Date()), endOfDay(new Date()), undefined);
         }
         return fetchSalesSummaryData(startDate, endDate, period && !startDate && !endDate ? period : undefined);
@@ -293,7 +334,6 @@ export default function SalesSummaryReportPage() {
     }
     setIsGeneratingPdf(true);
     try {
-      // Pass null for taxSettings as it's removed
       await generateSalesReportPdf(sales, reportData, invoiceSettings || null, formatCurrency, globalCurrency, startDate, endDate);
       toast({ title: "Report Generated", description: "Sales summary report PDF has been downloaded." });
     } catch (error) {
@@ -329,30 +369,23 @@ export default function SalesSummaryReportPage() {
 
 
   if (isLoading && sales.length === 0) {
-    return (
-      <AppLayout>
-        <PageHeader title="Sales Summary Report" description="Loading sales data..." />
-        <div className="flex justify-center items-center h-64">
-          <Loader2 className="h-12 w-12 animate-spin text-primary" />
-        </div>
-      </AppLayout>
-    );
+    return <SalesSummaryReportContentLoading />;
   }
 
   if (isError) {
      return (
-      <AppLayout>
+      <>
         <PageHeader title="Sales Summary Report" description="Error loading sales data." />
         <Card className="shadow-md">
           <CardHeader><CardTitle className="flex items-center text-destructive"><AlertTriangle className="mr-2 h-6 w-6" />Failed to Load Report</CardTitle></CardHeader>
           <CardContent><p>{error?.message || "An unknown error occurred."}</p></CardContent>
         </Card>
-      </AppLayout>
+      </>
     );
   }
 
   return (
-    <AppLayout>
+    <>
       <PageHeader title={pageTitle} description="Analyze sales performance for the selected period.">
         <div className="flex flex-wrap items-center gap-2">
             <Popover>
@@ -398,7 +431,7 @@ export default function SalesSummaryReportPage() {
         )}
 
         {sales.map((sale) => (
-          <Card key={sale.id} className="mb-6 shadow-lg">
+          <Card key={sale.id} className="mb-6 shadow-lg break-inside-avoid-page">
             <CardHeader>
               <div className="flex flex-col sm:flex-row justify-between sm:items-start">
                 <div>
@@ -414,7 +447,6 @@ export default function SalesSummaryReportPage() {
                    <Badge variant={sale.paymentMethod === 'Card' ? 'default' : sale.paymentMethod === 'Cash' ? 'secondary' : 'outline'} className="text-sm mb-1">
                       {sale.paymentMethod}
                     </Badge>
-                  {/* Subtotal and Tax display removed from here */}
                   <p className="text-2xl font-bold text-primary">{formatCurrency(sale.totalAmount)}</p>
                 </div>
               </div>
@@ -448,7 +480,7 @@ export default function SalesSummaryReportPage() {
         
         {sales.length > 0 && (
           <>
-            <Card className="mt-8 shadow-xl">
+            <Card className="mt-8 shadow-xl break-inside-avoid-page">
               <CardHeader><CardTitle className="text-xl flex items-center"><PieChart className="mr-3 h-6 w-6 text-indigo-500"/>Revenue by Category</CardTitle></CardHeader>
               <CardContent>
                 {Object.keys(reportData.revenueByCategory).length > 0 ? (
@@ -465,7 +497,7 @@ export default function SalesSummaryReportPage() {
               </CardContent>
             </Card>
 
-            <Card className="mt-8 shadow-xl">
+            <Card className="mt-8 shadow-xl break-inside-avoid-page">
               <CardHeader><CardTitle className="text-xl">Financial Summary</CardTitle><CardDescription>Across {reportData.numberOfSales} transaction(s) for the selected period.</CardDescription></CardHeader>
               <CardContent className="space-y-4">
                 <div className="flex items-center justify-between p-3 rounded-md border bg-muted/30"><div className="flex items-center"><DollarSign className="mr-3 h-6 w-6 text-green-500" /><span className="font-medium">Total Revenue</span></div><span className="text-2xl font-bold text-green-600">{formatCurrency(reportData.totalRevenue)}</span></div>
@@ -476,6 +508,19 @@ export default function SalesSummaryReportPage() {
           </>
         )}
       </div>
+    </>
+  );
+}
+
+export default function SalesSummaryReportPage() {
+  return (
+    <AppLayout>
+      <Suspense fallback={<SalesSummaryReportContentLoading />}>
+        <SalesSummaryReportContent />
+      </Suspense>
     </AppLayout>
   );
 }
+
+
+    
