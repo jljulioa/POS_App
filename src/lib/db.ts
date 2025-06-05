@@ -5,12 +5,14 @@ import { Pool, type PoolConfig } from 'pg';
 let pool: Pool | null = null;
 let poolInitializationError: Error | null = null;
 
+console.log("POSTGRES_URL:", process.env.POSTGRES_URL);
+
 async function initializePool(): Promise<Pool> {
   console.log("Attempting to initialize PostgreSQL pool (initializePool function called).");
 
   const connectionString = process.env.POSTGRES_URL;
 
-  console.log(connectionString)
+  console.log("POSTGRES_URL:", connectionString);
 
   if (poolInitializationError && poolInitializationError.message.includes('Failed to connect to PostgreSQL database during pool initialization')) {
     console.error("initializePool: Persistent critical error from previous initialization attempt. Aborting further attempts.", poolInitializationError);
