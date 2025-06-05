@@ -5,8 +5,6 @@ import { Pool, type PoolConfig } from 'pg';
 let pool: Pool | null = null;
 let poolInitializationError: Error | null = null;
 
-// Removed top-level console.log for POSTGRES_URL
-
 async function initializePool(): Promise<Pool> {
   console.log("PostgreSQL Pool: Attempting initialization (initializePool function).");
 
