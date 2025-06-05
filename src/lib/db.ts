@@ -10,6 +10,8 @@ async function initializePool(): Promise<Pool> {
 
   const connectionString = process.env.POSTGRES_URL;
 
+  console.log(connectionString)
+
   if (poolInitializationError && poolInitializationError.message.includes('Failed to connect to PostgreSQL database during pool initialization')) {
     console.error("initializePool: Persistent critical error from previous initialization attempt. Aborting further attempts.", poolInitializationError);
     throw poolInitializationError;
