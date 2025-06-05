@@ -10,7 +10,7 @@ console.log("POSTGRES_URL:", process.env.POSTGRES_URL);
 async function initializePool(): Promise<Pool> {
   console.log("Attempting to initialize PostgreSQL pool (initializePool function called).");
 
-  const connectionString = process.env.POSTGRES_URL;
+  const connectionString = "postgresql://postgres.zdlklhrmgoyvfsgyyqmt:g%2A3dCcHDtRMTSW%3F@aws-0-us-east-2.pooler.supabase.com:6543/postgres";
 
   console.log("POSTGRES_URL:", connectionString);
 
@@ -35,7 +35,7 @@ async function initializePool(): Promise<Pool> {
   // Mask password for logging connection string
   const maskedConnectionString = connectionString.replace(/:([^:@]*)(?=@)/, ':********');
   console.log("initializePool: Using POSTGRES_URL (password masked):", maskedConnectionString);
-  console.log("initializePool: Full POSTGRES_URL being used (ensure this is correct):", connectionString);
+  //console.log("initializePool: Full POSTGRES_URL being used (ensure this is correct):", connectionString);
 
 
   const config: PoolConfig = {
