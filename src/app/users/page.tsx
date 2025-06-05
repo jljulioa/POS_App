@@ -27,17 +27,12 @@ const fetchUsers = async (): Promise<User[]> => {
 export default function UsersPage() {
   const { toast } = useToast();
 
-  const { data: users = [], isLoading, error, isError } = useQuery<User[], Error>({
+  const { data, isLoading, error, isError } = useQuery({
     queryKey: ['appUsers'], // Changed queryKey to avoid conflict if 'users' is used elsewhere for Supabase users
     queryFn: fetchUsers,
-    onError: (err) => {
-      toast({
-        variant: "destructive",
-        title: "Failed to Load Users",
-        description: err.message || "An unexpected error occurred.",
-      });
-    }
   });
+
+  const users: User[] = (data as User[]) || [];
 
   if (isLoading) {
     return (

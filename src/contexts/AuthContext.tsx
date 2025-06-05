@@ -8,6 +8,8 @@ import type { User as SupabaseUser, Session } from '@supabase/supabase-js';
 import { useToast } from '@/hooks/use-toast';
 import type { User as AppUser, UserRole } from '@/lib/mockData';
 
+const INACTIVITY_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes in milliseconds
+
 interface AuthContextType {
   isAuthenticated: boolean;
   isLoading: boolean;
@@ -27,6 +29,35 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const router = useRouter();
   const pathname = usePathname();
   const { toast } = useToast();
+  const inactivityTimerRef = React.useRef<NodeJS.Timeout | null>(null);
+
+  const resetInactivityTimer = useCallback(() => {
+    if (inactivityTimerRef.current) {
+      clearTimeout(inactivityTimerRef.current);
+    }
+    if (supabaseUser) { // Only set timer if user is logged in
+      inactivityTimerRef.current = setTimeout(() => {
+        console.log("AuthContext: Inactivity timeout reached, logging out.");
+        logout(); // Call the logout function
+      }, INACTIVITY_TIMEOUT_MS);
+    }
+  }, [supabaseUser]); // Depend on supabaseUser to ensure timer is only active when logged in
+
+  const handleActivity = useCallback(() => {
+    resetInactivityTimer();
+  }, [resetInactivityTimer]);
+
+  const handleVisibilityChange = useCallback(() => {
+    if (document.hidden) {
+      console.log("AuthContext: Tab/window hidden, pausing inactivity timer.");
+      if (inactivityTimerRef.current) {
+        clearTimeout(inactivityTimerRef.current);
+      }
+    } else {
+      console.log("AuthContext: Tab/window visible, resuming inactivity timer.");
+      resetInactivityTimer();
+    }
+  }, [resetInactivityTimer]);
 
   const fetchAppUser = useCallback(async (user: SupabaseUser) => {
     if (!user || !user.id) {
@@ -119,6 +150,30 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   }, [fetchAppUser]); // fetchAppUser is stable due to useCallback
 
   useEffect(() => {
+    // Set up global activity listeners
+    window.addEventListener('mousemove', handleActivity);
+    window.addEventListener('keydown', handleActivity);
+    window.addEventListener('click', handleActivity);
+    window.addEventListener('scroll', handleActivity);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    // Initial reset of the timer when component mounts or user state changes
+    resetInactivityTimer();
+
+    return () => {
+      // Clean up global activity listeners
+      window.removeEventListener('mousemove', handleActivity);
+      window.removeEventListener('keydown', handleActivity);
+      window.removeEventListener('click', handleActivity);
+      window.removeEventListener('scroll', handleActivity);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      if (inactivityTimerRef.current) {
+        clearTimeout(inactivityTimerRef.current);
+      }
+    };
+  }, [handleActivity, handleVisibilityChange, resetInactivityTimer, supabaseUser]); // Re-run if handlers or supabaseUser change
+
+  useEffect(() => {
     // Navigation guard
     if (!isLoading && !supabaseUser && pathname !== '/login') {
       console.log("AuthContext Navigation Guard: Not authenticated (no supabaseUser) and not on login page, redirecting to /login.");
@@ -154,6 +209,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       toast({ variant: "destructive", title: "Login Failed", description: error.message || "Invalid email or password." });
       setIsLoading(false); // Ensure loading is false on error
       throw error;
+    } finally {
+      resetInactivityTimer(); // Reset timer on successful login
     }
   };
 
@@ -176,6 +233,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       console.error("AuthContext logout: Supabase logout error:", error);
       toast({ variant: "destructive", title: "Logout Failed", description: error.message || "Could not log out." });
       setIsLoading(false); // Ensure loading is false on error
+    } finally {
+      if (inactivityTimerRef.current) {
+        clearTimeout(inactivityTimerRef.current); // Clear timer on logout
+      }
+      setSupabaseUser(null); // Explicitly clear user state on logout
+      setAppUser(null);
     }
   };
 

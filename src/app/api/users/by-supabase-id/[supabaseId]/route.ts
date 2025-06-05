@@ -19,7 +19,7 @@ const parseUserFromDB = (dbUser: any): User | null => {
 };
 
 export async function GET(request: NextRequest, { params }: { params: { supabaseId: string } }) {
-  const { supabaseId } = params;
+  const { supabaseId } = await params;
 
   if (!supabaseId) {
     return NextResponse.json({ message: 'Supabase ID parameter is required' }, { status: 400 });
