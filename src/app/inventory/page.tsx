@@ -1,6 +1,7 @@
 
 "use client";
 
+import React, { Suspense, useState, useMemo, useEffect } from 'react';
 import AppLayout from '@/components/layout/AppLayout';
 import { PageHeader } from '@/components/PageHeader';
 import type { Product } from '@/lib/mockData';
@@ -11,7 +12,6 @@ import { Button } from '@/components/ui/button';
 import { PlusCircle, FileDown, Edit3, Trash2, Loader2, AlertTriangle, Upload, DollarSign, ChevronLeft, ChevronRight } from 'lucide-react';
 import Image from 'next/image';
 import { Badge } from '@/components/ui/badge';
-import React, { useState, useMemo, useEffect } from 'react';
 import Link from 'next/link';
 import { useQuery, useQueryClient, useMutation, type UseMutationResult } from '@tanstack/react-query';
 import { useToast } from '@/hooks/use-toast';
@@ -29,7 +29,8 @@ import {
 } from "@/components/ui/alert-dialog";
 import type { ProductCategory } from '@/app/api/categories/route';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { useCurrency } from '@/contexts/CurrencyContext'; // Import useCurrency
+import { useCurrency } from '@/contexts/CurrencyContext';
+import { Skeleton } from '@/components/ui/skeleton';
 
 // API fetch function
 const fetchProducts = async (): Promise<Product[]> => {
@@ -61,7 +62,6 @@ const fetchCategories = async (): Promise<ProductCategory[]> => {
   }
   return res.json();
 };
-
 
 interface ProductRowActionsProps {
   product: Product;
@@ -122,24 +122,56 @@ function ProductRowActions({ product, deleteMutation }: ProductRowActionsProps) 
 
 type StockStatusFilter = 'all' | 'in_stock' | 'low_stock' | 'out_of_stock';
 
-const stockStatusOptions: { value: StockStatusFilter; label: string }[] = [
-  { value: 'all', label: 'All Statuses' },
-  { value: 'in_stock', label: 'In Stock' },
-  { value: 'low_stock', label: 'Low Stock' },
-  { value: 'out_of_stock', label: 'Out of Stock' },
-];
+// Loading skeleton for the main content area
+function InventoryContentLoading() {
+  return (
+    <div className="flex flex-col gap-6">
+      <div className="flex flex-col sm:flex-row flex-wrap gap-2 sm:gap-4">
+        <Skeleton className="h-10 w-full sm:flex-1 md:flex-none md:max-w-xs lg:max-w-sm" />
+        <Skeleton className="h-10 w-full sm:w-auto md:w-[180px]" />
+        <Skeleton className="h-10 w-full sm:w-auto md:w-[180px]" />
+        <Skeleton className="h-10 w-full sm:w-auto md:w-[180px]" />
+      </div>
+      <Card className="mb-6 shadow-md">
+        <CardHeader><Skeleton className="h-6 w-3/4 mb-2" /><Skeleton className="h-4 w-1/2" /></CardHeader>
+        <CardContent><Skeleton className="h-8 w-1/2" /><Skeleton className="h-4 w-2/3 mt-1" /></CardContent>
+      </Card>
+      <div className="rounded-lg border shadow-sm bg-card overflow-x-auto">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              {[...Array(10)].map((_, i) => <TableHead key={i}><Skeleton className="h-5 my-2 w-full" /></TableHead>)}
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {[...Array(5)].map((_, i) => (
+              <TableRow key={i}>
+                {[...Array(10)].map((_, j) => <TableCell key={j}><Skeleton className="h-10 my-1 w-full" /></TableCell>)}
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+      <div className="mt-6 flex flex-col sm:flex-row items-center justify-between gap-4">
+        <div className="flex items-center gap-2">
+          <Skeleton className="h-5 w-20" /> <Skeleton className="h-9 w-[120px]" />
+        </div>
+        <Skeleton className="h-5 w-1/4 sm:w-1/5" />
+        <div className="flex items-center gap-2">
+          <Skeleton className="h-9 w-24" />
+          <Skeleton className="h-5 w-16" />
+          <Skeleton className="h-9 w-24" />
+        </div>
+      </div>
+    </div>
+  );
+}
 
-const itemsPerPageOptions = [
-  { value: '50', label: '50 per page' },
-  { value: '100', label: '100 per page' },
-  { value: 'all', label: 'Show All' },
-];
-
-export default function InventoryPage() {
+function InventoryPageContent({ productsData, categoriesData }: { productsData: Product[], categoriesData: ProductCategory[] }) {
   const [searchTerm, setSearchTerm] = useState('');
   const searchParams = useSearchParams();
   const router = useRouter();
-  const { formatCurrency } = useCurrency(); // Use currency context
+  const { formatCurrency } = useCurrency();
   
   const [filterBrand, setFilterBrand] = useState('all');
   const [filterCategoryName, setFilterCategoryName] = useState('all'); 
@@ -148,19 +180,8 @@ export default function InventoryPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState<number | 'all'>(50);
 
-
   const { toast } = useToast();
   const queryClient = useQueryClient();
-
-  const { data: products = [], isLoading: isLoadingProducts, error: productsError, isError: isProductsError } = useQuery<Product[], Error>({
-    queryKey: ['products'],
-    queryFn: fetchProducts,
-  });
-
-  const { data: categories = [], isLoading: isLoadingCategories } = useQuery<ProductCategory[], Error>({
-    queryKey: ['categories'],
-    queryFn: fetchCategories,
-  });
 
   useEffect(() => {
     const urlCategoryFilter = searchParams.get('category');
@@ -170,7 +191,7 @@ export default function InventoryPage() {
     setFilterStockStatus(urlStatusFilter || 'all');
   }, [searchParams]);
 
-  const deleteMutation = useMutation< { message: string }, Error, string>({
+  const deleteMutation = useMutation<{ message: string }, Error, string>({
     mutationFn: deleteProductAPI,
     onSuccess: (data, productId) => { 
       toast({
@@ -188,22 +209,20 @@ export default function InventoryPage() {
     },
   });
 
-  const uniqueBrands = useMemo(() => ['all', ...new Set(products.map(p => p.brand).filter(Boolean).sort((a, b) => a.localeCompare(b)))], [products]);
+  const uniqueBrands = useMemo(() => ['all', ...new Set(productsData.map(p => p.brand).filter(Boolean).sort((a, b) => a.localeCompare(b)))], [productsData]);
   
   const categoryFilterOptions = useMemo(() => {
-    if (isLoadingCategories || !categories) return [{ value: 'all', label: 'All Categories' }];
     const options = [{ value: 'all', label: 'All Categories' }];
-    categories.forEach(cat => {
+    categoriesData.forEach(cat => {
       if (cat.name) { 
         options.push({ value: cat.name, label: cat.name });
       }
     });
     return options.sort((a,b) => a.label.localeCompare(b.label));
-  }, [categories, isLoadingCategories]);
-
+  }, [categoriesData]);
 
   const currentFilteredProducts = useMemo(() => {
-    return products.filter(product => {
+    return productsData.filter(product => {
       const searchTermLower = searchTerm.toLowerCase();
       const matchesSearch = product.name.toLowerCase().includes(searchTermLower) ||
                             product.code.toLowerCase().includes(searchTermLower) ||
@@ -224,19 +243,15 @@ export default function InventoryPage() {
       
       return matchesSearch && matchesBrand && matchesCategory && matchesStockStatus;
     });
-  }, [searchTerm, filterBrand, filterCategoryName, filterStockStatus, products]);
+  }, [searchTerm, filterBrand, filterCategoryName, filterStockStatus, productsData]);
   
   const totalPages = useMemo(() => {
-    if (itemsPerPage === 'all' || currentFilteredProducts.length === 0) {
-      return 1;
-    }
-    return Math.ceil(currentFilteredProducts.length / itemsPerPage);
+    if (itemsPerPage === 'all' || currentFilteredProducts.length === 0) return 1;
+    return Math.ceil(currentFilteredProducts.length / Number(itemsPerPage));
   }, [currentFilteredProducts, itemsPerPage]);
 
   const displayedProducts = useMemo(() => {
-    if (itemsPerPage === 'all') {
-      return currentFilteredProducts;
-    }
+    if (itemsPerPage === 'all') return currentFilteredProducts;
     const numericItemsPerPage = Number(itemsPerPage);
     const startIndex = (currentPage - 1) * numericItemsPerPage;
     const endIndex = startIndex + numericItemsPerPage;
@@ -248,74 +263,36 @@ export default function InventoryPage() {
   }, [searchTerm, filterBrand, filterCategoryName, filterStockStatus, itemsPerPage]);
 
   useEffect(() => {
-    if (currentPage > totalPages && totalPages > 0) {
-      setCurrentPage(totalPages);
-    } else if (totalPages === 0 && currentFilteredProducts.length > 0) { 
-       setCurrentPage(1);
-    }
+    if (currentPage > totalPages && totalPages > 0) setCurrentPage(totalPages);
+    else if (totalPages === 0 && currentFilteredProducts.length > 0) setCurrentPage(1);
   }, [currentFilteredProducts.length, totalPages, currentPage]);
-
 
   const totalFilteredCogs = useMemo(() => {
     return currentFilteredProducts.reduce((acc, product) => acc + (product.cost * product.stock), 0);
   }, [currentFilteredProducts]);
 
   const handleItemsPerPageChange = (value: string) => {
-    if (value === 'all') {
-      setItemsPerPage('all');
-    } else {
-      setItemsPerPage(Number(value));
-    }
+    setItemsPerPage(value === 'all' ? 'all' : Number(value));
   };
 
   const paginationStartItem = itemsPerPage === 'all' ? 1 : (currentPage - 1) * Number(itemsPerPage) + 1;
   const paginationEndItem = itemsPerPage === 'all' ? currentFilteredProducts.length : Math.min(currentPage * Number(itemsPerPage), currentFilteredProducts.length);
 
+  const stockStatusOptions: { value: StockStatusFilter; label: string }[] = [
+    { value: 'all', label: 'All Statuses' },
+    { value: 'in_stock', label: 'In Stock' },
+    { value: 'low_stock', label: 'Low Stock' },
+    { value: 'out_of_stock', label: 'Out of Stock' },
+  ];
 
-  if (isLoadingProducts || isLoadingCategories) {
-    return (
-      <AppLayout>
-        <PageHeader title="Inventory Management" description="Loading product stock..." />
-        <div className="flex justify-center items-center h-64">
-          <Loader2 className="h-12 w-12 animate-spin text-primary" />
-        </div>
-      </AppLayout>
-    );
-  }
-
-  if (isProductsError) {
-    return (
-      <AppLayout>
-        <PageHeader title="Inventory Management" description="Error loading products." />
-        <div className="bg-destructive/10 border border-destructive text-destructive p-4 rounded-md">
-          <div className="flex items-center">
-            <AlertTriangle className="mr-2 h-6 w-6" />
-            <h3 className="font-semibold">Failed to Load Products</h3>
-          </div>
-          <p>{productsError?.message || "An unknown error occurred."}</p>
-        </div>
-      </AppLayout>
-    );
-  }
+  const itemsPerPageOptions = [
+    { value: '50', label: '50 per page' },
+    { value: '100', label: '100 per page' },
+    { value: 'all', label: 'Show All' },
+  ];
 
   return (
-    <AppLayout>
-      <PageHeader title="Inventory Management" description="View and manage your product stock.">
-        <Button asChild>
-          <Link href="/inventory/add">
-            <PlusCircle className="mr-2 h-4 w-4" /> Add Product
-          </Link>
-        </Button>
-         <Button variant="outline" asChild>
-          <Link href="/inventory/import">
-            <Upload className="mr-2 h-4 w-4" /> Import Products
-          </Link>
-        </Button>
-        <Button variant="outline">
-          <FileDown className="mr-2 h-4 w-4" /> Export CSV
-        </Button>
-      </PageHeader>
-
+    <>
       <div className="mb-6 flex flex-col sm:flex-row flex-wrap gap-2 sm:gap-4">
         <Input
           placeholder="Search by name, code, reference, barcode..."
@@ -324,37 +301,20 @@ export default function InventoryPage() {
           className="w-full sm:flex-1 md:flex-none md:max-w-xs lg:max-w-sm"
         />
         <Select value={filterBrand} onValueChange={setFilterBrand}>
-          <SelectTrigger className="w-full sm:w-auto md:w-[180px]">
-            <SelectValue placeholder="Filter by brand" />
-          </SelectTrigger>
-          <SelectContent>
-            {uniqueBrands.map(brand => (
-              <SelectItem key={brand} value={brand}>{brand === 'all' ? 'All Brands' : brand}</SelectItem>
-            ))}
-          </SelectContent>
+          <SelectTrigger className="w-full sm:w-auto md:w-[180px]"><SelectValue placeholder="Filter by brand" /></SelectTrigger>
+          <SelectContent>{uniqueBrands.map(brand => (<SelectItem key={brand} value={brand}>{brand === 'all' ? 'All Brands' : brand}</SelectItem>))}</SelectContent>
         </Select>
         <Select 
           value={filterCategoryName} 
           onValueChange={(value) => {
             setFilterCategoryName(value);
             const newQuery = new URLSearchParams(searchParams.toString());
-            if (value === 'all') {
-              newQuery.delete('category');
-            } else {
-              newQuery.set('category', value);
-            }
+            if (value === 'all') newQuery.delete('category'); else newQuery.set('category', value);
             router.push(`/inventory?${newQuery.toString()}`, { scroll: false });
           }}
-          disabled={isLoadingCategories}
         >
-          <SelectTrigger className="w-full sm:w-auto md:w-[180px]">
-            <SelectValue placeholder={isLoadingCategories ? "Loading..." : "Filter by category"} />
-          </SelectTrigger>
-          <SelectContent>
-            {categoryFilterOptions.map(opt => (
-              <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
-            ))}
-          </SelectContent>
+          <SelectTrigger className="w-full sm:w-auto md:w-[180px]"><SelectValue placeholder={"Filter by category"} /></SelectTrigger>
+          <SelectContent>{categoryFilterOptions.map(opt => (<SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>))}</SelectContent>
         </Select>
         <Select 
           value={filterStockStatus} 
@@ -362,37 +322,20 @@ export default function InventoryPage() {
             const newStatus = value as StockStatusFilter;
             setFilterStockStatus(newStatus);
             const newQuery = new URLSearchParams(searchParams.toString());
-            if (newStatus === 'all') {
-              newQuery.delete('status');
-            } else {
-              newQuery.set('status', newStatus);
-            }
+            if (newStatus === 'all') newQuery.delete('status'); else newQuery.set('status', newStatus);
             router.push(`/inventory?${newQuery.toString()}`, { scroll: false });
           }}
         >
-          <SelectTrigger className="w-full sm:w-auto md:w-[180px]">
-            <SelectValue placeholder="Filter by stock status" />
-          </SelectTrigger>
-          <SelectContent>
-            {stockStatusOptions.map(opt => (
-              <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
-            ))}
-          </SelectContent>
+          <SelectTrigger className="w-full sm:w-auto md:w-[180px]"><SelectValue placeholder="Filter by stock status" /></SelectTrigger>
+          <SelectContent>{stockStatusOptions.map(opt => (<SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>))}</SelectContent>
         </Select>
       </div>
 
       <Card className="mb-6 shadow-md">
-        <CardHeader>
-          <CardTitle className="text-lg flex items-center">
-            <DollarSign className="mr-2 h-5 w-5 text-blue-500" />
-            Filtered Inventory Value
-          </CardTitle>
-        </CardHeader>
+        <CardHeader><CardTitle className="text-lg flex items-center"><DollarSign className="mr-2 h-5 w-5 text-blue-500" />Filtered Inventory Value</CardTitle></CardHeader>
         <CardContent>
           <p className="text-2xl font-bold">Total COGS: {formatCurrency(totalFilteredCogs)}</p>
-          <p className="text-sm text-muted-foreground">
-            Based on {currentFilteredProducts.length} product(s) matching current filters.
-          </p>
+          <p className="text-sm text-muted-foreground">Based on {currentFilteredProducts.length} product(s) matching current filters.</p>
         </CardContent>
       </Card>
 
@@ -417,9 +360,7 @@ export default function InventoryPage() {
           <TableBody>
             {displayedProducts.map((product) => (
               <TableRow key={product.id}>
-                <TableCell>
-                  <Image src={product.imageUrl || `https://placehold.co/50x50.png?text=${product.name.substring(0,2)}`} alt={product.name} width={50} height={50} className="rounded-md object-cover" data-ai-hint={product.dataAiHint || "motorcycle part"} />
-                </TableCell>
+                <TableCell><Image src={product.imageUrl || `https://placehold.co/50x50.png?text=${product.name.substring(0,2)}`} alt={product.name} width={50} height={50} className="rounded-md object-cover" data-ai-hint={product.dataAiHint || "motorcycle part"} /></TableCell>
                 <TableCell className="font-medium">{product.name}</TableCell>
                 <TableCell className="hidden md:table-cell">{product.code}</TableCell>
                 <TableCell className="hidden lg:table-cell">{product.reference}</TableCell>
@@ -434,18 +375,10 @@ export default function InventoryPage() {
                    product.stock < product.minStock ? <Badge variant="outline" className="border-yellow-500 text-yellow-600">Low Stock</Badge> :
                    <Badge variant="secondary" className="border-green-500 text-green-600 bg-green-100">In Stock</Badge>}
                 </TableCell>
-                <TableCell className="text-center">
-                  <ProductRowActions product={product} deleteMutation={deleteMutation} />
-                </TableCell>
+                <TableCell className="text-center"><ProductRowActions product={product} deleteMutation={deleteMutation} /></TableCell>
               </TableRow>
             ))}
-             {displayedProducts.length === 0 && (
-              <TableRow>
-                <TableCell colSpan={12} className="h-24 text-center">
-                  No products found matching your criteria.
-                </TableCell>
-              </TableRow>
-            )}
+            {displayedProducts.length === 0 && (<TableRow><TableCell colSpan={12} className="h-24 text-center">No products found matching your criteria.</TableCell></TableRow>)}
           </TableBody>
         </Table>
       </div>
@@ -453,49 +386,68 @@ export default function InventoryPage() {
       <div className="mt-6 flex flex-col sm:flex-row items-center justify-between gap-4">
         <div className="flex items-center gap-2">
           <span className="text-sm text-muted-foreground">Rows per page:</span>
-          <Select
-            value={itemsPerPage.toString()}
-            onValueChange={handleItemsPerPageChange}
-          >
-            <SelectTrigger className="w-[120px] h-9">
-              <SelectValue placeholder="Items per page" />
-            </SelectTrigger>
-            <SelectContent>
-              {itemsPerPageOptions.map(option => (
-                <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
-              ))}
-            </SelectContent>
+          <Select value={itemsPerPage.toString()} onValueChange={handleItemsPerPageChange}>
+            <SelectTrigger className="w-[120px] h-9"><SelectValue placeholder="Items per page" /></SelectTrigger>
+            <SelectContent>{itemsPerPageOptions.map(option => (<SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>))}</SelectContent>
           </Select>
         </div>
-        <div className="text-sm text-muted-foreground">
-          {currentFilteredProducts.length > 0 ? 
-            `Showing ${paginationStartItem}-${paginationEndItem} of ${currentFilteredProducts.length} products` :
-            "No products"
-          }
-        </div>
+        <div className="text-sm text-muted-foreground">{currentFilteredProducts.length > 0 ? `Showing ${paginationStartItem}-${paginationEndItem} of ${currentFilteredProducts.length} products` : "No products"}</div>
         <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
-            disabled={currentPage === 1 || itemsPerPage === 'all'}
-          >
-            <ChevronLeft className="h-4 w-4 mr-1" /> Previous
-          </Button>
-          <span className="text-sm text-muted-foreground">
-            Page {currentPage} of {totalPages}
-          </span>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
-            disabled={currentPage === totalPages || itemsPerPage === 'all'}
-          >
-            Next <ChevronRight className="h-4 w-4 ml-1" />
-          </Button>
+          <Button variant="outline" size="sm" onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))} disabled={currentPage === 1 || itemsPerPage === 'all'}><ChevronLeft className="h-4 w-4 mr-1" /> Previous</Button>
+          <span className="text-sm text-muted-foreground">Page {currentPage} of {totalPages}</span>
+          <Button variant="outline" size="sm" onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))} disabled={currentPage === totalPages || itemsPerPage === 'all'}>Next <ChevronRight className="h-4 w-4 ml-1" /></Button>
         </div>
       </div>
+    </>
+  );
+}
 
+export default function InventoryPage() {
+  const { data: products = [], isLoading: isLoadingProducts, error: productsError, isError: isProductsError } = useQuery<Product[], Error>({
+    queryKey: ['products'],
+    queryFn: fetchProducts,
+  });
+
+  const { data: categories = [], isLoading: isLoadingCategories, error: categoriesError, isError: isCategoriesError } = useQuery<ProductCategory[], Error>({
+    queryKey: ['categories'],
+    queryFn: fetchCategories,
+  });
+
+  if (isLoadingProducts || isLoadingCategories) {
+    return (
+      <AppLayout>
+        <PageHeader title="Inventory Management" description="Loading product stock..." />
+        <InventoryContentLoading /> {/* Show skeleton while data fetches */}
+      </AppLayout>
+    );
+  }
+
+  if (isProductsError || isCategoriesError) {
+    return (
+      <AppLayout>
+        <PageHeader title="Inventory Management" description="Error loading products or categories." />
+        <div className="bg-destructive/10 border border-destructive text-destructive p-4 rounded-md">
+          <div className="flex items-center">
+            <AlertTriangle className="mr-2 h-6 w-6" />
+            <h3 className="font-semibold">Failed to Load Data</h3>
+          </div>
+          <p>{(productsError || categoriesError)?.message || "An unknown error occurred."}</p>
+        </div>
+      </AppLayout>
+    );
+  }
+
+  return (
+    <AppLayout>
+      <PageHeader title="Inventory Management" description="View and manage your product stock.">
+        <Button asChild><Link href="/inventory/add"><PlusCircle className="mr-2 h-4 w-4" /> Add Product</Link></Button>
+        <Button variant="outline" asChild><Link href="/inventory/import"><Upload className="mr-2 h-4 w-4" /> Import Products</Link></Button>
+        <Button variant="outline"><FileDown className="mr-2 h-4 w-4" /> Export CSV</Button>
+      </PageHeader>
+
+      <Suspense fallback={<InventoryContentLoading />}>
+        <InventoryPageContent productsData={products} categoriesData={categories} />
+      </Suspense>
     </AppLayout>
   );
 }
