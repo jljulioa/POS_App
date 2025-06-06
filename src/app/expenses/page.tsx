@@ -399,7 +399,7 @@ export default function ExpensesPage() {
                       {displayedExpenses.map((expense) => (
                         <TableRow key={expense.id}>
                           <TableCell className="text-sm whitespace-nowrap">{format(parseISO(expense.expenseDate), 'MMM d, yyyy')}</TableCell>
-                          <TableCell className="font-medium whitespace-nowrap">{expense.description}</TableCell>
+                          <TableCell className="font-medium">{expense.description}</TableCell>
                           <TableCell className="whitespace-nowrap">{expense.category}</TableCell>
                           <TableCell className="text-right whitespace-nowrap">{formatCurrency(expense.amount)}</TableCell>
                           <TableCell className="text-sm text-muted-foreground">{expense.notes || 'N/A'}</TableCell>
@@ -434,6 +434,3 @@ export default function ExpensesPage() {
     </AppLayout>
   );
 }
-
-
-    
