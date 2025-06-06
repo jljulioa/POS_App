@@ -384,14 +384,14 @@ export default function ExpensesPage() {
               )}
               {!isLoadingExpenses && !expensesError && displayedExpenses.length > 0 && (
                 <div className="rounded-lg border shadow-sm overflow-x-auto">
-                  <Table className="min-w-[700px]">
+                  <Table>
                     <TableHeader>
                       <TableRow>
                         <TableHead>Date</TableHead>
-                        <TableHead>Description</TableHead>
+                        <TableHead className="min-w-[200px]">Description</TableHead>
                         <TableHead>Category</TableHead>
                         <TableHead className="text-right">Amount</TableHead>
-                        <TableHead>Notes</TableHead>
+                        <TableHead className="min-w-[150px]">Notes</TableHead>
                         <TableHead>Recorded At</TableHead>
                       </TableRow>
                     </TableHeader>
@@ -434,3 +434,4 @@ export default function ExpensesPage() {
     </AppLayout>
   );
 }
+

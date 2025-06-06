@@ -272,12 +272,12 @@ export default function CategoriesPage() {
               )}
               {!isLoadingCategories && !isCategoriesError && categories.length > 0 && (
                 <div className="rounded-lg border shadow-sm overflow-x-auto">
-                  <Table className="min-w-[600px]">
+                  <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead>Name</TableHead>
+                        <TableHead className="min-w-[150px]">Name</TableHead>
                         <TableHead>Slug</TableHead>
-                        <TableHead>Description</TableHead>
+                        <TableHead className="min-w-[200px]">Description</TableHead>
                         <TableHead>Created At</TableHead>
                         <TableHead className="text-center">Actions</TableHead>
                       </TableRow>
