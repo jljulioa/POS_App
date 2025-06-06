@@ -384,7 +384,7 @@ export default function ExpensesPage() {
               )}
               {!isLoadingExpenses && !expensesError && displayedExpenses.length > 0 && (
                 <div className="rounded-lg border shadow-sm overflow-x-auto">
-                  <Table>
+                  <Table className="min-w-[700px]">
                     <TableHeader>
                       <TableRow>
                         <TableHead>Date</TableHead>
@@ -398,12 +398,12 @@ export default function ExpensesPage() {
                     <TableBody>
                       {displayedExpenses.map((expense) => (
                         <TableRow key={expense.id}>
-                          <TableCell className="text-sm">{format(parseISO(expense.expenseDate), 'MMM d, yyyy')}</TableCell>
-                          <TableCell className="font-medium">{expense.description}</TableCell>
-                          <TableCell>{expense.category}</TableCell>
-                          <TableCell className="text-right">{formatCurrency(expense.amount)}</TableCell>
-                          <TableCell className="text-sm text-muted-foreground max-w-xs truncate">{expense.notes || 'N/A'}</TableCell>
-                           <TableCell className="text-sm">{format(parseISO(expense.createdAt), 'p')}</TableCell>
+                          <TableCell className="text-sm whitespace-nowrap">{format(parseISO(expense.expenseDate), 'MMM d, yyyy')}</TableCell>
+                          <TableCell className="font-medium whitespace-nowrap">{expense.description}</TableCell>
+                          <TableCell className="whitespace-nowrap">{expense.category}</TableCell>
+                          <TableCell className="text-right whitespace-nowrap">{formatCurrency(expense.amount)}</TableCell>
+                          <TableCell className="text-sm text-muted-foreground">{expense.notes || 'N/A'}</TableCell>
+                           <TableCell className="text-sm whitespace-nowrap">{format(parseISO(expense.createdAt), 'p')}</TableCell>
                         </TableRow>
                       ))}
                     </TableBody>

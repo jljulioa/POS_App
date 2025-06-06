@@ -272,7 +272,7 @@ export default function CategoriesPage() {
               )}
               {!isLoadingCategories && !isCategoriesError && categories.length > 0 && (
                 <div className="rounded-lg border shadow-sm overflow-x-auto">
-                  <Table>
+                  <Table className="min-w-[600px]">
                     <TableHeader>
                       <TableRow>
                         <TableHead>Name</TableHead>
@@ -285,10 +285,10 @@ export default function CategoriesPage() {
                     <TableBody>
                       {categories.map((category) => (
                         <TableRow key={category.id}>
-                          <TableCell className="font-medium">{category.name}</TableCell>
-                          <TableCell>{category.slug}</TableCell>
-                          <TableCell className="text-sm text-muted-foreground max-w-xs truncate">{category.description || 'N/A'}</TableCell>
-                          <TableCell className="text-sm">{format(new Date(category.createdat), 'MMM d, yyyy')}</TableCell>
+                          <TableCell className="font-medium whitespace-nowrap">{category.name}</TableCell>
+                          <TableCell className="whitespace-nowrap">{category.slug}</TableCell>
+                          <TableCell className="text-sm text-muted-foreground">{category.description || 'N/A'}</TableCell>
+                          <TableCell className="text-sm whitespace-nowrap">{format(new Date(category.createdat), 'MMM d, yyyy')}</TableCell>
                           <TableCell className="text-center">
                             <Button variant="ghost" size="icon" className="hover:text-accent" onClick={() => handleEditClick(category)} disabled={deleteMutation.isPending && deleteMutation.variables === category.id}>
                               <Edit3 className="h-4 w-4" />
