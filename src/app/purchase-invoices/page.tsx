@@ -3,12 +3,12 @@
 
 import AppLayout from '@/components/layout/AppLayout';
 import { PageHeader } from '@/components/PageHeader';
-import type { PurchaseInvoice } from '@/lib/mockData'; 
+import type { PurchaseInvoice, PurchaseInvoiceItem } from '@/lib/mockData'; 
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { PlusCircle, FileDown, Settings2, Loader2, AlertTriangle, Trash2, ChevronLeft, ChevronRight } from 'lucide-react';
+import { PlusCircle, FileDown, Settings2, Loader2, AlertTriangle, Trash2, ChevronLeft, ChevronRight, Eye, ShoppingCart } from 'lucide-react';
 import React, { useState, useMemo, useEffect } from 'react';
 import { format } from 'date-fns';
 import { Badge } from '@/components/ui/badge';
@@ -26,10 +26,19 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { useCurrency } from '@/contexts/CurrencyContext'; // Import useCurrency
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+  DialogClose,
+} from "@/components/ui/dialog";
+import { useCurrency } from '@/contexts/CurrencyContext';
 
-// API fetch function for purchase invoices
-const fetchPurchaseInvoices = async (): Promise<PurchaseInvoice[]> => {
+// API fetch function for the list of purchase invoices (without items initially)
+const fetchPurchaseInvoicesList = async (): Promise<PurchaseInvoice[]> => {
   const res = await fetch('/api/purchase-invoices');
   if (!res.ok) {
     const errorData = await res.json().catch(() => ({ message: 'Network response was not ok and failed to parse error JSON.' }));
@@ -37,6 +46,18 @@ const fetchPurchaseInvoices = async (): Promise<PurchaseInvoice[]> => {
   }
   return res.json();
 };
+
+// API fetch function for a single purchase invoice with its items
+const fetchSinglePurchaseInvoiceWithItems = async (invoiceId: string): Promise<PurchaseInvoice> => {
+  if (!invoiceId) throw new Error("Invoice ID is required to fetch details.");
+  const res = await fetch(`/api/purchase-invoices/${invoiceId}`);
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({ message: 'Failed to fetch invoice details.' }));
+    throw new Error(errorData.message || 'Failed to fetch invoice details.');
+  }
+  return res.json();
+};
+
 
 // API delete function
 const deletePurchaseInvoiceAPI = async (invoiceId: string): Promise<{ message: string }> => {
@@ -51,9 +72,10 @@ const deletePurchaseInvoiceAPI = async (invoiceId: string): Promise<{ message: s
 interface InvoiceRowActionsProps {
   invoice: PurchaseInvoice;
   deleteMutation: UseMutationResult<{ message: string }, Error, string, unknown>;
+  onViewDetails: (invoice: PurchaseInvoice) => void;
 }
 
-function InvoiceRowActions({ invoice, deleteMutation }: InvoiceRowActionsProps) {
+function InvoiceRowActions({ invoice, deleteMutation, onViewDetails }: InvoiceRowActionsProps) {
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
 
   const handleDeleteConfirm = () => {
@@ -69,16 +91,16 @@ function InvoiceRowActions({ invoice, deleteMutation }: InvoiceRowActionsProps) 
 
   return (
     <div className="flex items-center justify-center space-x-1">
-      {!invoice.processed ? (
+      {invoice.processed ? (
+        <Button variant="ghost" size="icon" className="hover:text-primary h-8 w-8 sm:h-auto sm:w-auto" onClick={() => onViewDetails(invoice)}>
+          <Eye className="h-4 w-4" />
+        </Button>
+      ) : (
         <Button variant="ghost" size="icon" className="hover:text-accent h-8 w-8 sm:h-auto sm:w-auto" asChild>
           <Link href={`/purchase-invoices/${invoice.id}/process`}>
             <Settings2 className="h-4 w-4" />
           </Link>
         </Button>
-      ) : (
-          <Button variant="ghost" size="icon" disabled className="h-8 w-8 sm:h-auto sm:w-auto">
-            <Settings2 className="h-4 w-4 opacity-50" />
-          </Button>
       )}
       <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
         <AlertDialogTrigger asChild>
@@ -117,34 +139,61 @@ export default function PurchaseInvoicesPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const { formatCurrency } = useCurrency(); // Use currency context
+  const { formatCurrency } = useCurrency();
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState<number | 'all'>(20);
 
+  const [selectedInvoiceForView, setSelectedInvoiceForView] = useState<PurchaseInvoice | null>(null);
+  const [isViewModalOpen, setIsViewModalOpen] = useState(false);
 
-  const { data: invoices = [], isLoading, error, isError } = useQuery<PurchaseInvoice[], Error>({
-    queryKey: ['purchaseInvoices'],
-    queryFn: fetchPurchaseInvoices,
+  const { data: invoicesList = [], isLoading: isLoadingList, error: listError, isError: isListError } = useQuery<PurchaseInvoice[], Error>({
+    queryKey: ['purchaseInvoicesList'],
+    queryFn: fetchPurchaseInvoicesList,
+  });
+
+  const { 
+    data: detailedInvoice, 
+    isLoading: isLoadingDetailedInvoice, 
+    error: detailedInvoiceError,
+    isError: isDetailedInvoiceError,
+    refetch: refetchDetailedInvoice,
+  } = useQuery<PurchaseInvoice, Error>({
+    queryKey: ['purchaseInvoiceDetails', selectedInvoiceForView?.id],
+    queryFn: () => fetchSinglePurchaseInvoiceWithItems(selectedInvoiceForView!.id),
+    enabled: !!selectedInvoiceForView && isViewModalOpen, // Only fetch when an invoice is selected and modal is open
+    staleTime: 5 * 60 * 1000, // Cache for 5 minutes
   });
 
   const deleteMutation = useMutation<{ message: string }, Error, string>({
     mutationFn: deletePurchaseInvoiceAPI,
     onSuccess: (data) => {
       toast({ title: "Purchase Invoice Deleted", description: data.message });
-      queryClient.invalidateQueries({ queryKey: ['purchaseInvoices'] });
+      queryClient.invalidateQueries({ queryKey: ['purchaseInvoicesList'] });
     },
     onError: (error) => {
       toast({ variant: "destructive", title: "Failed to Delete Invoice", description: error.message });
     },
   });
 
+  const handleViewDetails = (invoice: PurchaseInvoice) => {
+    setSelectedInvoiceForView(invoice);
+    setIsViewModalOpen(true);
+  };
+
+  useEffect(() => {
+    if (selectedInvoiceForView && isViewModalOpen) {
+        refetchDetailedInvoice();
+    }
+  }, [selectedInvoiceForView, isViewModalOpen, refetchDetailedInvoice]);
+
+
   const filteredInvoices = useMemo(() => {
-    if (!invoices) return [];
-    return invoices.filter(invoice => 
+    if (!invoicesList) return [];
+    return invoicesList.filter(invoice => 
       invoice.invoiceNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
       invoice.supplierName.toLowerCase().includes(searchTerm.toLowerCase())
     );
-  }, [searchTerm, invoices]);
+  }, [searchTerm, invoicesList]);
 
   const totalPages = useMemo(() => {
     if (itemsPerPage === 'all' || filteredInvoices.length === 0) return 1;
@@ -181,8 +230,7 @@ export default function PurchaseInvoicesPage() {
     { value: 'all', label: 'Show All' },
   ];
 
-
-  if (isLoading) {
+  if (isLoadingList) {
     return (
       <AppLayout>
         <PageHeader title="Purchase Invoices" description="Loading supplier invoices..." />
@@ -193,13 +241,13 @@ export default function PurchaseInvoicesPage() {
     );
   }
 
-  if (isError) {
+  if (isListError) {
     return (
       <AppLayout>
         <PageHeader title="Purchase Invoices" description="Error loading invoices." />
         <div className="bg-destructive/10 border border-destructive text-destructive p-4 rounded-md">
           <div className="flex items-center"><AlertTriangle className="mr-2 h-6 w-6" /> Error</div>
-          <p>{error?.message || "An unknown error occurred."}</p>
+          <p>{listError?.message || "An unknown error occurred."}</p>
         </div>
       </AppLayout>
     );
@@ -258,7 +306,7 @@ export default function PurchaseInvoicesPage() {
                   </Badge>
                 </TableCell>
                 <TableCell className="text-center">
-                  <InvoiceRowActions invoice={invoice} deleteMutation={deleteMutation} />
+                  <InvoiceRowActions invoice={invoice} deleteMutation={deleteMutation} onViewDetails={handleViewDetails} />
                 </TableCell>
               </TableRow>
             ))}
@@ -287,7 +335,78 @@ export default function PurchaseInvoicesPage() {
           <Button variant="outline" size="sm" onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))} disabled={currentPage === totalPages || itemsPerPage === 'all'}>Next <ChevronRight className="h-4 w-4 ml-1" /></Button>
         </div>
       </div>
+
+      {selectedInvoiceForView && isViewModalOpen && (
+        <Dialog open={isViewModalOpen} onOpenChange={setIsViewModalOpen}>
+          <DialogContent className="sm:max-w-xl md:max-w-2xl">
+            <DialogHeader>
+              <DialogTitle className="flex items-center">
+                <ShoppingCart className="mr-2 h-6 w-6 text-primary" />
+                Invoice Details: {selectedInvoiceForView.invoiceNumber}
+              </DialogTitle>
+              <DialogDescription>
+                Supplier: {selectedInvoiceForView.supplierName} | Date: {format(new Date(selectedInvoiceForView.invoiceDate), 'PPP')}
+              </DialogDescription>
+            </DialogHeader>
+            <div className="py-4">
+              {isLoadingDetailedInvoice && (
+                <div className="flex justify-center items-center h-40">
+                  <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                </div>
+              )}
+              {isDetailedInvoiceError && (
+                <div className="text-destructive p-3 border border-destructive rounded-md">
+                  <AlertTriangle className="mr-2 h-5 w-5 inline-block" />
+                  Error loading details: {detailedInvoiceError?.message}
+                </div>
+              )}
+              {!isLoadingDetailedInvoice && !isDetailedInvoiceError && detailedInvoice && detailedInvoice.items && (
+                <>
+                  <h4 className="font-semibold mb-2">Items on Invoice:</h4>
+                  {detailedInvoice.items.length > 0 ? (
+                    <div className="max-h-[300px] overflow-y-auto rounded-md border">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Product Name</TableHead>
+                            <TableHead className="text-center">Qty</TableHead>
+                            <TableHead className="text-right">Cost/Unit</TableHead>
+                            <TableHead className="text-right">Total Cost</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {detailedInvoice.items.map((item: PurchaseInvoiceItem, index: number) => (
+                            <TableRow key={item.productId + index}>
+                              <TableCell>{item.productName}</TableCell>
+                              <TableCell className="text-center">{item.quantity}</TableCell>
+                              <TableCell className="text-right">{formatCurrency(item.costPrice)}</TableCell>
+                              <TableCell className="text-right">{formatCurrency(item.totalCost)}</TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  ) : (
+                     <p className="text-muted-foreground text-sm">No items were recorded for this processed invoice when it was finalized.</p>
+                  )}
+                  <div className="mt-4 text-right">
+                    <p className="font-bold text-lg">Invoice Total: {formatCurrency(detailedInvoice.totalAmount)}</p>
+                  </div>
+                </>
+              )}
+               {!isLoadingDetailedInvoice && !isDetailedInvoiceError && detailedInvoice && !detailedInvoice.items && (
+                 <p className="text-muted-foreground text-sm">Item details not available for this invoice (it might not have been processed with items, or items were not fetched).</p>
+               )}
+            </div>
+            <DialogFooter>
+              <DialogClose asChild>
+                <Button type="button" variant="secondary">Close</Button>
+              </DialogClose>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
     </AppLayout>
   );
 }
-
+    
