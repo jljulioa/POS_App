@@ -47,7 +47,7 @@ export default function LoginPage() {
       ></div>
 
       {/* Right half with login card */}
-      <div className="flex w-full md:w-1/2 items-center justify-center bg-background p-4">
+      <div className="flex w-full md:w-1/2 items-center shadow-2xl justify-center bg-background p-4">
         <Card className="w-full max-w-md shadow-xl">
           <CardHeader className="space-y-1 text-center">
             <div className="flex justify-center mb-4">
