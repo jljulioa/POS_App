@@ -387,12 +387,12 @@ export default function ExpensesPage() {
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead>Date</TableHead>
-                        <TableHead className="min-w-[200px]">Description</TableHead>
-                        <TableHead>Category</TableHead>
-                        <TableHead className="text-right">Amount</TableHead>
-                        <TableHead className="min-w-[150px]">Notes</TableHead>
-                        <TableHead>Recorded At</TableHead>
+                        <TableHead className="w-[120px]">Date</TableHead>
+                        <TableHead>Description</TableHead>
+                        <TableHead className="w-[150px]">Category</TableHead>
+                        <TableHead className="text-right w-[100px]">Amount</TableHead>
+                        <TableHead>Notes</TableHead>
+                        <TableHead className="w-[100px]">Recorded At</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -435,3 +435,5 @@ export default function ExpensesPage() {
   );
 }
 
+
+    

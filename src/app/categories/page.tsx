@@ -275,18 +275,18 @@ export default function CategoriesPage() {
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead className="min-w-[150px]">Name</TableHead>
+                        <TableHead>Name</TableHead>
                         <TableHead>Slug</TableHead>
-                        <TableHead className="min-w-[200px]">Description</TableHead>
+                        <TableHead>Description</TableHead>
                         <TableHead>Created At</TableHead>
-                        <TableHead className="text-center">Actions</TableHead>
+                        <TableHead className="text-center w-[100px]">Actions</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {categories.map((category) => (
                         <TableRow key={category.id}>
                           <TableCell className="font-medium">{category.name}</TableCell>
-                          <TableCell className="whitespace-nowrap">{category.slug}</TableCell>
+                          <TableCell>{category.slug}</TableCell>
                           <TableCell className="text-sm text-muted-foreground">{category.description || 'N/A'}</TableCell>
                           <TableCell className="text-sm whitespace-nowrap">{format(new Date(category.createdat), 'MMM d, yyyy')}</TableCell>
                           <TableCell className="text-center">
@@ -336,4 +336,6 @@ export default function CategoriesPage() {
     </AppLayout>
   );
 }
+    
+
     
