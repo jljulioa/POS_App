@@ -383,7 +383,7 @@ export default function ExpensesPage() {
                 <p className="text-muted-foreground text-center py-4">No expenses recorded for the selected criteria.</p>
               )}
               {!isLoadingExpenses && !expensesError && displayedExpenses.length > 0 && (
-                <div className="rounded-md border">
+                <div className="rounded-lg border shadow-sm overflow-x-auto">
                   <Table>
                     <TableHeader>
                       <TableRow>
@@ -435,3 +435,5 @@ export default function ExpensesPage() {
   );
 }
 
+
+    

@@ -271,7 +271,7 @@ export default function CategoriesPage() {
                 <p className="text-muted-foreground text-center py-4">No categories found. Add one using the form.</p>
               )}
               {!isLoadingCategories && !isCategoriesError && categories.length > 0 && (
-                <div className="rounded-md border">
+                <div className="rounded-lg border shadow-sm overflow-x-auto">
                   <Table>
                     <TableHeader>
                       <TableRow>
@@ -336,4 +336,6 @@ export default function CategoriesPage() {
     </AppLayout>
   );
 }
+    
+
     
