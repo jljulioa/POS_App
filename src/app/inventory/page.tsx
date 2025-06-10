@@ -327,12 +327,12 @@ function InventoryPageContent({ productsData, categoriesData }: { productsData: 
     setIsGeneratingPdf(true);
 
     const { jsPDF } = await import('jspdf');
-    const JsBarcode = (await import('jsbarcode')).default; // Dynamic import for JsBarcode
+    const JsBarcode = (await import('jsbarcode')).default;
 
     const doc = new jsPDF({
       orientation: 'portrait',
       unit: 'mm',
-      format: 'letter' // Letter size: 215.9mm x 279.4mm
+      format: 'letter'
     });
 
     const pageHeight = doc.internal.pageSize.getHeight();
@@ -342,7 +342,8 @@ function InventoryPageContent({ productsData, categoriesData }: { productsData: 
     const labelWidth = 50; // mm
     const labelHeight = 25; // mm (barcode + text)
     const barcodeHeight = 15; // mm for the barcode itself
-    const textHeight = 5; // mm for text below barcode
+    const textLineHeight = 3; // approx mm for a line of text
+    const textYOffsetFromBarcode = 2; // mm space between barcode and first line of text
 
     const labelsPerRow = Math.floor((pageWidth - 2 * margin) / labelWidth);
     const labelsPerCol = Math.floor((pageHeight - 2 * margin) / labelHeight);
@@ -359,27 +360,51 @@ function InventoryPageContent({ productsData, categoriesData }: { productsData: 
         labelsOnPage = 0;
       }
       
-      // Create a temporary canvas for JsBarcode
       const canvas = document.createElement('canvas');
       try {
-        JsBarcode(canvas, selectedProductForBarcode.code, { // Use product.code
+        JsBarcode(canvas, selectedProductForBarcode.code, {
           format: "CODE128",
-          width: 1.5, // Bar width
-          height: barcodeHeight * (72/25.4), // Convert mm to points for JsBarcode height
-          displayValue: false, // We'll add it manually
+          width: 1.5, // Bar width in px for JsBarcode
+          height: barcodeHeight * (72/25.4), // JsBarcode height in px (points)
+          displayValue: false,
           margin: 0,
         });
         const barcodeDataUrl = canvas.toDataURL('image/png');
-        doc.addImage(barcodeDataUrl, 'PNG', currentX + (labelWidth - (canvas.width / (72/25.4)*0.8) ) / 2, currentY, canvas.width / (72/25.4)*0.8, barcodeHeight); // scale image
+        
+        const actualBarcodeWidthInMM = canvas.width / (72 / 25.4);
+        const finalPdfImageWidth = Math.min(actualBarcodeWidthInMM, labelWidth - 4); // Ensure it fits, with padding
+        const imageX = currentX + (labelWidth - finalPdfImageWidth) / 2; // Center it
+
+        doc.addImage(barcodeDataUrl, 'PNG', imageX, currentY, finalPdfImageWidth, barcodeHeight);
       } catch (e) {
         console.error("Error generating barcode image:", e);
         doc.text("Error", currentX + labelWidth / 2, currentY + barcodeHeight / 2, { align: 'center' });
       }
       
+      // Product Name (single line, truncated)
+      let productName = selectedProductForBarcode.name;
+      const maxNameWidth = labelWidth - 4; // mm, allowing small horizontal padding
+
       doc.setFontSize(8);
-      doc.text(selectedProductForBarcode.name, currentX + labelWidth / 2, currentY + barcodeHeight + textHeight - 2, { align: 'center', maxWidth: labelWidth - 2 });
+      doc.setFont(undefined, 'normal');
+
+      if (doc.getTextWidth(productName) > maxNameWidth) {
+        let truncatedName = productName;
+        while (doc.getTextWidth(truncatedName + "...") > maxNameWidth && truncatedName.length > 0) {
+          truncatedName = truncatedName.slice(0, -1);
+        }
+        productName = truncatedName + "...";
+        if (doc.getTextWidth(productName) > maxNameWidth && productName.length <= 3) { // if "..." or shorter is still too wide
+             productName = productName.slice(0, Math.floor(maxNameWidth / doc.getTextWidth("."))); // very basic fallback
+        }
+      }
+      doc.text(productName, currentX + labelWidth / 2, currentY + barcodeHeight + textYOffsetFromBarcode + textLineHeight, { align: 'center' });
+
+      // Product Code (Bold)
       doc.setFontSize(7);
-      doc.text(selectedProductForBarcode.code, currentX + labelWidth / 2, currentY + barcodeHeight + textHeight + 1, { align: 'center', maxWidth: labelWidth -2 }); // Use product.code
+      doc.setFont(undefined, 'bold');
+      doc.text(selectedProductForBarcode.code, currentX + labelWidth / 2, currentY + barcodeHeight + textYOffsetFromBarcode + (textLineHeight * 2), { align: 'center', maxWidth: labelWidth - 2 });
+      doc.setFont(undefined, 'normal'); // Reset font
 
       currentX += labelWidth;
       if ((labelsOnPage + 1) % labelsPerRow === 0) {
