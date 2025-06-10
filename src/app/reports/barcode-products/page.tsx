@@ -99,46 +99,57 @@ export default function BarcodeProductsPage() {
     const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'letter' });
     const pageHeight = doc.internal.pageSize.getHeight();
     const pageWidth = doc.internal.pageSize.getWidth();
-    const margin = 10;
-    const labelWidth = 50;
-    const labelHeight = 25;
-    const barcodeHeightMM = 15;
-    const textLineHeightMM = 3;
-    const textYOffsetFromBarcodeMM = 2;
+    
+    const margin = 10; // mm
+    const labelWidth = 36; // mm, adjusted for 5 columns
+    const labelHeight = 25; // mm (barcode + text)
+    const xSpacing = 3; // mm horizontal space between labels
+    const ySpacing = 5; // mm vertical space between labels
 
-    const labelsPerRow = Math.floor((pageWidth - 2 * margin + 5) / (labelWidth + 5));
-    const labelsPerCol = Math.floor((pageHeight - 2 * margin + 5) / (labelHeight + 5));
+    const barcodeHeightMM = 15; // mm for the barcode itself
+    const textLineHeightMM = 3; // approx mm for a line of text
+    const textYOffsetFromBarcodeMM = 2; // mm space between barcode and first line of text
+
+    const labelsPerRow = 5; 
+    const labelsPerCol = Math.floor((pageHeight - 2 * margin + ySpacing) / (labelHeight + ySpacing));
 
     let currentX = margin;
     let currentY = margin;
-    let labelsOnPage = 0;
+    let labelsOnPageCount = 0; // Count labels on the current page
 
     for (const product of productsInPrintList) {
       for (let i = 0; i < product.printQuantity; i++) {
-        if (labelsOnPage >= labelsPerRow * labelsPerCol || (currentX + labelWidth > pageWidth - margin && currentY + labelHeight > pageHeight - margin) ) {
+        if (labelsOnPageCount >= labelsPerRow * labelsPerCol) {
           doc.addPage();
           currentX = margin;
           currentY = margin;
-          labelsOnPage = 0;
+          labelsOnPageCount = 0;
+        } else if (labelsOnPageCount > 0 && labelsOnPageCount % labelsPerRow === 0) {
+          // New row on the same page
+          currentX = margin;
+          currentY += labelHeight + ySpacing;
         }
         
         const canvas = document.createElement('canvas');
         try {
-          JsBarcode(canvas, product.code, {
+          JsBarcode(canvas, product.code, { // Using product.code
             format: "CODE128", width: 1.5, height: barcodeHeightMM * (72/25.4), displayValue: false, margin: 0,
           });
           const barcodeDataUrl = canvas.toDataURL('image/png');
-          const actualBarcodeWidthInMM = canvas.width / (72 / 25.4);
-          const finalPdfImageWidth = Math.min(actualBarcodeWidthInMM, labelWidth - 4);
-          const imageX = currentX + (labelWidth - finalPdfImageWidth) / 2;
+          // Calculate actual barcode width in mm to center it, ensure it fits
+          const actualBarcodeWidthInMM = canvas.width / (72 / 25.4); // Convert points to mm
+          const finalPdfImageWidth = Math.min(actualBarcodeWidthInMM, labelWidth - 4); // Ensure it fits, with small padding
+          const imageX = currentX + (labelWidth - finalPdfImageWidth) / 2; // Center barcode image
+
           doc.addImage(barcodeDataUrl, 'PNG', imageX, currentY, finalPdfImageWidth, barcodeHeightMM);
         } catch (e) {
           console.error(`Error generating barcode for ${product.code}:`, e);
           doc.text("Error", currentX + labelWidth / 2, currentY + barcodeHeightMM / 2, { align: 'center' });
         }
 
+        // Product Name (single line, truncated)
         let productNameText = product.name;
-        const maxNameWidth = labelWidth - 4;
+        const maxNameWidth = labelWidth - 4; // mm, allowing small horizontal padding
         doc.setFontSize(8);
         doc.setFont(undefined, 'normal');
         if (doc.getTextWidth(productNameText) > maxNameWidth) {
@@ -146,21 +157,18 @@ export default function BarcodeProductsPage() {
           while (doc.getTextWidth(truncatedName + "...") > maxNameWidth && truncatedName.length > 0) {
             truncatedName = truncatedName.slice(0, -1);
           }
-          productNameText = truncatedName.length > 0 ? truncatedName + "..." : "...";
+          productNameText = truncatedName.length > 0 ? truncatedName + "..." : "..."; // Handle very short names
         }
         doc.text(productNameText, currentX + labelWidth / 2, currentY + barcodeHeightMM + textYOffsetFromBarcodeMM + textLineHeightMM, { align: 'center' });
 
+        // Product Code (Bold)
         doc.setFontSize(7);
         doc.setFont(undefined, 'bold');
         doc.text(product.code, currentX + labelWidth / 2, currentY + barcodeHeightMM + textYOffsetFromBarcodeMM + (textLineHeightMM * 2), { align: 'center', maxWidth: labelWidth - 2 });
-        doc.setFont(undefined, 'normal');
+        doc.setFont(undefined, 'normal'); // Reset font to normal
 
-        currentX += labelWidth + 5;
-        if (currentX + labelWidth > pageWidth - margin) {
-          currentX = margin;
-          currentY += labelHeight + 5;
-        }
-        labelsOnPage++;
+        currentX += labelWidth + xSpacing;
+        labelsOnPageCount++;
       }
     }
     
@@ -273,3 +281,4 @@ export default function BarcodeProductsPage() {
     </AppLayout>
   );
 }
+
