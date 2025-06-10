@@ -24,6 +24,7 @@ const parsePurchaseInvoiceItemFromDB = (dbItem: any): PurchaseInvoiceItem => {
   return {
     productId: dbItem.product_id,
     productName: dbItem.productname,
+    productCode: dbItem.product_code, // Added product_code
     quantity: parseInt(dbItem.quantity, 10),
     costPrice: parseFloat(dbItem.costprice),
     totalCost: parseFloat(dbItem.totalcost),
@@ -59,7 +60,13 @@ export async function GET(request: NextRequest, { params }: { params: { invoiceI
     
     let items: PurchaseInvoiceItem[] = [];
     if (invoiceResult[0].processed === true) {
-        const itemsResult = await query('SELECT id, purchase_invoice_id, product_id, productname, quantity, costprice, totalcost FROM PurchaseInvoiceItems WHERE purchase_invoice_id = $1', [invoiceId]);
+        // Join with Products table to get product_code
+        const itemsResult = await query(`
+            SELECT pii.id, pii.purchase_invoice_id, pii.product_id, pii.productname, pii.quantity, pii.costprice, pii.totalcost, p.code as product_code
+            FROM PurchaseInvoiceItems pii
+            JOIN Products p ON pii.product_id = p.id
+            WHERE pii.purchase_invoice_id = $1
+        `, [invoiceId]);
         items = itemsResult.map(parsePurchaseInvoiceItemFromDB);
     }
     
@@ -124,7 +131,7 @@ export async function PUT(request: NextRequest, { params }: { params: { invoiceI
         await client.query('UPDATE PurchaseInvoices SET processed = TRUE WHERE id = $1', [invoiceId]);
 
         for (const item of items) {
-            const productInfoResult = await client.query('SELECT name, stock FROM Products WHERE id = $1 FOR UPDATE', [item.productId]);
+            const productInfoResult = await client.query('SELECT name, stock, code FROM Products WHERE id = $1 FOR UPDATE', [item.productId]); // Added code
             if (productInfoResult.rowCount === 0) {
                 await client.query('ROLLBACK');
                 client.release();
@@ -189,14 +196,20 @@ export async function PUT(request: NextRequest, { params }: { params: { invoiceI
 
     await client.query('COMMIT');
 
-    const updatedInvoiceResult = await client.query('SELECT id, invoicenumber, invoicedate, suppliername, totalamount, paymentterms, processed, createdat, updatedat FROM PurchaseInvoices WHERE id = $1', [invoiceId]);
+    // Fetch the updated invoice again to include potentially newly processed items with product codes
+    const finalInvoiceResult = await client.query('SELECT id, invoicenumber, invoicedate, suppliername, totalamount, paymentterms, processed, createdat, updatedat FROM PurchaseInvoices WHERE id = $1', [invoiceId]);
     let finalItems: PurchaseInvoiceItem[] = [];
-    if (updatedInvoiceResult.rows[0] && updatedInvoiceResult.rows[0].processed) {
-        const updatedItemsResult = await client.query('SELECT id, purchase_invoice_id, product_id, productname, quantity, costprice, totalcost FROM PurchaseInvoiceItems WHERE purchase_invoice_id = $1', [invoiceId]);
+    if (finalInvoiceResult.rows[0] && finalInvoiceResult.rows[0].processed) {
+        const updatedItemsResult = await client.query(`
+            SELECT pii.id, pii.purchase_invoice_id, pii.product_id, pii.productname, pii.quantity, pii.costprice, pii.totalcost, p.code as product_code
+            FROM PurchaseInvoiceItems pii
+            JOIN Products p ON pii.product_id = p.id
+            WHERE pii.purchase_invoice_id = $1
+        `, [invoiceId]);
         finalItems = updatedItemsResult.rows.map(parsePurchaseInvoiceItemFromDB);
     }
     
-    const finalInvoice = parsePurchaseInvoiceFromDB(updatedInvoiceResult.rows[0], finalItems);
+    const finalInvoice = parsePurchaseInvoiceFromDB(finalInvoiceResult.rows[0], finalItems);
 
     return NextResponse.json(finalInvoice, { status: 200 });
 

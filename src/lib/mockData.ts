@@ -60,6 +60,7 @@ export interface Customer {
 export interface PurchaseInvoiceItem {
   productId: string;
   productName: string;
+  productCode: string; // Added for barcode generation
   quantity: number;
   costPrice: number;
   totalCost: number;
@@ -134,3 +135,4 @@ export interface InvoiceSettings {
   updatedAt?: string;
 }
 // TaxSetting interface removed
+

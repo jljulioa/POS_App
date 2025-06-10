@@ -8,7 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { PlusCircle, FileDown, Settings2, Loader2, AlertTriangle, Trash2, ChevronLeft, ChevronRight, Eye, ShoppingCart } from 'lucide-react';
+import { PlusCircle, FileDown, Settings2, Loader2, AlertTriangle, Trash2, ChevronLeft, ChevronRight, Eye, ShoppingCart, Printer, Barcode as BarcodeIcon } from 'lucide-react';
 import React, { useState, useMemo, useEffect } from 'react';
 import { format } from 'date-fns';
 import { Badge } from '@/components/ui/badge';
@@ -36,6 +36,8 @@ import {
   DialogClose,
 } from "@/components/ui/dialog";
 import { useCurrency } from '@/contexts/CurrencyContext';
+import type { jsPDF } from 'jspdf';
+import 'jspdf-autotable';
 
 // API fetch function for the list of purchase invoices (without items initially)
 const fetchPurchaseInvoicesList = async (): Promise<PurchaseInvoice[]> => {
@@ -145,6 +147,7 @@ export default function PurchaseInvoicesPage() {
 
   const [selectedInvoiceForView, setSelectedInvoiceForView] = useState<PurchaseInvoice | null>(null);
   const [isViewModalOpen, setIsViewModalOpen] = useState(false);
+  const [isPrintingBarcodes, setIsPrintingBarcodes] = useState(false);
 
   const { data: invoicesList = [], isLoading: isLoadingList, error: listError, isError: isListError } = useQuery<PurchaseInvoice[], Error>({
     queryKey: ['purchaseInvoicesList'],
@@ -160,8 +163,8 @@ export default function PurchaseInvoicesPage() {
   } = useQuery<PurchaseInvoice, Error>({
     queryKey: ['purchaseInvoiceDetails', selectedInvoiceForView?.id],
     queryFn: () => fetchSinglePurchaseInvoiceWithItems(selectedInvoiceForView!.id),
-    enabled: !!selectedInvoiceForView && isViewModalOpen, // Only fetch when an invoice is selected and modal is open
-    staleTime: 5 * 60 * 1000, // Cache for 5 minutes
+    enabled: !!selectedInvoiceForView && isViewModalOpen, 
+    staleTime: 5 * 60 * 1000, 
   });
 
   const deleteMutation = useMutation<{ message: string }, Error, string>({
@@ -185,6 +188,97 @@ export default function PurchaseInvoicesPage() {
         refetchDetailedInvoice();
     }
   }, [selectedInvoiceForView, isViewModalOpen, refetchDetailedInvoice]);
+
+
+  const handlePrintPurchaseInvoiceBarcodes = async () => {
+    if (!detailedInvoice || !detailedInvoice.items || detailedInvoice.items.length === 0) {
+      toast({ variant: "destructive", title: "No Items", description: "No items in this invoice to print barcodes for." });
+      return;
+    }
+    setIsPrintingBarcodes(true);
+
+    const { jsPDF } = await import('jspdf');
+    const JsBarcode = (await import('jsbarcode')).default;
+
+    const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'letter' });
+    const pageHeight = doc.internal.pageSize.getHeight();
+    const pageWidth = doc.internal.pageSize.getWidth();
+    
+    const margin = 10; 
+    const labelWidth = 36; 
+    const labelHeight = 25; 
+    const xSpacing = 3; 
+    const ySpacing = 5; 
+
+    const barcodeHeightMM = 15; 
+    const textLineHeightMM = 3; 
+    const textYOffsetFromBarcodeMM = 2;
+
+    const labelsPerRow = 5; 
+    const labelsPerCol = Math.floor((pageHeight - 2 * margin + ySpacing) / (labelHeight + ySpacing));
+
+    let currentX = margin;
+    let currentY = margin;
+    let labelsOnPageCount = 0;
+
+    for (const item of detailedInvoice.items) {
+      if (!item.productCode) {
+        console.warn(`Skipping barcode for ${item.productName} as productCode is missing.`);
+        continue;
+      }
+      for (let i = 0; i < item.quantity; i++) {
+        if (labelsOnPageCount >= labelsPerRow * labelsPerCol) {
+          doc.addPage();
+          currentX = margin;
+          currentY = margin;
+          labelsOnPageCount = 0;
+        } else if (labelsOnPageCount > 0 && labelsOnPageCount % labelsPerRow === 0) {
+          currentX = margin;
+          currentY += labelHeight + ySpacing;
+        }
+        
+        const canvas = document.createElement('canvas');
+        try {
+          JsBarcode(canvas, item.productCode, {
+            format: "CODE128", width: 1.5, height: barcodeHeightMM * (72/25.4), displayValue: false, margin: 0,
+          });
+          const barcodeDataUrl = canvas.toDataURL('image/png');
+          const actualBarcodeWidthInMM = canvas.width / (72 / 25.4);
+          const finalPdfImageWidth = Math.min(actualBarcodeWidthInMM, labelWidth - 4);
+          const imageX = currentX + (labelWidth - finalPdfImageWidth) / 2;
+          doc.addImage(barcodeDataUrl, 'PNG', imageX, currentY, finalPdfImageWidth, barcodeHeightMM);
+        } catch (e) {
+          console.error(`Error generating barcode for ${item.productCode}:`, e);
+          doc.text("Error", currentX + labelWidth / 2, currentY + barcodeHeightMM / 2, { align: 'center' });
+        }
+        
+        let productNameText = item.productName;
+        const maxNameWidth = labelWidth - 4;
+        doc.setFontSize(8);
+        doc.setFont(undefined, 'normal');
+        if (doc.getTextWidth(productNameText) > maxNameWidth) {
+          let truncatedName = productNameText;
+          while (doc.getTextWidth(truncatedName + "...") > maxNameWidth && truncatedName.length > 0) {
+            truncatedName = truncatedName.slice(0, -1);
+          }
+          productNameText = truncatedName.length > 0 ? truncatedName + "..." : "...";
+        }
+        doc.text(productNameText, currentX + labelWidth / 2, currentY + barcodeHeightMM + textYOffsetFromBarcodeMM + textLineHeightMM, { align: 'center' });
+
+        doc.setFontSize(7);
+        doc.setFont(undefined, 'bold');
+        doc.text(item.productCode, currentX + labelWidth / 2, currentY + barcodeHeightMM + textYOffsetFromBarcodeMM + (textLineHeightMM * 2), { align: 'center', maxWidth: labelWidth - 2 });
+        doc.setFont(undefined, 'normal');
+
+        currentX += labelWidth + xSpacing;
+        labelsOnPageCount++;
+      }
+    }
+    
+    doc.save(`Invoice_Barcodes_${detailedInvoice.invoiceNumber.replace(/\s+/g, '_')}_${format(new Date(), 'yyyy-MM-dd')}.pdf`);
+    setIsPrintingBarcodes(false);
+    toast({ title: "PDF Generated", description: "Barcodes for invoice items have been downloaded." });
+  };
 
 
   const filteredInvoices = useMemo(() => {
@@ -369,6 +463,7 @@ export default function PurchaseInvoicesPage() {
                         <TableHeader>
                           <TableRow>
                             <TableHead>Product Name</TableHead>
+                            <TableHead>Product Code</TableHead>
                             <TableHead className="text-center">Qty</TableHead>
                             <TableHead className="text-right">Cost/Unit</TableHead>
                             <TableHead className="text-right">Total Cost</TableHead>
@@ -378,6 +473,7 @@ export default function PurchaseInvoicesPage() {
                           {detailedInvoice.items.map((item: PurchaseInvoiceItem, index: number) => (
                             <TableRow key={item.productId + index}>
                               <TableCell>{item.productName}</TableCell>
+                              <TableCell>{item.productCode}</TableCell>
                               <TableCell className="text-center">{item.quantity}</TableCell>
                               <TableCell className="text-right">{formatCurrency(item.costPrice)}</TableCell>
                               <TableCell className="text-right">{formatCurrency(item.totalCost)}</TableCell>
@@ -398,9 +494,18 @@ export default function PurchaseInvoicesPage() {
                  <p className="text-muted-foreground text-sm">Item details not available for this invoice (it might not have been processed with items, or items were not fetched).</p>
                )}
             </div>
-            <DialogFooter>
+            <DialogFooter className="flex flex-col sm:flex-row justify-between items-center gap-2">
+                <Button
+                  variant="outline"
+                  onClick={handlePrintPurchaseInvoiceBarcodes}
+                  disabled={isPrintingBarcodes || isLoadingDetailedInvoice || !detailedInvoice?.items?.length}
+                  className="w-full sm:w-auto"
+                >
+                  {isPrintingBarcodes ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <BarcodeIcon className="mr-2 h-4 w-4" />}
+                  Print Barcodes for Items
+                </Button>
               <DialogClose asChild>
-                <Button type="button" variant="secondary">Close</Button>
+                <Button type="button" variant="secondary" className="w-full sm:w-auto">Close</Button>
               </DialogClose>
             </DialogFooter>
           </DialogContent>
