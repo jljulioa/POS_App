@@ -1,7 +1,7 @@
 
 "use client";
 
-import React, { Suspense, useState, useMemo, useEffect } from 'react';
+import React, { Suspense, useState, useMemo, useEffect, useRef } from 'react';
 import AppLayout from '@/components/layout/AppLayout';
 import { PageHeader } from '@/components/PageHeader';
 import type { Product } from '@/lib/mockData';
@@ -9,7 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
-import { PlusCircle, FileDown, Edit3, Trash2, Loader2, AlertTriangle, Upload, DollarSign, ChevronLeft, ChevronRight, Barcode as BarcodeIcon } from 'lucide-react';
+import { PlusCircle, FileDown, Edit3, Trash2, Loader2, AlertTriangle, Upload, DollarSign, ChevronLeft, ChevronRight, Barcode as BarcodeIcon, Printer, Settings2 } from 'lucide-react';
 import Image from 'next/image';
 import { Badge } from '@/components/ui/badge';
 import Link from 'next/link';
@@ -27,11 +27,21 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+  DialogClose,
+} from "@/components/ui/dialog";
 import type { ProductCategory } from '@/app/api/categories/route';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useCurrency } from '@/contexts/CurrencyContext';
 import { Skeleton } from '@/components/ui/skeleton';
-import ProductBarcode from '@/components/ProductBarcode'; // Import the new component
+import ProductBarcode from '@/components/ProductBarcode';
+import type { jsPDF } from 'jspdf'; // For type annotation
 
 // API fetch function
 const fetchProducts = async (): Promise<Product[]> => {
@@ -67,9 +77,10 @@ const fetchCategories = async (): Promise<ProductCategory[]> => {
 interface ProductRowActionsProps {
   product: Product;
   deleteMutation: UseMutationResult<{ message: string }, Error, string, unknown>;
+  onBarcodeClick: (product: Product) => void;
 }
 
-function ProductRowActions({ product, deleteMutation }: ProductRowActionsProps) {
+function ProductRowActions({ product, deleteMutation, onBarcodeClick }: ProductRowActionsProps) {
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
 
   const handleDeleteConfirm = () => {
@@ -89,6 +100,9 @@ function ProductRowActions({ product, deleteMutation }: ProductRowActionsProps) 
         <Link href={`/inventory/${product.id}/edit`}>
           <Edit3 className="h-4 w-4" />
         </Link>
+      </Button>
+       <Button variant="ghost" size="icon" className="hover:text-indigo-500" onClick={() => onBarcodeClick(product)}>
+        <BarcodeIcon className="h-4 w-4" />
       </Button>
       <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
         <AlertDialogTrigger asChild>
@@ -123,7 +137,6 @@ function ProductRowActions({ product, deleteMutation }: ProductRowActionsProps) 
 
 type StockStatusFilter = 'all' | 'in_stock' | 'low_stock' | 'out_of_stock';
 
-// Loading skeleton for the main content area
 function InventoryContentLoading() {
   return (
     <div className="flex flex-col gap-6">
@@ -141,13 +154,13 @@ function InventoryContentLoading() {
         <Table>
           <TableHeader>
             <TableRow>
-              {[...Array(11)].map((_, i) => <TableHead key={i}><Skeleton className="h-5 my-2 w-full" /></TableHead>)}
+              {[...Array(10)].map((_, i) => <TableHead key={i}><Skeleton className="h-5 my-2 w-full" /></TableHead>)}
             </TableRow>
           </TableHeader>
           <TableBody>
             {[...Array(5)].map((_, i) => (
               <TableRow key={i}>
-                {[...Array(11)].map((_, j) => <TableCell key={j}><Skeleton className="h-10 my-1 w-full" /></TableCell>)}
+                {[...Array(10)].map((_, j) => <TableCell key={j}><Skeleton className="h-10 my-1 w-full" /></TableCell>)}
               </TableRow>
             ))}
           </TableBody>
@@ -183,6 +196,12 @@ function InventoryPageContent({ productsData, categoriesData }: { productsData: 
 
   const { toast } = useToast();
   const queryClient = useQueryClient();
+
+  const [isBarcodeModalOpen, setIsBarcodeModalOpen] = useState(false);
+  const [selectedProductForBarcode, setSelectedProductForBarcode] = useState<Product | null>(null);
+  const [barcodeQuantityToPrint, setBarcodeQuantityToPrint] = useState(1);
+  const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
+
 
   useEffect(() => {
     const urlCategoryFilter = searchParams.get('category');
@@ -292,6 +311,91 @@ function InventoryPageContent({ productsData, categoriesData }: { productsData: 
     { value: 'all', label: 'Show All' },
   ];
 
+  const handleBarcodeModalOpen = (product: Product) => {
+    setSelectedProductForBarcode(product);
+    setBarcodeQuantityToPrint(1);
+    setIsBarcodeModalOpen(true);
+  };
+
+  const handleCloseBarcodeModal = () => {
+    setIsBarcodeModalOpen(false);
+    setSelectedProductForBarcode(null);
+  };
+
+  const handlePrintBarcodes = async () => {
+    if (!selectedProductForBarcode || barcodeQuantityToPrint < 1) return;
+    setIsGeneratingPdf(true);
+
+    const { jsPDF } = await import('jspdf');
+    const JsBarcode = (await import('jsbarcode')).default; // Dynamic import for JsBarcode
+
+    const doc = new jsPDF({
+      orientation: 'portrait',
+      unit: 'mm',
+      format: 'letter' // Letter size: 215.9mm x 279.4mm
+    });
+
+    const pageHeight = doc.internal.pageSize.getHeight();
+    const pageWidth = doc.internal.pageSize.getWidth();
+    
+    const margin = 10; // mm
+    const labelWidth = 50; // mm
+    const labelHeight = 25; // mm (barcode + text)
+    const barcodeHeight = 15; // mm for the barcode itself
+    const textHeight = 5; // mm for text below barcode
+
+    const labelsPerRow = Math.floor((pageWidth - 2 * margin) / labelWidth);
+    const labelsPerCol = Math.floor((pageHeight - 2 * margin) / labelHeight);
+
+    let currentX = margin;
+    let currentY = margin;
+    let labelsOnPage = 0;
+
+    for (let i = 0; i < barcodeQuantityToPrint; i++) {
+      if (labelsOnPage >= labelsPerRow * labelsPerCol) {
+        doc.addPage();
+        currentX = margin;
+        currentY = margin;
+        labelsOnPage = 0;
+      }
+      
+      // Create a temporary canvas for JsBarcode
+      const canvas = document.createElement('canvas');
+      try {
+        JsBarcode(canvas, selectedProductForBarcode.barcode || selectedProductForBarcode.code, {
+          format: "CODE128",
+          width: 1.5, // Bar width
+          height: barcodeHeight * (72/25.4), // Convert mm to points for JsBarcode height
+          displayValue: false, // We'll add it manually
+          margin: 0,
+        });
+        const barcodeDataUrl = canvas.toDataURL('image/png');
+        doc.addImage(barcodeDataUrl, 'PNG', currentX + (labelWidth - (canvas.width / (72/25.4)*0.8) ) / 2, currentY, canvas.width / (72/25.4)*0.8, barcodeHeight); // scale image
+      } catch (e) {
+        console.error("Error generating barcode image:", e);
+        doc.text("Error", currentX + labelWidth / 2, currentY + barcodeHeight / 2, { align: 'center' });
+      }
+      
+      doc.setFontSize(8);
+      doc.text(selectedProductForBarcode.name, currentX + labelWidth / 2, currentY + barcodeHeight + textHeight - 2, { align: 'center', maxWidth: labelWidth - 2 });
+      doc.setFontSize(7);
+      doc.text(selectedProductForBarcode.barcode || selectedProductForBarcode.code, currentX + labelWidth / 2, currentY + barcodeHeight + textHeight + 1, { align: 'center', maxWidth: labelWidth -2 });
+
+      currentX += labelWidth;
+      if ((labelsOnPage + 1) % labelsPerRow === 0) {
+        currentX = margin;
+        currentY += labelHeight;
+      }
+      labelsOnPage++;
+    }
+    
+    doc.save(`Barcodes_${selectedProductForBarcode.code}_${Date.now()}.pdf`);
+    setIsGeneratingPdf(false);
+    handleCloseBarcodeModal();
+    toast({ title: "PDF Generated", description: "Barcode PDF has been downloaded." });
+  };
+
+
   return (
     <>
       <div className="mb-6 flex flex-col sm:flex-row flex-wrap gap-2 sm:gap-4">
@@ -348,7 +452,6 @@ function InventoryPageContent({ productsData, categoriesData }: { productsData: 
               <TableHead>Name</TableHead>
               <TableHead className="hidden md:table-cell">Code</TableHead>
               <TableHead className="hidden lg:table-cell">Reference</TableHead>
-              <TableHead className="hidden lg:table-cell">Barcode</TableHead> {/* New Barcode Image Column */}
               <TableHead className="hidden md:table-cell">Brand</TableHead>
               <TableHead>Category</TableHead>
               <TableHead className="text-right">Stock</TableHead>
@@ -366,14 +469,6 @@ function InventoryPageContent({ productsData, categoriesData }: { productsData: 
                 <TableCell className="font-medium">{product.name}</TableCell>
                 <TableCell className="hidden md:table-cell">{product.code}</TableCell>
                 <TableCell className="hidden lg:table-cell">{product.reference}</TableCell>
-                <TableCell className="hidden lg:table-cell">
-                  {product.barcode ? (
-                    <div className="flex flex-col items-center">
-                      <ProductBarcode value={product.barcode} className="max-w-[120px] h-auto" options={{ height: 30, width: 1.2 }} />
-                      <span className="text-xs text-muted-foreground mt-1">{product.barcode}</span>
-                    </div>
-                  ) : <span className="text-xs text-muted-foreground">N/A</span>}
-                </TableCell>
                 <TableCell className="hidden md:table-cell">{product.brand}</TableCell>
                 <TableCell>{product.category || 'N/A'}</TableCell>
                 <TableCell className="text-right">{product.stock}</TableCell>
@@ -385,10 +480,10 @@ function InventoryPageContent({ productsData, categoriesData }: { productsData: 
                    product.stock < product.minStock ? <Badge variant="outline" className="border-yellow-500 text-yellow-600">Low Stock</Badge> :
                    <Badge variant="secondary" className="border-green-500 text-green-600 bg-green-100">In Stock</Badge>}
                 </TableCell>
-                <TableCell className="text-center"><ProductRowActions product={product} deleteMutation={deleteMutation} /></TableCell>
+                <TableCell className="text-center"><ProductRowActions product={product} deleteMutation={deleteMutation} onBarcodeClick={handleBarcodeModalOpen} /></TableCell>
               </TableRow>
             ))}
-            {displayedProducts.length === 0 && (<TableRow><TableCell colSpan={13} className="h-24 text-center">No products found matching your criteria.</TableCell></TableRow>)}
+            {displayedProducts.length === 0 && (<TableRow><TableCell colSpan={12} className="h-24 text-center">No products found matching your criteria.</TableCell></TableRow>)}
           </TableBody>
         </Table>
       </div>
@@ -408,6 +503,51 @@ function InventoryPageContent({ productsData, categoriesData }: { productsData: 
           <Button variant="outline" size="sm" onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))} disabled={currentPage === totalPages || itemsPerPage === 'all'}>Next <ChevronRight className="h-4 w-4 ml-1" /></Button>
         </div>
       </div>
+      {isBarcodeModalOpen && selectedProductForBarcode && (
+            <Dialog open={isBarcodeModalOpen} onOpenChange={handleCloseBarcodeModal}>
+                <DialogContent className="sm:max-w-md">
+                    <DialogHeader>
+                        <DialogTitle className="flex items-center"><BarcodeIcon className="mr-2 h-6 w-6 text-primary" />Barcode for: {selectedProductForBarcode.name}</DialogTitle>
+                        <DialogDescription>Product Code: {selectedProductForBarcode.code}</DialogDescription>
+                    </DialogHeader>
+                    <div className="my-4 flex flex-col items-center justify-center">
+                        <ProductBarcode 
+                            value={selectedProductForBarcode.barcode || selectedProductForBarcode.code} 
+                            options={{ height: 80, width: 2.5, fontSize: 16, textMargin: 5 }}
+                            className="max-w-full h-auto"
+                        />
+                    </div>
+                    <div className="space-y-2">
+                        <label htmlFor="barcode-quantity" className="text-sm font-medium">Quantity to Print:</label>
+                        <Input 
+                            id="barcode-quantity"
+                            type="number" 
+                            value={barcodeQuantityToPrint}
+                            onChange={(e) => setBarcodeQuantityToPrint(Math.max(1, parseInt(e.target.value, 10) || 1))}
+                            min="1"
+                            className="w-24"
+                        />
+                    </div>
+                    <DialogFooter className="mt-4">
+                        <Button type="button" variant="outline" onClick={handleCloseBarcodeModal}>Cancel</Button>
+                        {selectedProductForBarcode.barcode || selectedProductForBarcode.code ? (
+                             <Button 
+                                type="button" 
+                                onClick={handlePrintBarcodes} 
+                                disabled={isGeneratingPdf || barcodeQuantityToPrint < 1}
+                            >
+                                {isGeneratingPdf ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Printer className="mr-2 h-4 w-4" />}
+                                Print to PDF
+                            </Button>
+                        ) : (
+                            <Button type="button" disabled={true} title="Product has no barcode or code to print.">
+                                <Printer className="mr-2 h-4 w-4" /> No Barcode Data
+                            </Button>
+                        )}
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+        )}
     </>
   );
 }
@@ -427,7 +567,7 @@ export default function InventoryPage() {
     return (
       <AppLayout>
         <PageHeader title="Inventory Management" description="Loading product stock..." />
-        <InventoryContentLoading /> {/* Show skeleton while data fetches */}
+        <InventoryContentLoading />
       </AppLayout>
     );
   }
@@ -461,3 +601,4 @@ export default function InventoryPage() {
     </AppLayout>
   );
 }
+
