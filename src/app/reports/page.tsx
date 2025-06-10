@@ -1,11 +1,10 @@
-
 "use client";
 
 import AppLayout from '@/components/layout/AppLayout';
 import { PageHeader } from '@/components/PageHeader';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { BarChart3, ArrowRight, FileText } from 'lucide-react';
+import { BarChart3, ArrowRight, FileText, Barcode as BarcodeIcon } from 'lucide-react'; // Added BarcodeIcon
 import Link from 'next/link';
 
 interface ReportOptionCardProps {
@@ -39,12 +38,12 @@ function ReportOptionCard({ title, description, icon: Icon, link, linkText }: Re
   );
 }
 
-export default function ReportsPage() {
+export default function ReportsAndToolsPage() { // Renamed component
   return (
     <AppLayout>
       <PageHeader
-        title="Reports Center"
-        description="Access various reports to analyze your business performance."
+        title="Reports & Tools Center" // Updated title
+        description="Access various reports and utility tools to analyze and manage your business." // Updated description
       />
       <div className="space-y-8">
         <div>
@@ -53,11 +52,24 @@ export default function ReportsPage() {
             <ReportOptionCard
               title="Sales Summary Report"
               description="Analyze sales revenue, COGS, profit, and item performance over selected periods."
-              icon={FileText} // Using FileText as it was used for the report page
+              icon={BarChart3} // Changed icon to BarChart3 for reports
               link="/reports/sales-summary"
               linkText="View Sales Summary"
             />
-            {/* Future reports can be added here as new ReportOptionCard components */}
+          </div>
+        </div>
+
+        <div>
+          <h2 className="text-xl font-semibold mb-4 mt-8 text-foreground">Utility Tools</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <ReportOptionCard
+              title="Barcode Products"
+              description="Generate and print barcodes for multiple products in bulk."
+              icon={BarcodeIcon}
+              link="/reports/barcode-products"
+              linkText="Open Barcode Tool"
+            />
+             {/* Future tools can be added here */}
           </div>
         </div>
       </div>

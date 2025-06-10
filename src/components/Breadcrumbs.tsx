@@ -1,4 +1,3 @@
-
 "use client";
 import React from 'react';
 import Link from 'next/link';
@@ -11,20 +10,21 @@ const pathLabels: Record<string, string> = {
   transactions: 'Transactions',
   categories: 'Categories',
   sales: 'Sales',
-  reports: 'Reports',
+  reports: 'Reports & Tools', // Updated label
+  'sales-summary': 'Sales Summary', // Added for sub-route
+  'barcode-products': 'Barcode Products', // Added for new tool
   customers: 'Customers',
   'purchase-invoices': 'Purchase Invoices',
   expenses: 'Expenses',
   reordering: 'Smart Reordering',
   users: 'Users',
   settings: 'Settings',
-  invoice: 'Invoice',
+  invoice: 'Invoice Settings', // Changed from 'Invoice' to be more descriptive
+  currency: 'Currency Settings', // Added for currency settings page
   add: 'Add',
   edit: 'Edit',
   import: 'Import',
   process: 'Process',
-  // Add more specific labels here as needed, e.g.
-  // "P123": "Product Detail" // This would require more logic to handle dynamic segments
 };
 
 // Function to capitalize first letter of each word
@@ -46,35 +46,23 @@ export function Breadcrumbs() {
 
   const breadcrumbItems = segments.map((segment, index) => {
     const href = '/' + segments.slice(0, index + 1).join('/');
-    // Try to get a friendly label, fallback to capitalized segment
     let label = pathLabels[segment.toLowerCase()] || capitalizeWords(segment);
     
-    // Basic check for UUID-like or numeric ID segments to avoid displaying them directly
-    // A more robust solution would involve checking against known patterns or fetching data
     if (segment.match(/^[0-9a-fA-F]{8}-([0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12}$/) || 
-        segment.match(/^P[0-9a-fA-F]+$/i) || // For product IDs like P123abc
-        segment.match(/^C[0-9a-fA-F]+$/i) || // For customer IDs like C123
-        segment.match(/^S[0-9a-fA-F]+$/i) || // For Sale IDs like S123
-        segment.match(/^PI[0-9a-fA-F]+$/i) || // For Purchase Invoice IDs
-        segment.match(/^T[0-9a-fA-F]+$/i) || // For Ticket IDs
+        segment.match(/^P[0-9a-fA-F]+$/i) || 
+        segment.match(/^C[0-9a-fA-F]+$/i) || 
+        segment.match(/^S[0-9a-fA-F]+$/i) || 
+        segment.match(/^PI[0-9a-fA-F]+$/i) || 
+        segment.match(/^T[0-9a-fA-F]+$/i) || 
         (segments[index-1] && (pathLabels[segments[index-1].toLowerCase()] === 'Edit' || pathLabels[segments[index-1].toLowerCase()] === 'Process')) && 
-        (!pathLabels[segment.toLowerCase()]) // if previous was edit/process and current is not a known label, likely an ID
+        (!pathLabels[segment.toLowerCase()]) 
        ) {
-      // If the previous segment was something like 'edit' or 'process', and this segment isn't a predefined label,
-      // it's likely an ID. We can try to use the label of the parent or just a generic term.
-      // For example, if path is /inventory/P123/edit, segment "P123" might not have a label.
-      // For "edit" or "process", the label is already handled.
-      // Let's try to be more specific for "edit" on the ID itself.
       if (segments[index+1] && segments[index+1].toLowerCase() === 'edit' && segments[index-1]) {
-        label = `${capitalizeWords(segments[index-1])} Detail`; // e.g. "Inventory Detail"
+        label = `${capitalizeWords(segments[index-1])} Detail`; 
       } else if (segments[index-1] && pathLabels[segments[index-1].toLowerCase()]) {
-         label = capitalizeWords(segments[index-1]); // Try to use parent's label if it's an ID page
-      } else {
-        // Fallback for unknown dynamic segments if not handled above
-        // label = "Detail"; 
+         label = capitalizeWords(segments[index-1]); 
       }
     }
-
 
     return { href, label, isCurrent: index === segments.length - 1 };
   });

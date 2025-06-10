@@ -1,11 +1,10 @@
-
 "use client";
 
 import React from 'react';
 import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
 import { cn } from '@/lib/utils';
-import { LayoutDashboard, Package, ShoppingCart, Users, Barcode, Bot, Settings, FileText, Tag, ArrowRightLeft, Landmark, UserCog, Archive, BarChart3 } from 'lucide-react';
+import { LayoutDashboard, Package, ShoppingCart, Users, Barcode, Bot, Settings, FileText, Tag, ArrowRightLeft, Landmark, UserCog, Archive, BarChart3, Wrench } from 'lucide-react';
 import { SidebarMenu, SidebarMenuItem, SidebarMenuButton, SidebarMenuSub, SidebarMenuSubItem, SidebarMenuSubButton } from '@/components/ui/sidebar';
 
 const mainNavItems = [
@@ -29,7 +28,7 @@ export function SidebarNav() {
   const isInventoryPathActive = pathname === '/inventory';
   const isCategoriesPathActive = pathname.startsWith('/categories');
   const isSettingsPathActive = pathname.startsWith('/settings');
-  const isReportsPathActive = pathname.startsWith('/reports');
+  const isReportsAndToolsPathActive = pathname.startsWith('/reports'); // Updated path check
 
   return (
     <SidebarMenu>
@@ -54,18 +53,18 @@ export function SidebarNav() {
         );
       })}
 
-      {/* Reports Menu */}
+      {/* Reports & Tools Menu */}
       <SidebarMenuItem>
         <Link href="/reports" passHref legacyBehavior> 
           <SidebarMenuButton
             asChild
-            isActive={isReportsPathActive}
+            isActive={isReportsAndToolsPathActive} // Use updated path check
             className="justify-start"
-            tooltip={{ children: 'Reports', side: 'right', align: 'center' }}
+            tooltip={{ children: 'Reports & Tools', side: 'right', align: 'center' }} // Updated tooltip
           >
             <a>
-              <BarChart3 className="h-5 w-5" />
-              <span className="group-data-[collapsible=icon]:hidden">Reports</span>
+              <Wrench className="h-5 w-5" /> {/* Using Wrench for "Tools" part */}
+              <span className="group-data-[collapsible=icon]:hidden">Reports & Tools</span>
             </a>
           </SidebarMenuButton>
         </Link>
