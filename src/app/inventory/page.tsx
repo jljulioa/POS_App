@@ -154,13 +154,13 @@ function InventoryContentLoading() {
         <Table>
           <TableHeader>
             <TableRow>
-              {[...Array(10)].map((_, i) => <TableHead key={i}><Skeleton className="h-5 my-2 w-full" /></TableHead>)}
+              {[...Array(9)].map((_, i) => <TableHead key={i}><Skeleton className="h-5 my-2 w-full" /></TableHead>)}
             </TableRow>
           </TableHeader>
           <TableBody>
             {[...Array(5)].map((_, i) => (
               <TableRow key={i}>
-                {[...Array(10)].map((_, j) => <TableCell key={j}><Skeleton className="h-10 my-1 w-full" /></TableCell>)}
+                {[...Array(9)].map((_, j) => <TableCell key={j}><Skeleton className="h-10 my-1 w-full" /></TableCell>)}
               </TableRow>
             ))}
           </TableBody>
@@ -362,7 +362,7 @@ function InventoryPageContent({ productsData, categoriesData }: { productsData: 
       // Create a temporary canvas for JsBarcode
       const canvas = document.createElement('canvas');
       try {
-        JsBarcode(canvas, selectedProductForBarcode.barcode || selectedProductForBarcode.code, {
+        JsBarcode(canvas, selectedProductForBarcode.code, { // Use product.code
           format: "CODE128",
           width: 1.5, // Bar width
           height: barcodeHeight * (72/25.4), // Convert mm to points for JsBarcode height
@@ -379,7 +379,7 @@ function InventoryPageContent({ productsData, categoriesData }: { productsData: 
       doc.setFontSize(8);
       doc.text(selectedProductForBarcode.name, currentX + labelWidth / 2, currentY + barcodeHeight + textHeight - 2, { align: 'center', maxWidth: labelWidth - 2 });
       doc.setFontSize(7);
-      doc.text(selectedProductForBarcode.barcode || selectedProductForBarcode.code, currentX + labelWidth / 2, currentY + barcodeHeight + textHeight + 1, { align: 'center', maxWidth: labelWidth -2 });
+      doc.text(selectedProductForBarcode.code, currentX + labelWidth / 2, currentY + barcodeHeight + textHeight + 1, { align: 'center', maxWidth: labelWidth -2 }); // Use product.code
 
       currentX += labelWidth;
       if ((labelsOnPage + 1) % labelsPerRow === 0) {
@@ -483,7 +483,7 @@ function InventoryPageContent({ productsData, categoriesData }: { productsData: 
                 <TableCell className="text-center"><ProductRowActions product={product} deleteMutation={deleteMutation} onBarcodeClick={handleBarcodeModalOpen} /></TableCell>
               </TableRow>
             ))}
-            {displayedProducts.length === 0 && (<TableRow><TableCell colSpan={12} className="h-24 text-center">No products found matching your criteria.</TableCell></TableRow>)}
+            {displayedProducts.length === 0 && (<TableRow><TableCell colSpan={11} className="h-24 text-center">No products found matching your criteria.</TableCell></TableRow>)}
           </TableBody>
         </Table>
       </div>
@@ -508,11 +508,11 @@ function InventoryPageContent({ productsData, categoriesData }: { productsData: 
                 <DialogContent className="sm:max-w-md">
                     <DialogHeader>
                         <DialogTitle className="flex items-center"><BarcodeIcon className="mr-2 h-6 w-6 text-primary" />Barcode for: {selectedProductForBarcode.name}</DialogTitle>
-                        <DialogDescription>Product Code: {selectedProductForBarcode.code}</DialogDescription>
+                        <DialogDescription>Product Code (Source for Barcode): {selectedProductForBarcode.code}</DialogDescription>
                     </DialogHeader>
                     <div className="my-4 flex flex-col items-center justify-center">
                         <ProductBarcode 
-                            value={selectedProductForBarcode.barcode || selectedProductForBarcode.code} 
+                            value={selectedProductForBarcode.code} 
                             options={{ height: 80, width: 2.5, fontSize: 16, textMargin: 5 }}
                             className="max-w-full h-auto"
                         />
@@ -530,7 +530,7 @@ function InventoryPageContent({ productsData, categoriesData }: { productsData: 
                     </div>
                     <DialogFooter className="mt-4">
                         <Button type="button" variant="outline" onClick={handleCloseBarcodeModal}>Cancel</Button>
-                        {selectedProductForBarcode.barcode || selectedProductForBarcode.code ? (
+                        {selectedProductForBarcode.code ? (
                              <Button 
                                 type="button" 
                                 onClick={handlePrintBarcodes} 
@@ -540,8 +540,8 @@ function InventoryPageContent({ productsData, categoriesData }: { productsData: 
                                 Print to PDF
                             </Button>
                         ) : (
-                            <Button type="button" disabled={true} title="Product has no barcode or code to print.">
-                                <Printer className="mr-2 h-4 w-4" /> No Barcode Data
+                            <Button type="button" disabled={true} title="Product has no code to generate a barcode.">
+                                <Printer className="mr-2 h-4 w-4" /> No Code Data
                             </Button>
                         )}
                     </DialogFooter>
