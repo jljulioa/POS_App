@@ -9,7 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
-import { PlusCircle, FileDown, Edit3, Trash2, Loader2, AlertTriangle, Upload, DollarSign, ChevronLeft, ChevronRight } from 'lucide-react';
+import { PlusCircle, FileDown, Edit3, Trash2, Loader2, AlertTriangle, Upload, DollarSign, ChevronLeft, ChevronRight, Barcode as BarcodeIcon } from 'lucide-react';
 import Image from 'next/image';
 import { Badge } from '@/components/ui/badge';
 import Link from 'next/link';
@@ -31,6 +31,7 @@ import type { ProductCategory } from '@/app/api/categories/route';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useCurrency } from '@/contexts/CurrencyContext';
 import { Skeleton } from '@/components/ui/skeleton';
+import ProductBarcode from '@/components/ProductBarcode'; // Import the new component
 
 // API fetch function
 const fetchProducts = async (): Promise<Product[]> => {
@@ -140,13 +141,13 @@ function InventoryContentLoading() {
         <Table>
           <TableHeader>
             <TableRow>
-              {[...Array(10)].map((_, i) => <TableHead key={i}><Skeleton className="h-5 my-2 w-full" /></TableHead>)}
+              {[...Array(11)].map((_, i) => <TableHead key={i}><Skeleton className="h-5 my-2 w-full" /></TableHead>)}
             </TableRow>
           </TableHeader>
           <TableBody>
             {[...Array(5)].map((_, i) => (
               <TableRow key={i}>
-                {[...Array(10)].map((_, j) => <TableCell key={j}><Skeleton className="h-10 my-1 w-full" /></TableCell>)}
+                {[...Array(11)].map((_, j) => <TableCell key={j}><Skeleton className="h-10 my-1 w-full" /></TableCell>)}
               </TableRow>
             ))}
           </TableBody>
@@ -347,6 +348,7 @@ function InventoryPageContent({ productsData, categoriesData }: { productsData: 
               <TableHead>Name</TableHead>
               <TableHead className="hidden md:table-cell">Code</TableHead>
               <TableHead className="hidden lg:table-cell">Reference</TableHead>
+              <TableHead className="hidden lg:table-cell">Barcode</TableHead> {/* New Barcode Image Column */}
               <TableHead className="hidden md:table-cell">Brand</TableHead>
               <TableHead>Category</TableHead>
               <TableHead className="text-right">Stock</TableHead>
@@ -364,6 +366,14 @@ function InventoryPageContent({ productsData, categoriesData }: { productsData: 
                 <TableCell className="font-medium">{product.name}</TableCell>
                 <TableCell className="hidden md:table-cell">{product.code}</TableCell>
                 <TableCell className="hidden lg:table-cell">{product.reference}</TableCell>
+                <TableCell className="hidden lg:table-cell">
+                  {product.barcode ? (
+                    <div className="flex flex-col items-center">
+                      <ProductBarcode value={product.barcode} className="max-w-[120px] h-auto" options={{ height: 30, width: 1.2 }} />
+                      <span className="text-xs text-muted-foreground mt-1">{product.barcode}</span>
+                    </div>
+                  ) : <span className="text-xs text-muted-foreground">N/A</span>}
+                </TableCell>
                 <TableCell className="hidden md:table-cell">{product.brand}</TableCell>
                 <TableCell>{product.category || 'N/A'}</TableCell>
                 <TableCell className="text-right">{product.stock}</TableCell>
@@ -378,7 +388,7 @@ function InventoryPageContent({ productsData, categoriesData }: { productsData: 
                 <TableCell className="text-center"><ProductRowActions product={product} deleteMutation={deleteMutation} /></TableCell>
               </TableRow>
             ))}
-            {displayedProducts.length === 0 && (<TableRow><TableCell colSpan={12} className="h-24 text-center">No products found matching your criteria.</TableCell></TableRow>)}
+            {displayedProducts.length === 0 && (<TableRow><TableCell colSpan={13} className="h-24 text-center">No products found matching your criteria.</TableCell></TableRow>)}
           </TableBody>
         </Table>
       </div>

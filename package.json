@@ -44,6 +44,7 @@
     "firebase": "^10.12.2",
     "genkit": "^1.8.0",
     "html2pdf.js": "^0.10.2",
+    "jsbarcode": "^3.11.6",
     "jspdf": "^2.5.1",
     "jspdf-autotable": "^3.8.2",
     "lucide-react": "^0.475.0",

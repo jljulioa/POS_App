@@ -13,12 +13,13 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useParams, useRouter } from 'next/navigation';
 import { useToast } from '@/hooks/use-toast';
-import { ArrowLeft, Package, Save, Loader2, AlertTriangle } from 'lucide-react';
+import { ArrowLeft, Package, Save, Loader2, AlertTriangle, Barcode as BarcodeIcon } from 'lucide-react';
 import Link from 'next/link';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { Product } from '@/lib/mockData';
 import React, { useEffect } from 'react';
 import type { ProductCategory } from '@/app/api/categories/route';
+import ProductBarcode from '@/components/ProductBarcode'; // Import the new component
 
 const ProductFormSchema = z.object({
   name: z.string().min(3, { message: "Name must be at least 3 characters." }),
@@ -153,6 +154,9 @@ export default function EditProductPage() {
   const onSubmit = (data: ProductFormValues) => {
     mutation.mutate(data);
   };
+  
+  const currentBarcodeValue = form.watch("barcode");
+
 
   if (isLoadingProduct || isLoadingCategories) {
     return (
@@ -260,6 +264,12 @@ export default function EditProductPage() {
                     <FormControl>
                       <Input placeholder="e.g., 1234567890123" {...field} value={field.value ?? ''} />
                     </FormControl>
+                     {currentBarcodeValue && (
+                        <div className="mt-2 p-2 border rounded-md bg-muted flex flex-col items-center justify-center">
+                           <ProductBarcode value={currentBarcodeValue} options={{ height: 50, width: 1.5, background:"hsl(var(--muted))" }} className="max-w-full h-auto"/>
+                           <p className="text-xs text-muted-foreground mt-1">{currentBarcodeValue}</p>
+                        </div>
+                      )}
                     <FormMessage />
                   </FormItem>
                 )}
