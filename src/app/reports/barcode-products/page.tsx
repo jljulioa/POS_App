@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState, useMemo, useCallback } from 'react';
@@ -15,7 +16,8 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type { Product as ProductType } from '@/lib/mockData';
 import ProductBarcode from '@/components/ProductBarcode'; // Reusable barcode component
 import type { jsPDF } from 'jspdf';
-import 'jspdf-autotable'; // For potential table layouts in PDF, though not used for barcodes directly
+import 'jspdf-autotable';
+import { format } from 'date-fns'; // Import format
 
 // API fetch function for products
 const fetchProductsAPI = async (): Promise<ProductType[]> => {
@@ -104,8 +106,8 @@ export default function BarcodeProductsPage() {
     const textLineHeightMM = 3;
     const textYOffsetFromBarcodeMM = 2;
 
-    const labelsPerRow = Math.floor((pageWidth - 2 * margin + 5) / (labelWidth + 5)); // +5 for inter-label spacing
-    const labelsPerCol = Math.floor((pageHeight - 2 * margin + 5) / (labelHeight + 5)); // +5 for inter-label spacing
+    const labelsPerRow = Math.floor((pageWidth - 2 * margin + 5) / (labelWidth + 5));
+    const labelsPerCol = Math.floor((pageHeight - 2 * margin + 5) / (labelHeight + 5));
 
     let currentX = margin;
     let currentY = margin;
@@ -122,7 +124,7 @@ export default function BarcodeProductsPage() {
         
         const canvas = document.createElement('canvas');
         try {
-          JsBarcode(canvas, product.code, { // Using product.code for barcode value
+          JsBarcode(canvas, product.code, {
             format: "CODE128", width: 1.5, height: barcodeHeightMM * (72/25.4), displayValue: false, margin: 0,
           });
           const barcodeDataUrl = canvas.toDataURL('image/png');
@@ -135,7 +137,6 @@ export default function BarcodeProductsPage() {
           doc.text("Error", currentX + labelWidth / 2, currentY + barcodeHeightMM / 2, { align: 'center' });
         }
 
-        // Product Name (single line, truncated)
         let productNameText = product.name;
         const maxNameWidth = labelWidth - 4;
         doc.setFontSize(8);
@@ -149,16 +150,15 @@ export default function BarcodeProductsPage() {
         }
         doc.text(productNameText, currentX + labelWidth / 2, currentY + barcodeHeightMM + textYOffsetFromBarcodeMM + textLineHeightMM, { align: 'center' });
 
-        // Product Code (Bold)
         doc.setFontSize(7);
         doc.setFont(undefined, 'bold');
         doc.text(product.code, currentX + labelWidth / 2, currentY + barcodeHeightMM + textYOffsetFromBarcodeMM + (textLineHeightMM * 2), { align: 'center', maxWidth: labelWidth - 2 });
         doc.setFont(undefined, 'normal');
 
-        currentX += labelWidth + 5; // +5 for inter-label spacing
+        currentX += labelWidth + 5;
         if (currentX + labelWidth > pageWidth - margin) {
           currentX = margin;
-          currentY += labelHeight + 5; // +5 for inter-label spacing
+          currentY += labelHeight + 5;
         }
         labelsOnPage++;
       }

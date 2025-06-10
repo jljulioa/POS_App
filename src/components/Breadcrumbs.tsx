@@ -1,3 +1,4 @@
+
 "use client";
 import React from 'react';
 import Link from 'next/link';
@@ -10,17 +11,17 @@ const pathLabels: Record<string, string> = {
   transactions: 'Transactions',
   categories: 'Categories',
   sales: 'Sales',
-  reports: 'Reports & Tools', // Updated label
-  'sales-summary': 'Sales Summary', // Added for sub-route
-  'barcode-products': 'Barcode Products', // Added for new tool
+  reports: 'Reports & Tools',
+  'sales-summary': 'Sales Summary',
+  'barcode-products': 'Barcode Products',
   customers: 'Customers',
   'purchase-invoices': 'Purchase Invoices',
   expenses: 'Expenses',
   reordering: 'Smart Reordering',
   users: 'Users',
   settings: 'Settings',
-  invoice: 'Invoice Settings', // Changed from 'Invoice' to be more descriptive
-  currency: 'Currency Settings', // Added for currency settings page
+  invoice: 'Invoice Settings',
+  currency: 'Currency Settings',
   add: 'Add',
   edit: 'Edit',
   import: 'Import',

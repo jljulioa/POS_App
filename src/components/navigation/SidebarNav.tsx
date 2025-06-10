@@ -1,3 +1,4 @@
+
 "use client";
 
 import React from 'react';
@@ -28,7 +29,7 @@ export function SidebarNav() {
   const isInventoryPathActive = pathname === '/inventory';
   const isCategoriesPathActive = pathname.startsWith('/categories');
   const isSettingsPathActive = pathname.startsWith('/settings');
-  const isReportsAndToolsPathActive = pathname.startsWith('/reports'); // Updated path check
+  const isReportsAndToolsPathActive = pathname.startsWith('/reports');
 
   return (
     <SidebarMenu>
@@ -58,12 +59,12 @@ export function SidebarNav() {
         <Link href="/reports" passHref legacyBehavior> 
           <SidebarMenuButton
             asChild
-            isActive={isReportsAndToolsPathActive} // Use updated path check
+            isActive={isReportsAndToolsPathActive}
             className="justify-start"
-            tooltip={{ children: 'Reports & Tools', side: 'right', align: 'center' }} // Updated tooltip
+            tooltip={{ children: 'Reports & Tools', side: 'right', align: 'center' }}
           >
             <a>
-              <Wrench className="h-5 w-5" /> {/* Using Wrench for "Tools" part */}
+              <Wrench className="h-5 w-5" />
               <span className="group-data-[collapsible=icon]:hidden">Reports & Tools</span>
             </a>
           </SidebarMenuButton>

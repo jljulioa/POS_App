@@ -1,10 +1,11 @@
+
 "use client";
 
 import AppLayout from '@/components/layout/AppLayout';
 import { PageHeader } from '@/components/PageHeader';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { BarChart3, ArrowRight, FileText, Barcode as BarcodeIcon } from 'lucide-react'; // Added BarcodeIcon
+import { BarChart3, ArrowRight, FileText, Barcode as BarcodeIcon } from 'lucide-react';
 import Link from 'next/link';
 
 interface ReportOptionCardProps {
@@ -38,12 +39,12 @@ function ReportOptionCard({ title, description, icon: Icon, link, linkText }: Re
   );
 }
 
-export default function ReportsAndToolsPage() { // Renamed component
+export default function ReportsAndToolsPage() {
   return (
     <AppLayout>
       <PageHeader
-        title="Reports & Tools Center" // Updated title
-        description="Access various reports and utility tools to analyze and manage your business." // Updated description
+        title="Reports & Tools Center"
+        description="Access various reports and utility tools to analyze and manage your business."
       />
       <div className="space-y-8">
         <div>
@@ -52,7 +53,7 @@ export default function ReportsAndToolsPage() { // Renamed component
             <ReportOptionCard
               title="Sales Summary Report"
               description="Analyze sales revenue, COGS, profit, and item performance over selected periods."
-              icon={BarChart3} // Changed icon to BarChart3 for reports
+              icon={BarChart3}
               link="/reports/sales-summary"
               linkText="View Sales Summary"
             />
