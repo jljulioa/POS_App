@@ -10,7 +10,7 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Bike, LogIn, Loader2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import loginBg from '@/components/public/login.png';
+import loginBg from '@/components/public/fox-back.png';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
