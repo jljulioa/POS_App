@@ -71,6 +71,7 @@ const QuickProductCreateSchema = z.object({
   price: z.coerce.number().min(0, "Selling price must be non-negative."),
   cost: z.coerce.number().min(0, "Cost price must be non-negative.").optional(),
   minStock: z.coerce.number().int().min(0).optional().default(0),
+  maxStock: z.coerce.number().int().min(0).optional().default(0), // Added maxStock with default
 });
 type QuickProductCreateFormValues = z.infer<typeof QuickProductCreateSchema>;
 
@@ -154,6 +155,7 @@ export default function ProcessPurchaseInvoicePage() {
       price: 0,
       cost: 0,
       minStock: 0,
+      maxStock: 0, // Default maxStock
     },
   });
 
@@ -381,7 +383,10 @@ export default function ProcessPurchaseInvoicePage() {
                             <FormField control={quickProductForm.control} name="price" render={({ field }) => (<FormItem><FormLabel>Selling Price *</FormLabel><FormControl><Input type="number" step="0.01" placeholder="0.00" {...field} /></FormControl><FormMessage /></FormItem>)} />
                             <FormField control={quickProductForm.control} name="cost" render={({ field }) => (<FormItem><FormLabel>Cost Price</FormLabel><FormControl><Input type="number" step="0.01" placeholder="0.00" {...field} /></FormControl><FormMessage /></FormItem>)} />
                           </div>
-                          <FormField control={quickProductForm.control} name="minStock" render={({ field }) => (<FormItem><FormLabel>Min. Stock</FormLabel><FormControl><Input type="number" placeholder="0" {...field} /></FormControl><FormMessage /></FormItem>)} />
+                          <div className="grid grid-cols-2 gap-4">
+                            <FormField control={quickProductForm.control} name="minStock" render={({ field }) => (<FormItem><FormLabel>Min. Stock</FormLabel><FormControl><Input type="number" placeholder="0" {...field} /></FormControl><FormMessage /></FormItem>)} />
+                            <FormField control={quickProductForm.control} name="maxStock" render={({ field }) => (<FormItem><FormLabel>Max. Stock</FormLabel><FormControl><Input type="number" placeholder="0" {...field} /></FormControl><FormMessage /></FormItem>)} />
+                          </div>
                           <DialogFooter>
                             <Button type="button" variant="outline" onClick={() => setIsCreateProductModalOpen(false)}>Cancel</Button>
                             <Button type="submit" disabled={addProductMutation.isPending}>

@@ -16,7 +16,7 @@ const ProductCreateSchema = z.object({
   categoryId: z.coerce.number().int().positive({ message: "Category is required." }), // Now categoryId
   brand: z.string().min(2),
   minStock: z.coerce.number().int().min(0),
-  maxStock: z.coerce.number().int().min(0).optional(),
+  maxStock: z.coerce.number().int().min(0).optional().default(0), // Added default
   cost: z.coerce.number().min(0),
   price: z.coerce.number().min(0),
   imageUrl: z.string().url().optional().or(z.literal('')),
@@ -105,7 +105,7 @@ export async function POST(request: NextRequest) {
     `;
     const params = [
         id, name, code, reference, barcode ?? null, stock, categoryId, brand,
-        minStock, maxStock ?? null, cost, price,
+        minStock, maxStock ?? 0, cost, price, // Use maxStock ?? 0
         finalImageUrl, finalDataAiHint
     ];
 

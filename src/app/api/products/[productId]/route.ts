@@ -14,7 +14,7 @@ const ProductUpdateSchema = z.object({
   categoryId: z.coerce.number().int().positive({ message: "Category is required." }), // Use categoryId
   brand: z.string().min(2),
   minStock: z.coerce.number().int().min(0),
-  maxStock: z.coerce.number().int().min(0).optional(),
+  maxStock: z.coerce.number().int().min(0).optional().default(0), // Added default
   cost: z.coerce.number().min(0),
   price: z.coerce.number().min(0),
   imageUrl: z.string().url().optional().or(z.literal('')),
@@ -108,7 +108,7 @@ export async function PUT(request: NextRequest, { params }: { params: { productI
     `;
     const queryParams = [
         name, code, reference, barcode ?? null, stock, categoryId, brand,
-        minStock, maxStock ?? null, cost, price,
+        minStock, maxStock ?? 0, cost, price, // Use maxStock ?? 0
         finalImageUrl, finalDataAiHint, productId
     ];
 
@@ -185,3 +185,4 @@ export async function DELETE(request: NextRequest, { params }: { params: { produ
     return NextResponse.json({ message: 'Failed to delete product', error: (error as Error).message }, { status: 500 });
   }
 }
+

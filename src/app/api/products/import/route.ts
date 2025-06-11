@@ -17,7 +17,7 @@ const ProductImportItemSchema = z.object({
   category_id: z.number().int().positive().optional().nullable(), // Changed from categoryId
   brand: z.string().optional().nullable(),
   minStock: z.number().int().min(0),
-  maxStock: z.number().int().min(0).optional().nullable(),
+  maxStock: z.number().int().min(0).optional().nullable().default(0), // Added default
   cost: z.number().min(0),
   price: z.number().min(0),
   imageUrl: z.string().url().optional().nullable(),
@@ -30,9 +30,10 @@ const ProductImportSchema = z.array(ProductImportItemSchema);
 export async function POST(request: NextRequest) {
   const pool = await getPool();
   const client = await pool.connect();
+  let body: any; // To safely access body in final catch block
 
   try {
-    const body = await request.json();
+    body = await request.json();
     const validation = ProductImportSchema.safeParse(body);
 
     if (!validation.success) {
@@ -88,7 +89,7 @@ export async function POST(request: NextRequest) {
             productData.category_id,
             productData.brand,
             productData.minStock,
-            productData.maxStock,
+            productData.maxStock ?? 0, // Use ?? 0
             productData.cost,
             productData.price,
             finalImageUrl,
@@ -113,7 +114,7 @@ export async function POST(request: NextRequest) {
             productData.category_id,
             productData.brand,
             productData.minStock,
-            productData.maxStock,
+            productData.maxStock ?? 0, // Use ?? 0
             productData.cost,
             productData.price,
             finalImageUrl,
@@ -154,13 +155,15 @@ export async function POST(request: NextRequest) {
   } catch (error: any) {
     await client.query('ROLLBACK').catch(rbError => console.error('Rollback failed:', rbError));
     console.error('Product import general error:', error);
+    const errorCountForResponse = (typeof body === 'object' && Array.isArray(body)) ? body.length : 0;
     return NextResponse.json({ 
       success: false, 
       message: 'Failed to import products due to a server error.', 
       error: error.message,
-      createdCount: 0, updatedCount: 0, errorCount: Array.isArray(body) ? body.length : 0 // Access body safely
+      createdCount: 0, updatedCount: 0, errorCount: errorCountForResponse
     }, { status: 500 });
   } finally {
     client.release();
   }
 }
+
