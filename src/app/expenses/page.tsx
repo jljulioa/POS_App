@@ -245,7 +245,7 @@ export default function ExpensesPage() {
         </div>
       </PageHeader>
 
-      <div className="grid md:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6">
         <div className="md:col-span-1">
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)}>
@@ -435,5 +435,7 @@ export default function ExpensesPage() {
   );
 }
 
+
+    
 
     
