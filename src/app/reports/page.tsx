@@ -5,7 +5,7 @@ import AppLayout from '@/components/layout/AppLayout';
 import { PageHeader } from '@/components/PageHeader';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { BarChart3, ArrowRight, FileText, Barcode as BarcodeIcon } from 'lucide-react';
+import { BarChart3, ArrowRight, FileText, Barcode as BarcodeIcon, Package } from 'lucide-react';
 import Link from 'next/link';
 
 interface ReportOptionCardProps {
@@ -69,6 +69,13 @@ export default function ReportsAndToolsPage() {
               icon={BarcodeIcon}
               link="/reports/barcode-products"
               linkText="Open Barcode Tool"
+            />
+            <ReportOptionCard
+              title="Inventory Adjustment"
+              description="Adjust product stock quantities based on physical counts."
+              icon={Package}
+              link="/reports/inventory-adjustment"
+              linkText="Adjust Inventory"
             />
              {/* Future tools can be added here */}
           </div>
