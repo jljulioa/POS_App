@@ -9,7 +9,7 @@ interface PageHeaderProps {
 
 export function PageHeader({ title, description, children }: PageHeaderProps) {
   return (
-    <div className="mb-6 pb-4 border-b border-border">
+    <div className="mb-6 pb-4 border-border">
       <div className="flex flex-col gap-4 sm:flex-row items-start sm:items-center justify-between">
         <div className="flex-grow">
           <h2 className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground">{title}</h2>

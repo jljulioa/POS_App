@@ -75,7 +75,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       </Sidebar>
       {/* This is the main layout container that sits beside the sidebar */}
       <div className="flex flex-col flex-1 min-h-screen overflow-x-hidden">
-        <header className="sticky top-0 z-10 flex h-16 items-center justify-between bg-background px-4 sm:px-6 border-b border-border">
+        <header className="sticky top-0 z-10 flex h-16 items-center justify-between bg-background px-4 sm:px-6 border-border">
           {/* Left side of header: Ensure this div can shrink and its content (breadcrumbs) can truncate */}
           <div className="flex items-center gap-2 sm:gap-4 flex-shrink-1 min-w-0 overflow-hidden">
              <SidebarTrigger className="md:hidden shrink-0" /> {/* shrink-0 for trigger */}
