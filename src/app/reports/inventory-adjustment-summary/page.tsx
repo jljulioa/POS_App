@@ -7,7 +7,7 @@ import type { InvoiceSettings } from '@/lib/mockData';
 import type { InventoryTransactionDB } from '@/app/api/inventory-transactions/route';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
-import { Printer, Loader2, AlertTriangle, TrendingUp, TrendingDown, PackageSearch, Calendar as CalendarIcon, FilterX, BarChart3 } from 'lucide-react';
+import { Printer, Loader2, AlertTriangle, TrendingUp, TrendingDown, PackageSearch, Calendar as CalendarIcon, FilterX, BarChart3, Info } from 'lucide-react';
 import React, { useMemo, useState, Suspense } from 'react';
 import { format, parseISO, isValid, startOfDay, endOfDay } from 'date-fns';
 import { useQuery } from '@tanstack/react-query';
@@ -21,6 +21,8 @@ import type { jsPDF } from 'jspdf';
 import 'jspdf-autotable';
 import { useCurrency } from '@/contexts/CurrencyContext';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+
 
 // API fetch function for adjustment transactions with date range
 const fetchAdjustmentTransactions = async (startDate?: Date, endDate?: Date): Promise<InventoryTransactionDB[]> => {
@@ -61,7 +63,7 @@ const generateAdjustmentReportPdf = async (transactions: InventoryTransactionDB[
 
   const pageHeight = doc.internal.pageSize.height;
   const pageWidth = doc.internal.pageSize.width;
-  const margin = 40;
+  const margin = 30; // Reduced margin for more space
   let yPos = margin;
 
   doc.setFontSize(18);
@@ -101,6 +103,9 @@ const generateAdjustmentReportPdf = async (transactions: InventoryTransactionDB[
     ['Total Positive Adjustments (Units)', reportData.totalPositiveAdjustments.toString()],
     ['Total Negative Adjustments (Units)', reportData.totalNegativeAdjustments.toString()],
     ['Net Change in Quantity (Units)', reportData.netChange.toString()],
+    ['Cost of Positive Adjustments', formatCurrencyFn(reportData.totalPositiveAdjustmentCostValue)],
+    ['Cost of Negative Adjustments', formatCurrencyFn(reportData.totalNegativeAdjustmentCostValue)],
+    ['Net Cost Impact', formatCurrencyFn(reportData.netCostImpactValue)],
   ];
 
   autoTable(doc, {
@@ -108,14 +113,14 @@ const generateAdjustmentReportPdf = async (transactions: InventoryTransactionDB[
     head: [['Metric', 'Value']],
     body: summaryBody,
     theme: 'striped',
-    headStyles: { fillColor: [75, 85, 99] }, // Dark gray for header
+    headStyles: { fillColor: [75, 85, 99] }, 
     margin: { left: margin, right: margin },
     tableWidth: pageWidth - (margin * 2),
   });
   yPos = (doc as any).lastAutoTable.finalY + 20;
 
   if (transactions.length > 0) {
-    if (yPos + 60 > pageHeight - margin) { // Check if there's enough space for table header + a few rows
+    if (yPos + 60 > pageHeight - margin) { 
       doc.addPage();
       yPos = margin;
     }
@@ -124,12 +129,13 @@ const generateAdjustmentReportPdf = async (transactions: InventoryTransactionDB[
     doc.text("Detailed Adjustment Transactions", margin, yPos);
     yPos += 15;
 
-    const tableHead = [['Date', 'Product Name', 'Product ID', 'Qty Change', 'Stock Before', 'Stock After', 'Notes']];
+    const tableHead = [['Date', 'Product Name', 'Qty Change', 'Cost/Unit', 'Cost Impact', 'Stock Before', 'Stock After', 'Notes']];
     const tableBody = transactions.map(t => [
       format(new Date(t.transaction_date), 'PPp'),
       t.product_name,
-      t.product_id,
       t.quantity_change > 0 ? `+${t.quantity_change}` : t.quantity_change.toString(),
+      t.cost_price !== undefined ? formatCurrencyFn(t.cost_price) : 'N/A',
+      t.cost_price !== undefined ? formatCurrencyFn(t.quantity_change * t.cost_price) : 'N/A',
       t.stock_before.toString(),
       t.stock_after.toString(),
       t.notes || 'N/A'
@@ -140,11 +146,17 @@ const generateAdjustmentReportPdf = async (transactions: InventoryTransactionDB[
       head: tableHead,
       body: tableBody,
       theme: 'grid',
-      headStyles: { fillColor: [75, 85, 99] },
+      headStyles: { fillColor: [75, 85, 99], fontSize: 9 },
+      bodyStyles: { fontSize: 8 },
       columnStyles: {
-        3: { halign: 'right' },
-        4: { halign: 'right' },
-        5: { halign: 'right' },
+        0: { cellWidth: 70 }, // Date
+        1: { cellWidth: 'auto' }, // Product Name
+        2: { halign: 'right', cellWidth: 40 }, // Qty Change
+        3: { halign: 'right', cellWidth: 50 }, // Cost/Unit
+        4: { halign: 'right', cellWidth: 60 }, // Cost Impact
+        5: { halign: 'right', cellWidth: 40 }, // Stock Before
+        6: { halign: 'right', cellWidth: 40 }, // Stock After
+        7: { cellWidth: 'auto' }, // Notes
       },
       margin: { left: margin, right: margin },
       tableWidth: pageWidth - (margin * 2),
@@ -176,10 +188,8 @@ function InventoryAdjustmentSummaryContentLoading() {
         </div>
         <Card className="shadow-lg">
           <CardHeader><Skeleton className="h-8 w-3/4" /><Skeleton className="h-4 w-1/2 mt-2" /></CardHeader>
-          <CardContent className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <Skeleton className="h-20 w-full" />
-            <Skeleton className="h-20 w-full" />
-            <Skeleton className="h-20 w-full" />
+          <CardContent className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-2 xl:grid-cols-3 gap-4">
+            {[...Array(6)].map((_, i) => <Skeleton key={i} className="h-20 w-full" />)}
           </CardContent>
         </Card>
         <Card className="shadow-xl">
@@ -194,7 +204,7 @@ function InventoryAdjustmentSummaryContentLoading() {
 function InventoryAdjustmentSummaryContent() {
   const { toast } = useToast();
   const router = useRouter();
-  const { formatCurrency } = useCurrency(); // Assuming currency formatting might be needed for future cost implications
+  const { formatCurrency } = useCurrency();
 
   const [startDate, setStartDate] = useState<Date | undefined>(undefined);
   const [endDate, setEndDate] = useState<Date | undefined>(undefined);
@@ -215,16 +225,29 @@ function InventoryAdjustmentSummaryContent() {
   const reportData = useMemo(() => {
     let totalPositiveAdjustments = 0;
     let totalNegativeAdjustments = 0;
+    let totalPositiveAdjustmentCostValue = 0;
+    let totalNegativeAdjustmentCostValue = 0;
 
     transactions.forEach(transaction => {
+      const cost = transaction.cost_price ?? 0;
       if (transaction.quantity_change > 0) {
         totalPositiveAdjustments += transaction.quantity_change;
+        totalPositiveAdjustmentCostValue += transaction.quantity_change * cost;
       } else {
         totalNegativeAdjustments += transaction.quantity_change; // This will be negative
+        totalNegativeAdjustmentCostValue += Math.abs(transaction.quantity_change) * cost; // Cost is absolute
       }
     });
-    const netChange = totalPositiveAdjustments + totalNegativeAdjustments; // Adding because negative is already negative
-    return { totalPositiveAdjustments, totalNegativeAdjustments, netChange };
+    const netChange = totalPositiveAdjustments + totalNegativeAdjustments;
+    const netCostImpactValue = totalPositiveAdjustmentCostValue - totalNegativeAdjustmentCostValue; // If pos is gain, neg is loss
+    return { 
+        totalPositiveAdjustments, 
+        totalNegativeAdjustments, 
+        netChange,
+        totalPositiveAdjustmentCostValue,
+        totalNegativeAdjustmentCostValue,
+        netCostImpactValue
+    };
   }, [transactions]);
 
   const handleGeneratePdf = async () => {
@@ -247,7 +270,7 @@ function InventoryAdjustmentSummaryContent() {
   const handleClearFilters = () => {
     setStartDate(undefined);
     setEndDate(undefined);
-    router.push('/reports/inventory-adjustment-summary'); // Clear URL params
+    router.push('/reports/inventory-adjustment-summary'); 
   };
 
   const pageTitle = useMemo(() => {
@@ -274,8 +297,8 @@ function InventoryAdjustmentSummaryContent() {
   }
   
   return (
-    <>
-      <PageHeader title={pageTitle} description="Review inventory adjustments, track discrepancies, and analyze net quantity changes.">
+    <TooltipProvider>
+      <PageHeader title={pageTitle} description="Review inventory adjustments, track discrepancies, and analyze net quantity and cost changes.">
         <div className="flex flex-wrap items-center gap-2">
           <Popover><PopoverTrigger asChild><Button variant={"outline"} className={cn("w-[180px] justify-start text-left font-normal",!startDate && "text-muted-foreground")}><CalendarIcon className="mr-2 h-4 w-4" />{startDate ? format(startDate, "PPP") : <span>Start Date</span>}</Button></PopoverTrigger><PopoverContent className="w-auto p-0"><Calendar mode="single" selected={startDate} onSelect={setStartDate} initialFocus /></PopoverContent></Popover>
           <Popover><PopoverTrigger asChild><Button variant={"outline"} className={cn("w-[180px] justify-start text-left font-normal",!endDate && "text-muted-foreground")}><CalendarIcon className="mr-2 h-4 w-4" />{endDate ? format(endDate, "PPP") : <span>End Date</span>}</Button></PopoverTrigger><PopoverContent className="w-auto p-0"><Calendar mode="single" selected={endDate} onSelect={setEndDate} disabled={startDate ? { before: startDate } : undefined} initialFocus /></PopoverContent></Popover>
@@ -286,10 +309,32 @@ function InventoryAdjustmentSummaryContent() {
 
       <Card className="mb-6 shadow-lg">
         <CardHeader><CardTitle className="text-lg flex items-center"><BarChart3 className="mr-2 h-5 w-5 text-primary"/>Summary of Adjustments</CardTitle></CardHeader>
-        <CardContent className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="p-4 border rounded-lg bg-green-50 dark:bg-green-900/30"><p className="text-sm font-medium text-green-700 dark:text-green-400">Total Positive Adjustments</p><p className="text-2xl font-bold text-green-600 dark:text-green-300">+{reportData.totalPositiveAdjustments} units</p></div>
-          <div className="p-4 border rounded-lg bg-red-50 dark:bg-red-900/30"><p className="text-sm font-medium text-red-700 dark:text-red-400">Total Negative Adjustments</p><p className="text-2xl font-bold text-red-600 dark:text-red-300">{reportData.totalNegativeAdjustments} units</p></div>
-          <div className={`p-4 border rounded-lg ${reportData.netChange >= 0 ? 'bg-blue-50 dark:bg-blue-900/30' : 'bg-yellow-50 dark:bg-yellow-900/30'}`}><p className={`text-sm font-medium ${reportData.netChange >= 0 ? 'text-blue-700 dark:text-blue-400' : 'text-yellow-700 dark:text-yellow-400'}`}>Net Change in Quantity</p><p className={`text-2xl font-bold ${reportData.netChange >= 0 ? 'text-blue-600 dark:text-blue-300' : 'text-yellow-600 dark:text-yellow-300'}`}>{reportData.netChange > 0 ? '+' : ''}{reportData.netChange} units</p></div>
+        <CardContent className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="p-4 border rounded-lg bg-green-50 dark:bg-green-900/30"><p className="text-sm font-medium text-green-700 dark:text-green-400">Total Positive Adjustments (Units)</p><p className="text-2xl font-bold text-green-600 dark:text-green-300">+{reportData.totalPositiveAdjustments} units</p></div>
+          <div className="p-4 border rounded-lg bg-red-50 dark:bg-red-900/30"><p className="text-sm font-medium text-red-700 dark:text-red-400">Total Negative Adjustments (Units)</p><p className="text-2xl font-bold text-red-600 dark:text-red-300">{reportData.totalNegativeAdjustments} units</p></div>
+          <div className={`p-4 border rounded-lg ${reportData.netChange >= 0 ? 'bg-blue-50 dark:bg-blue-900/30' : 'bg-yellow-50 dark:bg-yellow-900/30'}`}><p className={`text-sm font-medium ${reportData.netChange >= 0 ? 'text-blue-700 dark:text-blue-400' : 'text-yellow-700 dark:text-yellow-400'}`}>Net Change in Quantity (Units)</p><p className={`text-2xl font-bold ${reportData.netChange >= 0 ? 'text-blue-600 dark:text-blue-300' : 'text-yellow-600 dark:text-yellow-300'}`}>{reportData.netChange > 0 ? '+' : ''}{reportData.netChange} units</p></div>
+          
+          <div className="p-4 border rounded-lg bg-green-50 dark:bg-green-900/30"><p className="text-sm font-medium text-green-700 dark:text-green-400">Cost of Positive Adjustments</p><p className="text-2xl font-bold text-green-600 dark:text-green-300">{formatCurrency(reportData.totalPositiveAdjustmentCostValue)}</p></div>
+          <div className="p-4 border rounded-lg bg-red-50 dark:bg-red-900/30">
+            <div className="flex items-center justify-between">
+                <p className="text-sm font-medium text-red-700 dark:text-red-400">Cost of Negative Adjustments</p>
+                 <Tooltip>
+                    <TooltipTrigger asChild><Info className="h-4 w-4 text-red-500 cursor-help"/></TooltipTrigger>
+                    <TooltipContent><p>Represents the cost value of units removed/decreased.</p></TooltipContent>
+                </Tooltip>
+            </div>
+            <p className="text-2xl font-bold text-red-600 dark:text-red-300">{formatCurrency(reportData.totalNegativeAdjustmentCostValue)}</p>
+          </div>
+          <div className={`p-4 border rounded-lg ${reportData.netCostImpactValue >= 0 ? 'bg-blue-50 dark:bg-blue-900/30' : 'bg-yellow-50 dark:bg-yellow-900/30'}`}>
+            <div className="flex items-center justify-between">
+                <p className={`text-sm font-medium ${reportData.netCostImpactValue >= 0 ? 'text-blue-700 dark:text-blue-400' : 'text-yellow-700 dark:text-yellow-400'}`}>Net Cost Impact</p>
+                <Tooltip>
+                    <TooltipTrigger asChild><Info className="h-4 w-4 text-gray-500 cursor-help"/></TooltipTrigger>
+                    <TooltipContent><p>Positive value indicates net increase in inventory cost; negative indicates net decrease.</p></TooltipContent>
+                </Tooltip>
+            </div>
+            <p className={`text-2xl font-bold ${reportData.netCostImpactValue >= 0 ? 'text-blue-600 dark:text-blue-300' : 'text-yellow-600 dark:text-yellow-300'}`}>{reportData.netCostImpactValue >= 0 ? '+' : ''}{formatCurrency(reportData.netCostImpactValue)}</p>
+          </div>
         </CardContent>
       </Card>
       
@@ -299,7 +344,7 @@ function InventoryAdjustmentSummaryContent() {
           {transactions.length > 0 ? (
             <div className="rounded-md border overflow-x-auto">
               <Table>
-                <TableHeader><TableRow><TableHead>Date</TableHead><TableHead>Product Name</TableHead><TableHead>Product ID</TableHead><TableHead className="text-center">Qty Change</TableHead><TableHead className="text-center">Stock Before</TableHead><TableHead className="text-center">Stock After</TableHead><TableHead>Notes</TableHead></TableRow></TableHeader>
+                <TableHeader><TableRow><TableHead>Date</TableHead><TableHead>Product Name</TableHead><TableHead>Product ID</TableHead><TableHead className="text-center">Qty Change</TableHead><TableHead className="text-right">Cost/Unit</TableHead><TableHead className="text-right">Cost Impact</TableHead><TableHead className="text-center">Stock Before</TableHead><TableHead className="text-center">Stock After</TableHead><TableHead>Notes</TableHead></TableRow></TableHeader>
                 <TableBody>
                   {transactions.map((t) => (
                     <TableRow key={t.id}>
@@ -307,6 +352,8 @@ function InventoryAdjustmentSummaryContent() {
                       <TableCell className="font-medium">{t.product_name}</TableCell>
                       <TableCell>{t.product_id}</TableCell>
                       <TableCell className={`text-center font-semibold ${t.quantity_change > 0 ? 'text-green-600' : 'text-red-600'}`}>{t.quantity_change > 0 ? `+${t.quantity_change}` : t.quantity_change}</TableCell>
+                      <TableCell className="text-right">{t.cost_price !== undefined ? formatCurrency(t.cost_price) : <span className="text-muted-foreground text-xs">N/A</span>}</TableCell>
+                      <TableCell className="text-right font-semibold">{t.cost_price !== undefined ? formatCurrency(t.quantity_change * t.cost_price) : <span className="text-muted-foreground text-xs">N/A</span>}</TableCell>
                       <TableCell className="text-center">{t.stock_before}</TableCell>
                       <TableCell className="text-center">{t.stock_after}</TableCell>
                       <TableCell className="text-xs text-muted-foreground">{t.notes || 'N/A'}</TableCell>
@@ -318,7 +365,7 @@ function InventoryAdjustmentSummaryContent() {
           ) : (<p className="text-center text-muted-foreground py-6">No adjustment transactions found for the selected period.</p>)}
         </CardContent>
       </Card>
-    </>
+    </TooltipProvider>
   );
 }
 
