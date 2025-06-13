@@ -3,6 +3,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { query as executeQuery } from '@/lib/db';
 import type { InventoryTransaction } from '@/lib/types'; // Assuming types.ts will be created
+import { format, isValid, parseISO, endOfDay, startOfDay } from 'date-fns';
 
 export interface InventoryTransactionDB {
     id: number;
@@ -33,10 +34,43 @@ const parseTransactionFromDB = (dbTransaction: any): InventoryTransactionDB => {
 };
 
 export async function GET(request: NextRequest) {
+  const { searchParams } = new URL(request.url);
+  const transactionType = searchParams.get('type');
+  const startDateParam = searchParams.get('startDate');
+  const endDateParam = searchParams.get('endDate');
+
+  let sql = 'SELECT * FROM InventoryTransactions';
+  const conditions: string[] = [];
+  const queryParams: any[] = [];
+  let paramIndex = 1;
+
+  if (transactionType) {
+    conditions.push(`transaction_type = $${paramIndex++}`);
+    queryParams.push(transactionType);
+  }
+
+  if (startDateParam) {
+    const startDate = parseISO(startDateParam);
+    if (isValid(startDate)) {
+      conditions.push(`transaction_date >= $${paramIndex++}`);
+      queryParams.push(format(startOfDay(startDate), "yyyy-MM-dd'T'HH:mm:ss.SSSXXX"));
+    }
+  }
+  if (endDateParam) {
+    const endDate = parseISO(endDateParam);
+    if (isValid(endDate)) {
+      conditions.push(`transaction_date <= $${paramIndex++}`);
+      queryParams.push(format(endOfDay(endDate), "yyyy-MM-dd'T'HH:mm:ss.SSSXXX"));
+    }
+  }
+
+  if (conditions.length > 0) {
+    sql += ` WHERE ${conditions.join(' AND ')}`;
+  }
+  sql += ' ORDER BY transaction_date DESC, id DESC';
+
   try {
-    const dbTransactions = await executeQuery(
-      'SELECT * FROM InventoryTransactions ORDER BY transaction_date DESC, id DESC'
-    );
+    const dbTransactions = await executeQuery(sql, queryParams);
     const transactions: InventoryTransactionDB[] = dbTransactions.map(parseTransactionFromDB);
     return NextResponse.json(transactions);
   } catch (error) {

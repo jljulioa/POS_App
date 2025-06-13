@@ -57,6 +57,13 @@ export default function ReportsAndToolsPage() {
               link="/reports/sales-summary"
               linkText="View Sales Summary"
             />
+            <ReportOptionCard
+              title="Inventory Adjustment Summary"
+              description="Review inventory adjustments, track discrepancies, and analyze net changes."
+              icon={BarChart3} // Consider a different icon if desired, e.g., PackageSearch
+              link="/reports/inventory-adjustment-summary"
+              linkText="View Adjustment Summary"
+            />
           </div>
         </div>
 
