@@ -479,6 +479,7 @@ export default function PurchaseInvoicesPage() {
               <TableHead>Invoice #</TableHead>
               <TableHead className="hidden sm:table-cell">Date</TableHead>
               <TableHead>Supplier</TableHead>
+              <TableHead className="hidden md:table-cell">Terms</TableHead>
               <TableHead className="text-right hidden md:table-cell">Total</TableHead>
               <TableHead className="text-right hidden md:table-cell">Balance Due</TableHead>
               <TableHead className="text-center">Payment Status</TableHead>
@@ -492,6 +493,9 @@ export default function PurchaseInvoicesPage() {
                 <TableCell className="font-medium text-xs sm:text-sm">{invoice.invoiceNumber}</TableCell>
                 <TableCell className="hidden sm:table-cell text-xs sm:text-sm">{format(new Date(invoice.invoiceDate), 'MMM d, yyyy')}</TableCell>
                 <TableCell className="text-xs sm:text-sm">{invoice.supplierName}</TableCell>
+                <TableCell className="hidden md:table-cell">
+                  <Badge variant={invoice.paymentTerms === 'Credit' ? 'outline' : 'secondary'}>{invoice.paymentTerms}</Badge>
+                </TableCell>
                 <TableCell className="text-right hidden md:table-cell">{formatCurrency(invoice.totalAmount)}</TableCell>
                 <TableCell className="text-right hidden md:table-cell font-semibold">{formatCurrency(invoice.balanceDue)}</TableCell>
                 <TableCell className="text-center"><Badge variant={getPaymentStatusBadgeVariant(invoice.paymentStatus)} className={invoice.paymentStatus === 'Paid' ? "bg-green-500 hover:bg-green-600" : ""}>{invoice.paymentStatus}</Badge></TableCell>
@@ -499,7 +503,7 @@ export default function PurchaseInvoicesPage() {
                 <TableCell className="text-center"><InvoiceRowActions invoice={invoice} deleteMutation={deleteMutation} onViewDetails={handleViewDetails} onAddPayment={handleAddPayment} /></TableCell>
               </TableRow>
             ))}
-            {displayedInvoices.length === 0 && (<TableRow><TableCell colSpan={8} className="h-24 text-center">No purchase invoices found.</TableCell></TableRow>)}
+            {displayedInvoices.length === 0 && (<TableRow><TableCell colSpan={9} className="h-24 text-center">No purchase invoices found.</TableCell></TableRow>)}
           </TableBody>
         </Table>
       </div>
@@ -537,7 +541,7 @@ export default function PurchaseInvoicesPage() {
                   className="w-full sm:w-auto"
               >
                   {isPrintingBarcodes ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <BarcodeIcon className="mr-2 h-4 w-4" />}
-                  Print Barcodes
+                  Print Item Barcodes
               </Button>
               <DialogClose asChild>
                 <Button type="button" variant="secondary" className="w-full sm:w-auto mt-2 sm:mt-0">Close</Button>
