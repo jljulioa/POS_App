@@ -60,52 +60,52 @@ body {
   }
 
   .dark {
-    --background: 266 10% 5%; /* Very Dark Grape/Almost Black */
-    --foreground: 266 30% 90%; /* Light Grape/Off-white Text */
+    --background: 240 10% 3.9%; /* Very Dark Grey/Almost Black from image */
+    --foreground: 0 0% 98%; /* Off-white Text */
     
-    --card: 266 10% 8%; /* Slightly Lighter Dark Grape */
-    --card-foreground: 266 30% 90%; /* Light Grape/Off-white Text */
+    --card: 240 5.9% 10%; /* Lighter Dark Grey from image */
+    --card-foreground: 0 0% 98%; /* Off-white Text */
     
-    --popover: 266 10% 8%; /* Slightly Lighter Dark Grape */
-    --popover-foreground: 266 30% 90%; /* Light Grape/Off-white Text */
+    --popover: 240 5.9% 10%; /* Lighter Dark Grey from image */
+    --popover-foreground: 0 0% 98%; /* Off-white Text */
     
-    --primary: 266 40% 62%; /* Grape */
-    --primary-foreground: 0 0% 100%; /* White */
+    --primary: 160 70% 45%; /* Vibrant Green/Teal from image */
+    --primary-foreground: 240 10% 3.9%; /* Dark text for contrast on primary */
     
-    --secondary: 266 30% 20%; /* Dark Muted Grape */
-    --secondary-foreground: 266 40% 80%; /* Lighter Grape Text */
+    --secondary: 240 3.7% 15.9%; /* Muted dark grey */
+    --secondary-foreground: 0 0% 98%; /* Off-white Text */
     
-    --muted: 266 20% 15%; /* Darker Muted Grape */
-    --muted-foreground: 266 30% 70%; /* Muted Lighter Grape Text */
+    --muted: 240 3.7% 15.9%; /* Muted dark grey */
+    --muted-foreground: 240 5% 64.9%; /* Lighter muted text from image */
     
-    --accent: 266 40% 62%; /* Grape */
-    --accent-foreground: 0 0% 100%; /* White */
+    --accent: 160 70% 45%; /* Vibrant Green/Teal from image */
+    --accent-foreground: 240 10% 3.9%; /* Dark text for contrast on accent */
     
     --destructive: 0 62.8% 30.6%; /* Default dark red */
     --destructive-foreground: 0 0% 98%; /* Default light text for destructive */
     
-    --border: 266 20% 12%; /* Dark Grape Border */
-    --input: 266 15% 10%; /* Very Dark Grape Input Background */
-    --ring: 266 40% 62%; /* Grape */
+    --border: 240 3.7% 15.9%; /* Subtle border for cards */
+    --input: 240 3.7% 15.9%; /* Input background */
+    --ring: 160 70% 45%; /* Focus ring color */
     
-    --chart-1: 220 70% 50%;
-    --chart-2: 160 60% 45%;
-    --chart-3: 30 80% 55%;
+    --chart-1: 160 70% 45%;
+    --chart-2: 210 60% 55%;
+    --chart-3: 30 70% 55%;
     --chart-4: 280 65% 60%;
     --chart-5: 340 75% 55%;
 
-    /* Dark ShadCN Sidebar variables (Remains Dark Sidebar) */
-    --sidebar-background: 266 20% 8%; /* Very Dark Grape, almost black */
-    --sidebar-foreground: 266 35% 85%; /* Light Grape/Off-white */
+    /* Dark ShadCN Sidebar variables */
+    --sidebar-background: 240 5.9% 10%; /* Match card background */
+    --sidebar-foreground: 0 0% 98%; /* Off-white text */
     
-    --sidebar-primary: 266 40% 62%; /* Grape (Active item background) */
-    --sidebar-primary-foreground: 0 0% 100%; /* White (Active item text) */
+    --sidebar-primary: 160 70% 45%; /* Active item background */
+    --sidebar-primary-foreground: 240 10% 3.9%; /* Active item text */
     
-    --sidebar-accent: 266 30% 20%; /* Darker Grape (Hover item background) */
-    --sidebar-accent-foreground: 266 35% 85%; /* Light Grape/Off-white (Hover item text) */
+    --sidebar-accent: 240 3.7% 15.9%; /* Hover item background */
+    --sidebar-accent-foreground: 0 0% 98%; /* Hover item text */
     
-    --sidebar-border: 266 20% 5%; /* Near Black Grape Border */
-    --sidebar-ring: 266 40% 62%; /* Grape */
+    --sidebar-border: 240 3.7% 15.9%; /* Subtle border */
+    --sidebar-ring: 160 70% 45%; /* Focus ring */
   }
 }
 
