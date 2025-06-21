@@ -7,7 +7,6 @@ import { format, parseISO } from 'date-fns';
 
 const PaymentCreateSchema = z.object({
   amount: z.coerce.number().positive({ message: "Payment amount must be a positive number." }),
-  payment_date: z.string().refine((date) => !isNaN(Date.parse(date)), { message: "Invalid date format." }),
   payment_method: z.string().min(1, "Payment method is required."),
   notes: z.string().optional().or(z.literal('')),
 });
@@ -38,10 +37,7 @@ export async function POST(request: NextRequest, { params }: { params: { invoice
       return NextResponse.json({ message: 'Invalid payment data', errors: validation.error.format() }, { status: 400 });
     }
 
-    const { amount, payment_date, payment_method, notes } = validation.data;
-
-    // Explicitly parse the ISO string from client and format for PostgreSQL
-    const formattedDate = format(parseISO(payment_date), "yyyy-MM-dd'T'HH:mm:ss.SSSxxx");
+    const { amount, payment_method, notes } = validation.data;
 
     await client.query('BEGIN');
 
@@ -61,10 +57,10 @@ export async function POST(request: NextRequest, { params }: { params: { invoice
         return NextResponse.json({ message: `Payment amount (${amount}) cannot be greater than the balance due (${currentBalance}).`}, { status: 400 });
     }
 
-    // Insert the payment record using the formatted date
+    // Insert the payment record, letting the DB handle the payment_date with its default value
     await client.query(
-      'INSERT INTO PurchaseInvoicePayments (purchase_invoice_id, payment_date, amount, payment_method, notes) VALUES ($1, $2, $3, $4, $5)',
-      [invoiceId, formattedDate, amount, payment_method, notes || null]
+      'INSERT INTO PurchaseInvoicePayments (purchase_invoice_id, amount, payment_method, notes) VALUES ($1, $2, $3, $4)',
+      [invoiceId, amount, payment_method, notes || null]
     );
 
     // Update the invoice balance and status

@@ -81,14 +81,13 @@ const deletePurchaseInvoiceAPI = async (invoiceId: string): Promise<{ message: s
 
 const AddPaymentSchema = z.object({
   amount: z.coerce.number().positive({ message: "Amount must be a positive number." }),
-  payment_date: z.date({ required_error: "Payment date is required." }),
   payment_method: z.string().min(1, "Payment method is required."),
   notes: z.string().optional(),
 });
 
 type AddPaymentFormValues = z.infer<typeof AddPaymentSchema>;
 
-const addPaymentAPI = async ({ invoiceId, data }: { invoiceId: string; data: Omit<AddPaymentFormValues, 'payment_date'> & { payment_date: string } }) => {
+const addPaymentAPI = async ({ invoiceId, data }: { invoiceId: string; data: AddPaymentFormValues }) => {
     const response = await fetch(`/api/purchase-invoices/${invoiceId}/payments`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -116,7 +115,6 @@ function AddPaymentModal({ isOpen, onClose, invoice }: AddPaymentModalProps) {
         resolver: zodResolver(AddPaymentSchema),
         defaultValues: {
             amount: invoice.balanceDue,
-            payment_date: new Date(),
             payment_method: 'Transfer',
             notes: '',
         }
@@ -142,7 +140,7 @@ function AddPaymentModal({ isOpen, onClose, invoice }: AddPaymentModalProps) {
         }
         addPaymentMutation.mutate({
             invoiceId: invoice.id,
-            data: { ...data, payment_date: data.payment_date.toISOString() },
+            data: data,
         });
     };
 
@@ -162,16 +160,7 @@ function AddPaymentModal({ isOpen, onClose, invoice }: AddPaymentModalProps) {
                                 <FormMessage />
                             </FormItem>
                         )} />
-                        <FormField control={form.control} name="payment_date" render={({ field }) => (
-                            <FormItem className="flex flex-col">
-                                <FormLabel>Payment Date *</FormLabel>
-                                <Popover>
-                                  <PopoverTrigger asChild><FormControl><Button variant={"outline"} className={cn("pl-3 text-left font-normal", !field.value && "text-muted-foreground")}><CalendarIcon className="mr-auto h-4 w-4 opacity-50" />{field.value ? format(field.value, "PPP") : <span>Pick a date</span>}</Button></FormControl></PopoverTrigger>
-                                  <PopoverContent className="w-auto p-0" align="start"><Calendar mode="single" selected={field.value} onSelect={field.onChange} /></PopoverContent>
-                                </Popover>
-                                <FormMessage />
-                            </FormItem>
-                        )} />
+                        
                         <FormField control={form.control} name="payment_method" render={({ field }) => (
                             <FormItem>
                                 <FormLabel>Payment Method *</FormLabel>
