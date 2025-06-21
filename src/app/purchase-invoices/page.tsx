@@ -336,6 +336,86 @@ export default function PurchaseInvoicesPage() {
     const paginationEndItem = itemsPerPage === 'all' ? filteredInvoices.length : Math.min(currentPage * Number(itemsPerPage), filteredInvoices.length);
     const itemsPerPageOptions = [ { value: '20', label: '20 per page' }, { value: '40', label: '40 per page' }, { value: 'all', label: 'Show All' } ];
 
+    const handlePrintBarcodes = async () => {
+      if (!detailedInvoice?.items || detailedInvoice.items.length === 0) {
+        toast({ variant: "destructive", title: "No Items", description: "This invoice has no items to print barcodes for." });
+        return;
+      }
+      setIsPrintingBarcodes(true);
+
+      const { jsPDF } = await import('jspdf');
+      const JsBarcode = (await import('jsbarcode')).default;
+      
+      const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'letter' });
+      const pageHeight = doc.internal.pageSize.getHeight();
+      const pageWidth = doc.internal.pageSize.getWidth();
+      const margin = 10;
+      const labelWidth = 36;
+      const labelHeight = 25;
+      const xSpacing = 3;
+      const ySpacing = 5;
+      const barcodeHeightMM = 15;
+      const textLineHeightMM = 3;
+      const textYOffsetFromBarcodeMM = 2;
+      const labelsPerRow = 5;
+      const labelsPerCol = Math.floor((pageHeight - 2 * margin + ySpacing) / (labelHeight + ySpacing));
+
+      let currentX = margin;
+      let currentY = margin;
+      let labelsOnPageCount = 0;
+
+      for (const item of detailedInvoice.items) {
+          for (let i = 0; i < item.quantity; i++) {
+              if (labelsOnPageCount >= labelsPerRow * labelsPerCol) {
+                  doc.addPage();
+                  currentX = margin;
+                  currentY = margin;
+                  labelsOnPageCount = 0;
+              } else if (labelsOnPageCount > 0 && labelsOnPageCount % labelsPerRow === 0) {
+                  currentX = margin;
+                  currentY += labelHeight + ySpacing;
+              }
+
+              const canvas = document.createElement('canvas');
+              try {
+                  JsBarcode(canvas, item.productCode, { format: "CODE128", width: 1.5, height: barcodeHeightMM * (72/25.4), displayValue: false, margin: 0 });
+                  const barcodeDataUrl = canvas.toDataURL('image/png');
+                  const actualBarcodeWidthInMM = canvas.width / (72 / 25.4);
+                  const finalPdfImageWidth = Math.min(actualBarcodeWidthInMM, labelWidth - 4);
+                  const imageX = currentX + (labelWidth - finalPdfImageWidth) / 2;
+                  doc.addImage(barcodeDataUrl, 'PNG', imageX, currentY, finalPdfImageWidth, barcodeHeightMM);
+              } catch (e) {
+                  doc.text("Error", currentX + labelWidth / 2, currentY + barcodeHeightMM / 2, { align: 'center' });
+              }
+              
+              let productNameText = item.productName;
+              const maxNameWidth = labelWidth - 4;
+              doc.setFontSize(8);
+              doc.setFont(undefined, 'normal');
+              if (doc.getTextWidth(productNameText) > maxNameWidth) {
+                  let truncatedName = productNameText;
+                  while (doc.getTextWidth(truncatedName + "...") > maxNameWidth && truncatedName.length > 0) {
+                      truncatedName = truncatedName.slice(0, -1);
+                  }
+                  productNameText = truncatedName.length > 0 ? truncatedName + "..." : "...";
+              }
+              doc.text(productNameText, currentX + labelWidth / 2, currentY + barcodeHeightMM + textYOffsetFromBarcodeMM + textLineHeightMM, { align: 'center' });
+
+              doc.setFontSize(7);
+              doc.setFont(undefined, 'bold');
+              doc.text(item.productCode, currentX + labelWidth / 2, currentY + barcodeHeightMM + textYOffsetFromBarcodeMM + (textLineHeightMM * 2), { align: 'center', maxWidth: labelWidth - 2 });
+              doc.setFont(undefined, 'normal');
+
+              currentX += labelWidth + xSpacing;
+              labelsOnPageCount++;
+          }
+      }
+
+      doc.save(`Invoice_${detailedInvoice.invoiceNumber}_Barcodes.pdf`);
+      setIsPrintingBarcodes(false);
+      toast({ title: "PDF Generated", description: "Invoice item barcodes PDF has been downloaded." });
+  };
+
 
   if (isLoadingList) {
     return (
@@ -416,8 +496,19 @@ export default function PurchaseInvoicesPage() {
                 </>
               ) : (<div className="md:col-span-2 text-destructive">Failed to load details.</div>)}
             </div>
-            <DialogFooter>
-              <DialogClose asChild><Button type="button" variant="secondary" className="w-full sm:w-auto">Close</Button></DialogClose>
+            <DialogFooter className="flex-col sm:flex-row sm:justify-between items-center pt-4">
+              <Button
+                  variant="outline"
+                  onClick={handlePrintBarcodes}
+                  disabled={isPrintingBarcodes || !detailedInvoice?.items?.length}
+                  className="w-full sm:w-auto"
+              >
+                  {isPrintingBarcodes ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <BarcodeIcon className="mr-2 h-4 w-4" />}
+                  Print Item Barcodes
+              </Button>
+              <DialogClose asChild>
+                <Button type="button" variant="secondary" className="w-full sm:w-auto mt-2 sm:mt-0">Close</Button>
+              </DialogClose>
             </DialogFooter>
           </DialogContent>
         </Dialog>
@@ -425,3 +516,5 @@ export default function PurchaseInvoicesPage() {
     </AppLayout>
   );
 }
+
+    
