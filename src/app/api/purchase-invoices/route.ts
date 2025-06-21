@@ -23,10 +23,12 @@ const parsePurchaseInvoiceFromDB = (dbInvoice: any): PurchaseInvoice => {
     supplierName: dbInvoice.suppliername,
     totalAmount: parseFloat(dbInvoice.totalamount),
     paymentTerms: dbInvoice.paymentterms,
+    paymentStatus: dbInvoice.payment_status,
+    balanceDue: parseFloat(dbInvoice.balance_due),
     processed: dbInvoice.processed,
     createdAt: dbInvoice.createdat ? new Date(dbInvoice.createdat).toISOString() : undefined,
     updatedAt: dbInvoice.updatedat ? new Date(dbInvoice.updatedat).toISOString() : undefined,
-    // items are not typically fetched in the main list
+    // items and payments are not typically fetched in the main list
   };
 };
 
@@ -34,7 +36,7 @@ const parsePurchaseInvoiceFromDB = (dbInvoice: any): PurchaseInvoice => {
 // GET handler to fetch all purchase invoices
 export async function GET(request: NextRequest) {
   try {
-    const dbInvoices = await query('SELECT id, invoicenumber, invoicedate, suppliername, totalamount, paymentterms, processed, createdat, updatedat FROM PurchaseInvoices ORDER BY invoiceDate DESC');
+    const dbInvoices = await query('SELECT id, invoicenumber, invoicedate, suppliername, totalamount, paymentterms, processed, payment_status, balance_due, createdat, updatedat FROM PurchaseInvoices ORDER BY invoiceDate DESC');
     const invoices: PurchaseInvoice[] = dbInvoices.map(parsePurchaseInvoiceFromDB);
     return NextResponse.json(invoices);
   } catch (error) {
@@ -58,11 +60,12 @@ export async function POST(request: NextRequest) {
 
     // 'createdat' and 'updatedat' will use DEFAULT CURRENT_TIMESTAMP on insert.
     const sql = `
-      INSERT INTO PurchaseInvoices (id, invoiceNumber, invoiceDate, supplierName, totalAmount, paymentTerms, processed)
-      VALUES ($1, $2, $3, $4, $5, $6, $7)
+      INSERT INTO PurchaseInvoices (id, invoiceNumber, invoiceDate, supplierName, totalAmount, paymentTerms, processed, payment_status, balance_due)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
       RETURNING * 
     `;
-    const params = [id, invoiceNumber, invoiceDate, supplierName, totalAmount, paymentTerms, false];
+    // New invoices start as 'Unpaid' and balance is the total amount
+    const params = [id, invoiceNumber, invoiceDate, supplierName, totalAmount, paymentTerms, false, 'Unpaid', totalAmount];
     
     const result = await query(sql, params);
     const newInvoice: PurchaseInvoice = parsePurchaseInvoiceFromDB(result[0]);

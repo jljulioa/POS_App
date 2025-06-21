@@ -57,6 +57,16 @@ export interface Customer {
   updatedAt?: string;
 }
 
+export interface PurchaseInvoicePayment {
+  id: number;
+  purchase_invoice_id: string;
+  payment_date: string; // ISO string
+  amount: number;
+  payment_method: string;
+  notes?: string | null;
+  created_at: string; // ISO string
+}
+
 export interface PurchaseInvoiceItem {
   productId: string;
   productName: string;
@@ -74,8 +84,11 @@ export interface PurchaseInvoice {
   supplierName: string;
   totalAmount: number;
   paymentTerms: 'Credit' | 'Cash';
+  paymentStatus: 'Unpaid' | 'Partially Paid' | 'Paid';
+  balanceDue: number;
   processed: boolean;
   items?: PurchaseInvoiceItem[];
+  payments?: PurchaseInvoicePayment[];
   createdAt?: string;
   updatedAt?: string;
 }
@@ -135,4 +148,3 @@ export interface InvoiceSettings {
   updatedAt?: string;
 }
 // TaxSetting interface removed
-

@@ -3,9 +3,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { query, getPool } from '@/lib/db';
 import { z } from 'zod';
-import type { PurchaseInvoice, PurchaseInvoiceItem, Product } from '@/lib/mockData';
+import type { PurchaseInvoice, PurchaseInvoiceItem, Product, PurchaseInvoicePayment } from '@/lib/mockData';
 
-const parsePurchaseInvoiceFromDB = (dbInvoice: any, items?: PurchaseInvoiceItem[]): PurchaseInvoice => {
+const parsePurchaseInvoiceFromDB = (dbInvoice: any, items?: PurchaseInvoiceItem[], payments?: PurchaseInvoicePayment[]): PurchaseInvoice => {
   return {
     id: dbInvoice.id,
     invoiceNumber: dbInvoice.invoicenumber,
@@ -13,8 +13,11 @@ const parsePurchaseInvoiceFromDB = (dbInvoice: any, items?: PurchaseInvoiceItem[
     supplierName: dbInvoice.suppliername,
     totalAmount: parseFloat(dbInvoice.totalamount),
     paymentTerms: dbInvoice.paymentterms,
+    paymentStatus: dbInvoice.payment_status,
+    balanceDue: parseFloat(dbInvoice.balance_due),
     processed: dbInvoice.processed,
     items: items || [],
+    payments: payments || [],
     createdAt: dbInvoice.createdat ? new Date(dbInvoice.createdat).toISOString() : undefined,
     updatedAt: dbInvoice.updatedat ? new Date(dbInvoice.updatedat).toISOString() : undefined,
   };
@@ -30,6 +33,19 @@ const parsePurchaseInvoiceItemFromDB = (dbItem: any): PurchaseInvoiceItem => {
     totalCost: parseFloat(dbItem.totalcost),
   };
 };
+
+const parsePurchaseInvoicePaymentFromDB = (dbPayment: any): PurchaseInvoicePayment => {
+    return {
+        id: parseInt(dbPayment.id, 10),
+        purchase_invoice_id: dbPayment.purchase_invoice_id,
+        payment_date: new Date(dbPayment.payment_date).toISOString(),
+        amount: parseFloat(dbPayment.amount),
+        payment_method: dbPayment.payment_method,
+        notes: dbPayment.notes,
+        created_at: new Date(dbPayment.created_at).toISOString(),
+    };
+};
+
 
 const InvoiceItemProcessSchema = z.object({
     productId: z.string(),
@@ -53,24 +69,28 @@ const InvoiceUpdateSchema = z.object({
 export async function GET(request: NextRequest, { params }: { params: { invoiceId: string } }) {
   const { invoiceId } = params;
   try {
-    const invoiceResult = await query('SELECT id, invoicenumber, invoicedate, suppliername, totalamount, paymentterms, processed, createdat, updatedat FROM PurchaseInvoices WHERE id = $1', [invoiceId]);
+    const invoiceResult = await query('SELECT * FROM PurchaseInvoices WHERE id = $1', [invoiceId]);
     if (invoiceResult.length === 0) {
       return NextResponse.json({ message: 'Purchase invoice not found' }, { status: 404 });
     }
     
     let items: PurchaseInvoiceItem[] = [];
-    if (invoiceResult[0].processed === true) {
-        // Join with Products table to get product_code
-        const itemsResult = await query(`
-            SELECT pii.id, pii.purchase_invoice_id, pii.product_id, pii.productname, pii.quantity, pii.costprice, pii.totalcost, p.code as product_code
-            FROM PurchaseInvoiceItems pii
-            JOIN Products p ON pii.product_id = p.id
-            WHERE pii.purchase_invoice_id = $1
-        `, [invoiceId]);
+    // Always fetch items if they exist, regardless of processed status
+    const itemsResult = await query(`
+        SELECT pii.id, pii.purchase_invoice_id, pii.product_id, pii.productname, pii.quantity, pii.costprice, pii.totalcost, p.code as product_code
+        FROM PurchaseInvoiceItems pii
+        JOIN Products p ON pii.product_id = p.id
+        WHERE pii.purchase_invoice_id = $1
+    `, [invoiceId]);
+    if (itemsResult.length > 0) {
         items = itemsResult.map(parsePurchaseInvoiceItemFromDB);
     }
     
-    const invoice: PurchaseInvoice = parsePurchaseInvoiceFromDB(invoiceResult[0], items);
+    // Fetch payment history for the invoice
+    const paymentsResult = await query('SELECT * FROM PurchaseInvoicePayments WHERE purchase_invoice_id = $1 ORDER BY payment_date DESC', [invoiceId]);
+    const payments: PurchaseInvoicePayment[] = paymentsResult.map(parsePurchaseInvoicePaymentFromDB);
+
+    const invoice: PurchaseInvoice = parsePurchaseInvoiceFromDB(invoiceResult[0], items, payments);
     return NextResponse.json(invoice);
   } catch (error) {
     console.error(`Failed to fetch purchase invoice ${invoiceId}:`, error);
@@ -111,7 +131,21 @@ export async function PUT(request: NextRequest, { params }: { params: { invoiceI
     if (invoiceNumber !== undefined) { updateFields.push(`invoicenumber = ${addParam(invoiceNumber)}`); }
     if (invoiceDate !== undefined) { updateFields.push(`invoicedate = ${addParam(invoiceDate)}`); }
     if (supplierName !== undefined) { updateFields.push(`suppliername = ${addParam(supplierName)}`); }
-    if (totalAmount !== undefined) { updateFields.push(`totalamount = ${addParam(totalAmount)}`); }
+    
+    // Logic to update totalAmount and balanceDue if totalAmount is changed
+    if (totalAmount !== undefined) {
+        updateFields.push(`totalamount = ${addParam(totalAmount)}`);
+        // This assumes that if totalAmount changes, balanceDue should reset relative to payments made.
+        // A more complex logic might be needed depending on business rules.
+        // For now, we'll let a trigger handle it or update it manually.
+        // Let's assume balance_due should be totalAmount - sum(payments).
+        const paymentsSumResult = await client.query('SELECT SUM(amount) as total_paid FROM purchaseinvoicepayments WHERE purchase_invoice_id = $1', [invoiceId]);
+        const totalPaid = parseFloat(paymentsSumResult.rows[0]?.total_paid || '0');
+        const newBalanceDue = totalAmount - totalPaid;
+        updateFields.push(`balance_due = ${addParam(newBalanceDue)}`);
+        updateFields.push(`payment_status = CASE WHEN ${newBalanceDue} <= 0 THEN 'Paid' WHEN ${totalPaid} > 0 THEN 'Partially Paid' ELSE 'Unpaid' END`);
+    }
+
     if (paymentTerms !== undefined) { updateFields.push(`paymentterms = ${addParam(paymentTerms)}`); }
     
     // The DB trigger handles 'updatedat'
@@ -196,20 +230,21 @@ export async function PUT(request: NextRequest, { params }: { params: { invoiceI
 
     await client.query('COMMIT');
 
-    // Fetch the updated invoice again to include potentially newly processed items with product codes
-    const finalInvoiceResult = await client.query('SELECT id, invoicenumber, invoicedate, suppliername, totalamount, paymentterms, processed, createdat, updatedat FROM PurchaseInvoices WHERE id = $1', [invoiceId]);
-    let finalItems: PurchaseInvoiceItem[] = [];
-    if (finalInvoiceResult.rows[0] && finalInvoiceResult.rows[0].processed) {
-        const updatedItemsResult = await client.query(`
+    // Fetch the updated invoice again to include potentially newly processed items and payments
+    const finalInvoiceResult = await client.query('SELECT * FROM PurchaseInvoices WHERE id = $1', [invoiceId]);
+    
+    const finalItemsResult = await query(`
             SELECT pii.id, pii.purchase_invoice_id, pii.product_id, pii.productname, pii.quantity, pii.costprice, pii.totalcost, p.code as product_code
             FROM PurchaseInvoiceItems pii
             JOIN Products p ON pii.product_id = p.id
             WHERE pii.purchase_invoice_id = $1
-        `, [invoiceId]);
-        finalItems = updatedItemsResult.rows.map(parsePurchaseInvoiceItemFromDB);
-    }
+    `, [invoiceId]);
+    const finalItems = finalItemsResult.map(parsePurchaseInvoiceItemFromDB);
+
+    const finalPaymentsResult = await query('SELECT * FROM PurchaseInvoicePayments WHERE purchase_invoice_id = $1 ORDER BY payment_date DESC', [invoiceId]);
+    const finalPayments = finalPaymentsResult.map(parsePurchaseInvoicePaymentFromDB);
     
-    const finalInvoice = parsePurchaseInvoiceFromDB(finalInvoiceResult.rows[0], finalItems);
+    const finalInvoice = parsePurchaseInvoiceFromDB(finalInvoiceResult.rows[0], finalItems, finalPayments);
 
     return NextResponse.json(finalInvoice, { status: 200 });
 
@@ -242,6 +277,8 @@ export async function DELETE(request: NextRequest, { params }: { params: { invoi
       return NextResponse.json({ message: 'Purchase invoice not found.' }, { status: 404 });
     }
 
+    // Delete associated payments first
+    await client.query('DELETE FROM PurchaseInvoicePayments WHERE purchase_invoice_id = $1', [invoiceId]);
     await client.query('DELETE FROM PurchaseInvoiceItems WHERE purchase_invoice_id = $1', [invoiceId]);
     const result = await client.query('DELETE FROM PurchaseInvoices WHERE id = $1 RETURNING id', [invoiceId]);
     await client.query('COMMIT');
@@ -249,7 +286,7 @@ export async function DELETE(request: NextRequest, { params }: { params: { invoi
     if (result.rowCount === 0) {
       return NextResponse.json({ message: 'Purchase invoice not found or already deleted' }, { status: 404 });
     }
-    return NextResponse.json({ message: `Purchase invoice ${invoiceId} and its items deleted successfully. Stock levels NOT automatically reverted.` }, { status: 200 });
+    return NextResponse.json({ message: `Purchase invoice ${invoiceId} and its items/payments deleted successfully. Stock levels NOT automatically reverted.` }, { status: 200 });
   } catch (error) {
     await client.query('ROLLBACK').catch(err => console.error('Rollback failed on delete error:', err));
     console.error(`Failed to delete purchase invoice ${invoiceId}:`, error);
@@ -261,4 +298,3 @@ export async function DELETE(request: NextRequest, { params }: { params: { invoi
     client.release();
   }
 }
-    
