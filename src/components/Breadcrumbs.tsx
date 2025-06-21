@@ -1,4 +1,3 @@
-
 "use client";
 import React from 'react';
 import Link from 'next/link';
@@ -16,6 +15,7 @@ const pathLabels: Record<string, string> = {
   'barcode-products': 'Barcode Products',
   'inventory-adjustment': 'Inventory Adjustment',
   'inventory-adjustment-summary': 'Inventory Adjustment Summary',
+  'top-selling-products': 'Top Selling Products',
   customers: 'Customers',
   'purchase-invoices': 'Purchase Invoices',
   expenses: 'Expenses',

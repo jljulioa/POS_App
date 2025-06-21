@@ -1,11 +1,10 @@
-
 "use client";
 
 import AppLayout from '@/components/layout/AppLayout';
 import { PageHeader } from '@/components/PageHeader';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { BarChart3, ArrowRight, FileText, Barcode as BarcodeIcon, Package } from 'lucide-react';
+import { BarChart3, ArrowRight, FileText, Barcode as BarcodeIcon, Package, Trophy } from 'lucide-react';
 import Link from 'next/link';
 
 interface ReportOptionCardProps {
@@ -60,9 +59,16 @@ export default function ReportsAndToolsPage() {
             <ReportOptionCard
               title="Inventory Adjustment Summary"
               description="Review inventory adjustments, track discrepancies, and analyze net changes."
-              icon={BarChart3} // Consider a different icon if desired, e.g., PackageSearch
+              icon={BarChart3} 
               link="/reports/inventory-adjustment-summary"
               linkText="View Adjustment Summary"
+            />
+            <ReportOptionCard
+              title="Top Selling Products"
+              description="See a ranked list of your 20 best-selling products by quantity."
+              icon={Trophy}
+              link="/reports/top-selling-products"
+              linkText="View Top Products"
             />
           </div>
         </div>
