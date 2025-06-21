@@ -142,7 +142,7 @@ function AddPaymentModal({ isOpen, onClose, invoice }: AddPaymentModalProps) {
         }
         addPaymentMutation.mutate({
             invoiceId: invoice.id,
-            data: { ...data, payment_date: format(data.payment_date, 'yyyy-MM-dd') },
+            data: { ...data, payment_date: data.payment_date.toISOString() },
         });
     };
 
