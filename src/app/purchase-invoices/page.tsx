@@ -171,7 +171,7 @@ function AddPaymentModal({ isOpen, onClose, invoice }: AddPaymentModalProps) {
         <Dialog open={isOpen} onOpenChange={onClose}>
             <DialogContent className="sm:max-w-md">
                 <DialogHeader>
-                    <DialogTitle>Add Payment to Invoice {invoice.invoiceNumber}</DialogTitle>
+                    <DialogTitle>{invoice.balanceDue > 0 ? "Add Payment to" : "Payment History for"} Invoice {invoice.invoiceNumber}</DialogTitle>
                     <DialogDescription>Balance Due: <span className="font-bold">{formatCurrency(invoice.balanceDue)}</span></DialogDescription>
                 </DialogHeader>
 
@@ -196,26 +196,34 @@ function AddPaymentModal({ isOpen, onClose, invoice }: AddPaymentModalProps) {
                         <p className="text-muted-foreground text-sm text-center py-4">No payments have been recorded.</p>
                     )}
                 </div>
-                <Separator />
                 
-                <Form {...form}>
-                    <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 pt-4">
-                        <FormField control={form.control} name="amount" render={({ field }) => (
-                            <FormItem><FormLabel>Amount *</FormLabel><FormControl><Input type="number" step="0.01" {...field} /></FormControl><FormMessage /></FormItem>
-                        )} />
-                        
-                        <FormField control={form.control} name="payment_method" render={({ field }) => (
-                            <FormItem><FormLabel>Payment Method *</FormLabel><Select onValueChange={field.onChange} defaultValue={field.value}><FormControl><SelectTrigger><SelectValue placeholder="Select a method" /></SelectTrigger></FormControl><SelectContent><SelectItem value="Cash">Cash</SelectItem><SelectItem value="Card">Card</SelectItem><SelectItem value="Transfer">Bank Transfer</SelectItem></SelectContent></Select><FormMessage /></FormItem>
-                        )} />
-                        <FormField control={form.control} name="notes" render={({ field }) => (
-                            <FormItem><FormLabel>Notes</FormLabel><FormControl><Textarea placeholder="Optional payment notes" {...field} /></FormControl><FormMessage /></FormItem>
-                        )} />
-                        <DialogFooter className="mt-4">
-                            <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
-                            <Button type="submit" disabled={addPaymentMutation.isPending}>{addPaymentMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin"/>}Record Payment</Button>
-                        </DialogFooter>
-                    </form>
-                </Form>
+                {invoice.balanceDue > 0 ? (
+                  <>
+                    <Separator />
+                    <Form {...form}>
+                        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 pt-4">
+                            <FormField control={form.control} name="amount" render={({ field }) => (
+                                <FormItem><FormLabel>Amount *</FormLabel><FormControl><Input type="number" step="0.01" {...field} /></FormControl><FormMessage /></FormItem>
+                            )} />
+                            
+                            <FormField control={form.control} name="payment_method" render={({ field }) => (
+                                <FormItem><FormLabel>Payment Method *</FormLabel><Select onValueChange={field.onChange} defaultValue={field.value}><FormControl><SelectTrigger><SelectValue placeholder="Select a method" /></SelectTrigger></FormControl><SelectContent><SelectItem value="Cash">Cash</SelectItem><SelectItem value="Card">Card</SelectItem><SelectItem value="Transfer">Bank Transfer</SelectItem></SelectContent></Select><FormMessage /></FormItem>
+                            )} />
+                            <FormField control={form.control} name="notes" render={({ field }) => (
+                                <FormItem><FormLabel>Notes</FormLabel><FormControl><Textarea placeholder="Optional payment notes" {...field} /></FormControl><FormMessage /></FormItem>
+                            )} />
+                            <DialogFooter className="mt-4">
+                                <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
+                                <Button type="submit" disabled={addPaymentMutation.isPending}>{addPaymentMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin"/>}Record Payment</Button>
+                            </DialogFooter>
+                        </form>
+                    </Form>
+                  </>
+                ) : (
+                    <DialogFooter>
+                      <Button type="button" variant="outline" onClick={onClose}>Close</Button>
+                    </DialogFooter>
+                )}
             </DialogContent>
         </Dialog>
     );
@@ -241,8 +249,8 @@ function InvoiceRowActions({ invoice, deleteMutation, onViewDetails, onAddPaymen
   return (
     <div className="flex items-center justify-center space-x-1">
       <Button variant="ghost" size="icon" className="hover:text-primary h-8 w-8 sm:h-auto sm:w-auto" onClick={() => onViewDetails(invoice)}><Eye className="h-4 w-4" /></Button>
-      {invoice.paymentTerms === 'Credit' && invoice.paymentStatus !== 'Paid' && (
-        <Button variant="ghost" size="icon" title="Add Payment" className="hover:text-green-600 h-8 w-8 sm:h-auto sm:w-auto" onClick={() => onAddPayment(invoice)}><DollarSign className="h-4 w-4" /></Button>
+      {invoice.paymentTerms === 'Credit' && (
+        <Button variant="ghost" size="icon" title={invoice.paymentStatus !== 'Paid' ? "Add Payment" : "View Payments"} className="hover:text-green-600 h-8 w-8 sm:h-auto sm:w-auto" onClick={() => onAddPayment(invoice)}><DollarSign className="h-4 w-4" /></Button>
       )}
       {!invoice.processed && (
         <Button variant="ghost" size="icon" title="Process Invoice" className="hover:text-accent h-8 w-8 sm:h-auto sm:w-auto" asChild>
