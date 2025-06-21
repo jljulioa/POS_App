@@ -3,7 +3,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getPool } from '@/lib/db';
 import { z } from 'zod';
-import { format, parseISO } from 'date-fns';
 
 const PaymentCreateSchema = z.object({
   amount: z.coerce.number().positive({ message: "Payment amount must be a positive number." }),
@@ -34,6 +33,7 @@ export async function POST(request: NextRequest, { params }: { params: { invoice
     const validation = PaymentCreateSchema.safeParse(body);
 
     if (!validation.success) {
+      client.release();
       return NextResponse.json({ message: 'Invalid payment data', errors: validation.error.format() }, { status: 400 });
     }
 
@@ -46,6 +46,7 @@ export async function POST(request: NextRequest, { params }: { params: { invoice
 
     if (invoiceResult.rowCount === 0) {
       await client.query('ROLLBACK');
+      client.release();
       return NextResponse.json({ message: `Purchase invoice with ID ${invoiceId} not found.` }, { status: 404 });
     }
 
@@ -54,6 +55,7 @@ export async function POST(request: NextRequest, { params }: { params: { invoice
 
     if (amount > currentBalance) {
         await client.query('ROLLBACK');
+        client.release();
         return NextResponse.json({ message: `Payment amount (${amount}) cannot be greater than the balance due (${currentBalance}).`}, { status: 400 });
     }
 
@@ -63,20 +65,26 @@ export async function POST(request: NextRequest, { params }: { params: { invoice
       [invoiceId, amount, payment_method, notes || null]
     );
 
-    // Update the invoice balance and status
+    // *** REVISED LOGIC FOR UPDATING INVOICE ***
+    // Calculate new balance and determine status in JS to create a simpler query
     const newBalance = currentBalance - amount;
+    let newPaymentStatus = 'Unpaid'; // Default status
+
+    if (newBalance <= 0) {
+        newPaymentStatus = 'Paid';
+    } else if (newBalance < totalAmount) {
+        newPaymentStatus = 'Partially Paid';
+    }
+    
+    // A simpler, more direct UPDATE statement
     const paymentStatusUpdateSql = `
         UPDATE PurchaseInvoices
-        SET 
+        SET
             balance_due = $1,
-            payment_status = CASE
-                WHEN $1 <= 0 THEN 'Paid'
-                WHEN $1 < totalamount THEN 'Partially Paid'
-                ELSE 'Unpaid'
-            END
-        WHERE id = $2
+            payment_status = $2
+        WHERE id = $3
     `;
-    await client.query(paymentStatusUpdateSql, [newBalance, invoiceId]);
+    await client.query(paymentStatusUpdateSql, [newBalance, newPaymentStatus, invoiceId]);
     
     await client.query('COMMIT');
 
