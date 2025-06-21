@@ -3,7 +3,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getPool } from '@/lib/db';
 import { z } from 'zod';
-import { format } from 'date-fns';
+import { format, parseISO } from 'date-fns';
 
 const PaymentCreateSchema = z.object({
   amount: z.coerce.number().positive({ message: "Payment amount must be a positive number." }),
@@ -40,6 +40,9 @@ export async function POST(request: NextRequest, { params }: { params: { invoice
 
     const { amount, payment_date, payment_method, notes } = validation.data;
 
+    // Explicitly parse the ISO string from client and format for PostgreSQL
+    const formattedDate = format(parseISO(payment_date), "yyyy-MM-dd'T'HH:mm:ss.SSSxxx");
+
     await client.query('BEGIN');
 
     // Lock the invoice row and get current balance and total amount
@@ -58,10 +61,10 @@ export async function POST(request: NextRequest, { params }: { params: { invoice
         return NextResponse.json({ message: `Payment amount (${amount}) cannot be greater than the balance due (${currentBalance}).`}, { status: 400 });
     }
 
-    // Insert the payment record
+    // Insert the payment record using the formatted date
     await client.query(
       'INSERT INTO PurchaseInvoicePayments (purchase_invoice_id, payment_date, amount, payment_method, notes) VALUES ($1, $2, $3, $4, $5)',
-      [invoiceId, payment_date, amount, payment_method, notes || null]
+      [invoiceId, formattedDate, amount, payment_method, notes || null]
     );
 
     // Update the invoice balance and status
