@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import AppLayout from '@/components/layout/AppLayout';
@@ -9,7 +10,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { PlusCircle, FileDown, Settings2, Loader2, AlertTriangle, Trash2, ChevronLeft, ChevronRight, Eye, ShoppingCart, Printer, Barcode as BarcodeIcon, DollarSign, Calendar as CalendarIcon } from 'lucide-react';
+import { PlusCircle, FileDown, Settings2, Loader2, AlertTriangle, Trash2, ChevronLeft, ChevronRight, Eye, ShoppingCart, Printer, Barcode as BarcodeIcon, DollarSign, Calendar as CalendarIcon, FilterX } from 'lucide-react';
 import React, { useState, useMemo, useEffect } from 'react';
 import { format } from 'date-fns';
 import { Badge } from '@/components/ui/badge';
@@ -46,24 +47,25 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { cn } from "@/lib/utils";
+import { Separator } from '@/components/ui/separator';
 
 // API fetch function for the list of purchase invoices
 const fetchPurchaseInvoicesList = async (): Promise<PurchaseInvoice[]> => {
   const res = await fetch('/api/purchase-invoices');
   if (!res.ok) {
-    const errorData = await res.json().catch(() => ({ message: 'Network response was not ok and failed to parse error JSON.' }));
-    throw new Error(errorData.message || 'Network response was not ok');
+    const errorData = await res.json().catch(() => ({ message: 'La respuesta de la red no fue correcta y no se pudo analizar el JSON de error.' }));
+    throw new Error(errorData.message || 'La respuesta de la red no fue correcta');
   }
   return res.json();
 };
 
 // API fetch function for a single purchase invoice with its items and payments
 const fetchSinglePurchaseInvoiceDetails = async (invoiceId: string): Promise<PurchaseInvoice> => {
-  if (!invoiceId) throw new Error("Invoice ID is required to fetch details.");
+  if (!invoiceId) throw new Error("Se requiere un ID de factura para obtener los detalles.");
   const res = await fetch(`/api/purchase-invoices/${invoiceId}`);
   if (!res.ok) {
-    const errorData = await res.json().catch(() => ({ message: 'Failed to fetch invoice details.' }));
-    throw new Error(errorData.message || 'Failed to fetch invoice details.');
+    const errorData = await res.json().catch(() => ({ message: 'Error al obtener los detalles de la factura.' }));
+    throw new Error(errorData.message || 'Error al obtener los detalles de la factura.');
   }
   return res.json();
 };
@@ -73,15 +75,15 @@ const fetchSinglePurchaseInvoiceDetails = async (invoiceId: string): Promise<Pur
 const deletePurchaseInvoiceAPI = async (invoiceId: string): Promise<{ message: string }> => {
   const res = await fetch(`/api/purchase-invoices/${invoiceId}`, { method: 'DELETE' });
   if (!res.ok) {
-    const errorData = await res.json().catch(() => ({ message: 'Failed to delete invoice' }));
-    throw new Error(errorData.message || 'Failed to delete invoice');
+    const errorData = await res.json().catch(() => ({ message: 'Error al eliminar la factura' }));
+    throw new Error(errorData.message || 'Error al eliminar la factura');
   }
   return res.json();
 };
 
 const AddPaymentSchema = z.object({
-  amount: z.coerce.number().positive({ message: "Amount must be a positive number." }),
-  payment_method: z.string().min(1, "Payment method is required."),
+  amount: z.coerce.number().positive({ message: "El monto debe ser un número positivo." }),
+  payment_method: z.string().min(1, "El método de pago es obligatorio."),
   notes: z.string().optional(),
 });
 
@@ -94,8 +96,8 @@ const addPaymentAPI = async ({ invoiceId, data }: { invoiceId: string; data: Add
         body: JSON.stringify(data),
     });
     if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ message: 'Failed to add payment' }));
-        throw new Error(errorData.message || 'Failed to add payment');
+        const errorData = await response.json().catch(() => ({ message: 'Error al añadir el pago' }));
+        throw new Error(errorData.message || 'Error al añadir el pago');
     }
     return response.json();
 }
@@ -111,31 +113,52 @@ function AddPaymentModal({ isOpen, onClose, invoice }: AddPaymentModalProps) {
     const queryClient = useQueryClient();
     const { formatCurrency } = useCurrency();
 
+    const { data: payments = [], isLoading: isLoadingPayments } = useQuery<PurchaseInvoicePayment[], Error>({
+        queryKey: ['invoicePayments', invoice.id],
+        queryFn: async () => {
+            const res = await fetch(`/api/purchase-invoices/${invoice.id}/payments`);
+            if (!res.ok) throw new Error('Error al obtener el historial de pagos');
+            return res.json();
+        },
+        enabled: isOpen,
+    });
+
     const form = useForm<AddPaymentFormValues>({
         resolver: zodResolver(AddPaymentSchema),
         defaultValues: {
-            amount: invoice.balanceDue,
+            amount: invoice.balanceDue > 0 ? invoice.balanceDue : 0,
             payment_method: 'Transfer',
             notes: '',
         }
     });
+
+    useEffect(() => {
+        if (invoice) {
+            form.reset({
+                amount: invoice.balanceDue > 0 ? invoice.balanceDue : 0,
+                payment_method: 'Transfer',
+                notes: ''
+            });
+        }
+    }, [invoice, form]);
     
     const addPaymentMutation = useMutation({
         mutationFn: addPaymentAPI,
         onSuccess: () => {
-            toast({ title: 'Payment Added', description: `Payment for invoice ${invoice.invoiceNumber} has been successfully recorded.` });
+            toast({ title: 'Pago Añadido', description: `El pago para la factura ${invoice.invoiceNumber} ha sido registrado.` });
             queryClient.invalidateQueries({ queryKey: ['purchaseInvoicesList'] });
             queryClient.invalidateQueries({ queryKey: ['purchaseInvoiceDetails', invoice.id] });
+            queryClient.invalidateQueries({ queryKey: ['invoicePayments', invoice.id] });
             onClose();
         },
         onError: (error: Error) => {
-            toast({ variant: 'destructive', title: 'Failed to Add Payment', description: error.message });
+            toast({ variant: 'destructive', title: 'Error al Añadir Pago', description: error.message });
         }
     });
 
     const onSubmit = (data: AddPaymentFormValues) => {
         if (data.amount > invoice.balanceDue) {
-            form.setError('amount', { type: 'manual', message: `Amount cannot exceed balance due of ${formatCurrency(invoice.balanceDue)}` });
+            form.setError('amount', { type: 'manual', message: `El monto no puede exceder el saldo pendiente de ${formatCurrency(invoice.balanceDue)}` });
             return;
         }
         addPaymentMutation.mutate({
@@ -148,43 +171,48 @@ function AddPaymentModal({ isOpen, onClose, invoice }: AddPaymentModalProps) {
         <Dialog open={isOpen} onOpenChange={onClose}>
             <DialogContent className="sm:max-w-md">
                 <DialogHeader>
-                    <DialogTitle>Add Payment to Invoice {invoice.invoiceNumber}</DialogTitle>
-                    <DialogDescription>Balance Due: <span className="font-bold">{formatCurrency(invoice.balanceDue)}</span></DialogDescription>
+                    <DialogTitle>Añadir Pago a Factura {invoice.invoiceNumber}</DialogTitle>
+                    <DialogDescription>Balance Pendiente: <span className="font-bold">{formatCurrency(invoice.balanceDue)}</span></DialogDescription>
                 </DialogHeader>
+
+                <div className="py-2">
+                    <h4 className="font-semibold mb-2 text-sm">Historial de Pagos</h4>
+                    {isLoadingPayments ? (
+                        <div className="flex justify-center items-center h-20"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>
+                    ) : payments.length > 0 ? (
+                        <div className="max-h-[150px] overflow-y-auto rounded-md border">
+                            <Table>
+                                <TableHeader>
+                                    <TableRow><TableHead>Fecha</TableHead><TableHead>Método</TableHead><TableHead className="text-right">Monto</TableHead></TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                    {payments.map((p) => (
+                                        <TableRow key={p.id}><TableCell>{format(new Date(p.payment_date), 'PP')}</TableCell><TableCell>{p.payment_method}</TableCell><TableCell className="text-right">{formatCurrency(p.amount)}</TableCell></TableRow>
+                                    ))}
+                                </TableBody>
+                            </Table>
+                        </div>
+                    ) : (
+                        <p className="text-muted-foreground text-sm text-center py-4">No se han registrado pagos.</p>
+                    )}
+                </div>
+                <Separator />
+                
                 <Form {...form}>
-                    <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 py-4">
+                    <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 pt-4">
                         <FormField control={form.control} name="amount" render={({ field }) => (
-                            <FormItem>
-                                <FormLabel>Amount *</FormLabel>
-                                <FormControl><Input type="number" step="0.01" {...field} /></FormControl>
-                                <FormMessage />
-                            </FormItem>
+                            <FormItem><FormLabel>Monto *</FormLabel><FormControl><Input type="number" step="0.01" {...field} /></FormControl><FormMessage /></FormItem>
                         )} />
                         
                         <FormField control={form.control} name="payment_method" render={({ field }) => (
-                            <FormItem>
-                                <FormLabel>Payment Method *</FormLabel>
-                                <Select onValueChange={field.onChange} defaultValue={field.value}>
-                                    <FormControl><SelectTrigger><SelectValue placeholder="Select a method" /></SelectTrigger></FormControl>
-                                    <SelectContent>
-                                        <SelectItem value="Cash">Cash</SelectItem>
-                                        <SelectItem value="Card">Card</SelectItem>
-                                        <SelectItem value="Transfer">Bank Transfer</SelectItem>
-                                    </SelectContent>
-                                </Select>
-                                <FormMessage />
-                            </FormItem>
+                            <FormItem><FormLabel>Método de Pago *</FormLabel><Select onValueChange={field.onChange} defaultValue={field.value}><FormControl><SelectTrigger><SelectValue placeholder="Seleccione un método" /></SelectTrigger></FormControl><SelectContent><SelectItem value="Cash">Efectivo</SelectItem><SelectItem value="Card">Tarjeta</SelectItem><SelectItem value="Transfer">Transferencia Bancaria</SelectItem></SelectContent></Select><FormMessage /></FormItem>
                         )} />
                         <FormField control={form.control} name="notes" render={({ field }) => (
-                            <FormItem>
-                                <FormLabel>Notes</FormLabel>
-                                <FormControl><Textarea placeholder="Optional payment notes" {...field} /></FormControl>
-                                <FormMessage />
-                            </FormItem>
+                            <FormItem><FormLabel>Notas</FormLabel><FormControl><Textarea placeholder="Notas opcionales del pago" {...field} /></FormControl><FormMessage /></FormItem>
                         )} />
                         <DialogFooter className="mt-4">
-                            <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
-                            <Button type="submit" disabled={addPaymentMutation.isPending}>{addPaymentMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin"/>}Record Payment</Button>
+                            <Button type="button" variant="outline" onClick={onClose}>Cancelar</Button>
+                            <Button type="submit" disabled={addPaymentMutation.isPending}>{addPaymentMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin"/>}Registrar Pago</Button>
                         </DialogFooter>
                     </form>
                 </Form>
@@ -214,10 +242,10 @@ function InvoiceRowActions({ invoice, deleteMutation, onViewDetails, onAddPaymen
     <div className="flex items-center justify-center space-x-1">
       <Button variant="ghost" size="icon" className="hover:text-primary h-8 w-8 sm:h-auto sm:w-auto" onClick={() => onViewDetails(invoice)}><Eye className="h-4 w-4" /></Button>
       {invoice.paymentTerms === 'Credit' && invoice.paymentStatus !== 'Paid' && (
-        <Button variant="ghost" size="icon" title="Add Payment" className="hover:text-green-600 h-8 w-8 sm:h-auto sm:w-auto" onClick={() => onAddPayment(invoice)}><DollarSign className="h-4 w-4" /></Button>
+        <Button variant="ghost" size="icon" title="Añadir Pago" className="hover:text-green-600 h-8 w-8 sm:h-auto sm:w-auto" onClick={() => onAddPayment(invoice)}><DollarSign className="h-4 w-4" /></Button>
       )}
       {!invoice.processed && (
-        <Button variant="ghost" size="icon" title="Process Invoice" className="hover:text-accent h-8 w-8 sm:h-auto sm:w-auto" asChild>
+        <Button variant="ghost" size="icon" title="Procesar Factura" className="hover:text-accent h-8 w-8 sm:h-auto sm:w-auto" asChild>
           <Link href={`/purchase-invoices/${invoice.id}/process`}><Settings2 className="h-4 w-4" /></Link>
         </Button>
       )}
@@ -226,10 +254,10 @@ function InvoiceRowActions({ invoice, deleteMutation, onViewDetails, onAddPaymen
           <Button variant="ghost" size="icon" className="hover:text-destructive h-8 w-8 sm:h-auto sm:w-auto"><Trash2 className="h-4 w-4" /></Button>
         </AlertDialogTrigger>
         <AlertDialogContent>
-          <AlertDialogHeader><AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle><AlertDialogDescription>This action cannot be undone. This will permanently delete the purchase invoice <span className="font-semibold">{invoice.invoiceNumber}</span> and all its associated payments. This action does NOT revert any stock changes if the invoice was already processed.</AlertDialogDescription></AlertDialogHeader>
+          <AlertDialogHeader><AlertDialogTitle>¿Está absolutamente seguro?</AlertDialogTitle><AlertDialogDescription>Esta acción no se puede deshacer. Esto eliminará permanentemente la factura de compra <span className="font-semibold">{invoice.invoiceNumber}</span> y todos sus pagos asociados. Esta acción NO revierte ningún cambio de stock si la factura ya fue procesada.</AlertDialogDescription></AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDeleteConfirm} disabled={deleteMutation.isPending && deleteMutation.variables === invoice.id} className="bg-destructive hover:bg-destructive/90 text-destructive-foreground">{(deleteMutation.isPending && deleteMutation.variables === invoice.id) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Delete</AlertDialogAction>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDeleteConfirm} disabled={deleteMutation.isPending && deleteMutation.variables === invoice.id} className="bg-destructive hover:bg-destructive/90 text-destructive-foreground">{(deleteMutation.isPending && deleteMutation.variables === invoice.id) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Eliminar</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
@@ -271,11 +299,11 @@ export default function PurchaseInvoicesPage() {
   const deleteMutation = useMutation<{ message: string }, Error, string>({
     mutationFn: deletePurchaseInvoiceAPI,
     onSuccess: (data) => {
-      toast({ title: "Purchase Invoice Deleted", description: data.message });
+      toast({ title: "Factura de Compra Eliminada", description: data.message });
       queryClient.invalidateQueries({ queryKey: ['purchaseInvoicesList'] });
     },
     onError: (error) => {
-      toast({ variant: "destructive", title: "Failed to Delete Invoice", description: error.message });
+      toast({ variant: "destructive", title: "Error al Eliminar Factura", description: error.message });
     },
   });
 
@@ -334,11 +362,11 @@ export default function PurchaseInvoicesPage() {
     const handleItemsPerPageChange = (value: string) => { setItemsPerPage(value === 'all' ? 'all' : Number(value)); };
     const paginationStartItem = itemsPerPage === 'all' || filteredInvoices.length === 0 ? (filteredInvoices.length > 0 ? 1 : 0) : (currentPage - 1) * Number(itemsPerPage) + 1;
     const paginationEndItem = itemsPerPage === 'all' ? filteredInvoices.length : Math.min(currentPage * Number(itemsPerPage), filteredInvoices.length);
-    const itemsPerPageOptions = [ { value: '20', label: '20 per page' }, { value: '40', label: '40 per page' }, { value: 'all', label: 'Show All' } ];
+    const itemsPerPageOptions = [ { value: '20', label: '20 por página' }, { value: '40', label: '40 por página' }, { value: 'all', label: 'Mostrar Todos' } ];
 
     const handlePrintBarcodes = async () => {
       if (!detailedInvoice?.items || detailedInvoice.items.length === 0) {
-        toast({ variant: "destructive", title: "No Items", description: "This invoice has no items to print barcodes for." });
+        toast({ variant: "destructive", title: "Sin Artículos", description: "Esta factura no tiene artículos para imprimir códigos de barras." });
         return;
       }
       setIsPrintingBarcodes(true);
@@ -411,16 +439,16 @@ export default function PurchaseInvoicesPage() {
           }
       }
 
-      doc.save(`Invoice_${detailedInvoice.invoiceNumber}_Barcodes.pdf`);
+      doc.save(`Factura_${detailedInvoice.invoiceNumber}_Barcodes.pdf`);
       setIsPrintingBarcodes(false);
-      toast({ title: "PDF Generated", description: "Invoice item barcodes PDF has been downloaded." });
+      toast({ title: "PDF Generado", description: "El PDF de códigos de barras de la factura ha sido descargado." });
   };
 
 
   if (isLoadingList) {
     return (
       <AppLayout>
-        <PageHeader title="Purchase Invoices" description="Loading supplier invoices..." />
+        <PageHeader title="Facturas de Compra" description="Cargando facturas de proveedores..." />
         <div className="flex justify-center items-center h-64"><Loader2 className="h-12 w-12 animate-spin text-primary" /></div>
       </AppLayout>
     );
@@ -429,33 +457,33 @@ export default function PurchaseInvoicesPage() {
   if (isListError) {
     return (
       <AppLayout>
-        <PageHeader title="Purchase Invoices" description="Error loading invoices." />
-        <div className="bg-destructive/10 border border-destructive text-destructive p-4 rounded-md"><div className="flex items-center"><AlertTriangle className="mr-2 h-6 w-6" /> Error</div><p>{listError?.message || "An unknown error occurred."}</p></div>
+        <PageHeader title="Facturas de Compra" description="Error al cargar facturas." />
+        <div className="bg-destructive/10 border border-destructive text-destructive p-4 rounded-md"><div className="flex items-center"><AlertTriangle className="mr-2 h-6 w-6" /> Error</div><p>{listError?.message || "Ocurrió un error desconocido."}</p></div>
       </AppLayout>
     );
   }
 
   return (
     <AppLayout>
-      <PageHeader title="Purchase Invoices" description="Manage incoming supplier invoices.">
-        <Button asChild><Link href="/purchase-invoices/add"><PlusCircle className="mr-2 h-4 w-4" /> Add Invoice</Link></Button>
-        <Button variant="outline"><FileDown className="mr-2 h-4 w-4" /> Export CSV</Button>
+      <PageHeader title="Facturas de Compra" description="Gestiona las facturas de proveedores entrantes.">
+        <Button asChild><Link href="/purchase-invoices/add"><PlusCircle className="mr-2 h-4 w-4" /> Añadir Factura</Link></Button>
+        <Button variant="outline"><FileDown className="mr-2 h-4 w-4" /> Exportar CSV</Button>
       </PageHeader>
 
-      <div className="mb-6"><Input placeholder="Search by Invoice #, Supplier..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full sm:max-w-sm" /></div>
+      <div className="mb-6"><Input placeholder="Buscar por # de Factura, Proveedor..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full sm:max-w-sm" /></div>
 
       <div className="rounded-lg border shadow-sm bg-card">
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Invoice #</TableHead>
-              <TableHead className="hidden sm:table-cell">Date</TableHead>
-              <TableHead>Supplier</TableHead>
+              <TableHead># Factura</TableHead>
+              <TableHead className="hidden sm:table-cell">Fecha</TableHead>
+              <TableHead>Proveedor</TableHead>
               <TableHead className="text-right hidden md:table-cell">Total</TableHead>
-              <TableHead className="text-right hidden md:table-cell">Balance Due</TableHead>
-              <TableHead className="text-center">Payment Status</TableHead>
-              <TableHead className="text-center">Processed</TableHead>
-              <TableHead className="text-center">Actions</TableHead>
+              <TableHead className="text-right hidden md:table-cell">Saldo Pendiente</TableHead>
+              <TableHead className="text-center">Estado de Pago</TableHead>
+              <TableHead className="text-center">Procesada</TableHead>
+              <TableHead className="text-center">Acciones</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -467,18 +495,18 @@ export default function PurchaseInvoicesPage() {
                 <TableCell className="text-right hidden md:table-cell">{formatCurrency(invoice.totalAmount)}</TableCell>
                 <TableCell className="text-right hidden md:table-cell font-semibold">{formatCurrency(invoice.balanceDue)}</TableCell>
                 <TableCell className="text-center"><Badge variant={getPaymentStatusBadgeVariant(invoice.paymentStatus)} className={invoice.paymentStatus === 'Paid' ? "bg-green-500 hover:bg-green-600" : ""}>{invoice.paymentStatus}</Badge></TableCell>
-                <TableCell className="text-center"><Badge variant={invoice.processed ? 'default' : 'secondary'} className={invoice.processed ? "bg-green-500 hover:bg-green-600" : ""}>{invoice.processed ? 'Processed' : 'Pending'}</Badge></TableCell>
+                <TableCell className="text-center"><Badge variant={invoice.processed ? 'default' : 'secondary'} className={invoice.processed ? "bg-green-500 hover:bg-green-600" : ""}>{invoice.processed ? 'Procesada' : 'Pendiente'}</Badge></TableCell>
                 <TableCell className="text-center"><InvoiceRowActions invoice={invoice} deleteMutation={deleteMutation} onViewDetails={handleViewDetails} onAddPayment={handleAddPayment} /></TableCell>
               </TableRow>
             ))}
-            {displayedInvoices.length === 0 && (<TableRow><TableCell colSpan={8} className="h-24 text-center">No purchase invoices found.</TableCell></TableRow>)}
+            {displayedInvoices.length === 0 && (<TableRow><TableCell colSpan={8} className="h-24 text-center">No se encontraron facturas de compra.</TableCell></TableRow>)}
           </TableBody>
         </Table>
       </div>
       <div className="mt-6 flex flex-col sm:flex-row items-center justify-between gap-4">
-        <div className="flex items-center gap-2"><span className="text-sm text-muted-foreground">Rows per page:</span><Select value={itemsPerPage.toString()} onValueChange={handleItemsPerPageChange}><SelectTrigger className="w-[120px] h-9"><SelectValue placeholder="Items per page" /></SelectTrigger><SelectContent>{itemsPerPageOptions.map(option => (<SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>))}</SelectContent></Select></div>
-        <div className="text-sm text-muted-foreground">{filteredInvoices.length > 0 ? `Showing ${paginationStartItem}-${paginationEndItem} of ${filteredInvoices.length} invoices` : "No invoices"}</div>
-        <div className="flex items-center gap-2"><Button variant="outline" size="sm" onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))} disabled={currentPage === 1 || itemsPerPage === 'all'}><ChevronLeft className="h-4 w-4 mr-1" /> Previous</Button><span className="text-sm text-muted-foreground">Page {currentPage} of {totalPages}</span><Button variant="outline" size="sm" onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))} disabled={currentPage === totalPages || itemsPerPage === 'all'}>Next <ChevronRight className="h-4 w-4 ml-1" /></Button></div>
+        <div className="flex items-center gap-2"><span className="text-sm text-muted-foreground">Filas por página:</span><Select value={itemsPerPage.toString()} onValueChange={handleItemsPerPageChange}><SelectTrigger className="w-[120px] h-9"><SelectValue placeholder="Items por página" /></SelectTrigger><SelectContent>{itemsPerPageOptions.map(option => (<SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>))}</SelectContent></Select></div>
+        <div className="text-sm text-muted-foreground">{filteredInvoices.length > 0 ? `Mostrando ${paginationStartItem}-${paginationEndItem} de ${filteredInvoices.length} facturas` : "No hay facturas"}</div>
+        <div className="flex items-center gap-2"><Button variant="outline" size="sm" onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))} disabled={currentPage === 1 || itemsPerPage === 'all'}><ChevronLeft className="h-4 w-4 mr-1" /> Anterior</Button><span className="text-sm text-muted-foreground">Página {currentPage} de {totalPages}</span><Button variant="outline" size="sm" onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))} disabled={currentPage === totalPages || itemsPerPage === 'all'}>Siguiente <ChevronRight className="h-4 w-4 ml-1" /></Button></div>
       </div>
       
       {selectedInvoiceForPayment && isPaymentModalOpen && (<AddPaymentModal isOpen={isPaymentModalOpen} onClose={() => setIsPaymentModalOpen(false)} invoice={selectedInvoiceForPayment} />)}
@@ -486,15 +514,20 @@ export default function PurchaseInvoicesPage() {
       {selectedInvoiceForView && isViewModalOpen && (
         <Dialog open={isViewModalOpen} onOpenChange={setIsViewModalOpen}>
           <DialogContent className="sm:max-w-xl md:max-w-2xl">
-            <DialogHeader><DialogTitle className="flex items-center"><ShoppingCart className="mr-2 h-6 w-6 text-primary" />Invoice Details: {selectedInvoiceForView.invoiceNumber}</DialogTitle><DialogDescription>Supplier: {selectedInvoiceForView.supplierName} | Date: {format(new Date(selectedInvoiceForView.invoiceDate), 'PPP')}</DialogDescription></DialogHeader>
-            <div className="py-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+            <DialogHeader><DialogTitle className="flex items-center"><ShoppingCart className="mr-2 h-6 w-6 text-primary" />Detalles de Factura: {selectedInvoiceForView.invoiceNumber}</DialogTitle><DialogDescription>Proveedor: {selectedInvoiceForView.supplierName} | Fecha: {format(new Date(selectedInvoiceForView.invoiceDate), 'PPP')}</DialogDescription></DialogHeader>
+            <div className="py-4">
               {isLoadingDetailedInvoice ? (<div className="flex justify-center items-center h-40 md:col-span-2"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>) : detailedInvoice ? (
                 <>
-                  <div><h4 className="font-semibold mb-2">Items on Invoice:</h4>{detailedInvoice.items && detailedInvoice.items.length > 0 ? (<div className="max-h-[200px] overflow-y-auto rounded-md border"><Table><TableHeader><TableRow><TableHead>Product</TableHead><TableHead className="text-center">Qty</TableHead><TableHead className="text-right">Cost</TableHead></TableRow></TableHeader><TableBody>{detailedInvoice.items.map((item, index) => (<TableRow key={item.productId + index}><TableCell>{item.productName}</TableCell><TableCell className="text-center">{item.quantity}</TableCell><TableCell className="text-right">{formatCurrency(item.costPrice)}</TableCell></TableRow>))}</TableBody></Table></div>) : (<p className="text-muted-foreground text-sm">No items were recorded for this invoice.</p>)}</div>
-                  <div><h4 className="font-semibold mb-2">Payment History:</h4>{detailedInvoice.payments && detailedInvoice.payments.length > 0 ? (<div className="max-h-[200px] overflow-y-auto rounded-md border"><Table><TableHeader><TableRow><TableHead>Date</TableHead><TableHead>Method</TableHead><TableHead className="text-right">Amount</TableHead></TableRow></TableHeader><TableBody>{detailedInvoice.payments.map((p) => (<TableRow key={p.id}><TableCell>{format(new Date(p.payment_date), 'PP')}</TableCell><TableCell>{p.payment_method}</TableCell><TableCell className="text-right">{formatCurrency(p.amount)}</TableCell></TableRow>))}</TableBody></Table></div>) : (<p className="text-muted-foreground text-sm">No payments recorded.</p>)}</div>
-                  <div className="md:col-span-2 mt-4 text-right space-y-1"><p className="font-bold text-md">Total Amount: {formatCurrency(detailedInvoice.totalAmount)}</p><p className="font-bold text-lg text-destructive">Balance Due: {formatCurrency(detailedInvoice.balanceDue)}</p></div>
+                  <div>
+                    <h4 className="font-semibold mb-2">Artículos en la Factura:</h4>
+                    {detailedInvoice.items && detailedInvoice.items.length > 0 ? (<div className="max-h-[200px] overflow-y-auto rounded-md border"><Table><TableHeader><TableRow><TableHead>Producto</TableHead><TableHead className="text-center">Cant</TableHead><TableHead className="text-right">Costo/Ud</TableHead></TableRow></TableHeader><TableBody>{detailedInvoice.items.map((item, index) => (<TableRow key={item.productId + index}><TableCell>{item.productName}</TableCell><TableCell className="text-center">{item.quantity}</TableCell><TableCell className="text-right">{formatCurrency(item.costPrice)}</TableCell></TableRow>))}</TableBody></Table></div>) : (<p className="text-muted-foreground text-sm">No se registraron artículos para esta factura.</p>)}
+                  </div>
+                  <div className="md:col-span-2 mt-4 text-right space-y-1">
+                    <p className="font-bold text-md">Monto Total: {formatCurrency(detailedInvoice.totalAmount)}</p>
+                    <p className="font-bold text-lg text-destructive">Balance Pendiente: {formatCurrency(detailedInvoice.balanceDue)}</p>
+                  </div>
                 </>
-              ) : (<div className="md:col-span-2 text-destructive">Failed to load details.</div>)}
+              ) : (<div className="md:col-span-2 text-destructive">Error al cargar detalles.</div>)}
             </div>
             <DialogFooter className="flex-col sm:flex-row sm:justify-between items-center pt-4">
               <Button
@@ -504,10 +537,10 @@ export default function PurchaseInvoicesPage() {
                   className="w-full sm:w-auto"
               >
                   {isPrintingBarcodes ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <BarcodeIcon className="mr-2 h-4 w-4" />}
-                  Print Item Barcodes
+                  Imprimir Códigos de Barras
               </Button>
               <DialogClose asChild>
-                <Button type="button" variant="secondary" className="w-full sm:w-auto mt-2 sm:mt-0">Close</Button>
+                <Button type="button" variant="secondary" className="w-full sm:w-auto mt-2 sm:mt-0">Cerrar</Button>
               </DialogClose>
             </DialogFooter>
           </DialogContent>
@@ -516,5 +549,3 @@ export default function PurchaseInvoicesPage() {
     </AppLayout>
   );
 }
-
-    
