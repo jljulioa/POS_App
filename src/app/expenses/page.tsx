@@ -11,7 +11,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Calendar as CalendarIcon, DollarSign, PlusCircle, Save, Loader2, AlertTriangle, FilterX, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Calendar as CalendarIcon, DollarSign, PlusCircle, Save, Loader2, AlertTriangle, FilterX, ChevronLeft, ChevronRight, Edit3, Trash2 } from 'lucide-react';
 import { Calendar } from "@/components/ui/calendar";
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -23,7 +23,17 @@ import type { DailyExpense, ExpenseCategoryEnum } from '@/lib/mockData';
 import { expenseCategories } from '@/lib/mockData'; 
 import React, { useState, useEffect, useMemo } from 'react';
 import { cn } from "@/lib/utils";
-import { useCurrency } from '@/contexts/CurrencyContext'; // Import useCurrency
+import { useCurrency } from '@/contexts/CurrencyContext';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 const ExpenseCategoryEnumSchema = z.enum(expenseCategories as [ExpenseCategoryEnum, ...ExpenseCategoryEnum[]]);
 
@@ -81,23 +91,51 @@ const addExpenseAPI = async (newExpense: ExpenseFormValues): Promise<DailyExpens
   return response.json();
 };
 
+const updateExpenseAPI = async ({ id, data }: { id: number; data: ExpenseFormValues }): Promise<DailyExpense> => {
+  const apiPayload = { ...data, expenseDate: format(data.expenseDate, "yyyy-MM-dd") };
+  const response = await fetch(`/api/expenses/${id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(apiPayload),
+  });
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({ message: 'Failed to update expense' }));
+    throw new Error(errorData.message || 'Failed to update expense');
+  }
+  return response.json();
+};
+
+const deleteExpenseAPI = async (id: number): Promise<{ message: string }> => {
+  const response = await fetch(`/api/expenses/${id}`, { method: 'DELETE' });
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({ message: 'Failed to delete expense' }));
+    throw new Error(errorData.message || 'Failed to delete expense');
+  }
+  return response.json();
+};
+
+
 export default function ExpensesPage() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const { formatCurrency } = useCurrency(); // Use currency context
+  const { formatCurrency } = useCurrency();
   const [startDate, setStartDate] = useState<Date | undefined>(undefined);
   const [endDate, setEndDate] = useState<Date | undefined>(undefined);
-  const [searchTerm, setSearchTerm] = useState(''); // For filtering expenses client-side after fetch
+  const [searchTerm, setSearchTerm] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState<number | 'all'>(20);
 
+  const [formMode, setFormMode] = useState<'add' | 'edit'>('add');
+  const [editingExpense, setEditingExpense] = useState<DailyExpense | null>(null);
+  const [expenseToDelete, setExpenseToDelete] = useState<DailyExpense | null>(null);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
 
   const queryKeyParams = [
     startDate ? format(startDate, 'yyyy-MM-dd') : 'all',
     endDate ? format(endDate, 'yyyy-MM-dd') : 'all',
   ];
 
-  const { data: fetchedExpenses = [], isLoading: isLoadingExpenses, error: expensesError, refetch: refetchExpenses } = useQuery<DailyExpense[], Error>({
+  const { data: fetchedExpenses = [], isLoading: isLoadingExpenses, error: expensesError } = useQuery<DailyExpense[], Error>({
     queryKey: ['expenses', ...queryKeyParams],
     queryFn: () => fetchExpensesAPI(startDate, endDate),
   });
@@ -119,8 +157,71 @@ export default function ExpensesPage() {
     },
   });
 
+  const updateMutation = useMutation<DailyExpense, Error, { id: number; data: ExpenseFormValues }>({
+    mutationFn: updateExpenseAPI,
+    onSuccess: (data) => {
+      toast({ title: "Expense Updated", description: `${data.description} has been updated.` });
+      queryClient.invalidateQueries({ queryKey: ['expenses'] });
+      handleCancelEdit();
+    },
+    onError: (error) => {
+      toast({ variant: "destructive", title: "Failed to Update Expense", description: error.message });
+    },
+  });
+
+  const deleteMutation = useMutation<{ message: string }, Error, number>({
+    mutationFn: deleteExpenseAPI,
+    onSuccess: (data, deletedExpenseId) => {
+        toast({ title: "Expense Deleted", description: `Expense has been deleted.` });
+        queryClient.invalidateQueries({ queryKey: ['expenses'] });
+        if (editingExpense?.id === deletedExpenseId) {
+            handleCancelEdit();
+        }
+        setIsDeleteDialogOpen(false);
+        setExpenseToDelete(null);
+    },
+    onError: (error) => {
+        toast({ variant: "destructive", title: "Failed to Delete Expense", description: error.message });
+        setIsDeleteDialogOpen(false);
+        setExpenseToDelete(null);
+    }
+  });
+  
   const onSubmit = (data: ExpenseFormValues) => {
-    addMutation.mutate(data);
+    if (formMode === 'edit' && editingExpense) {
+      updateMutation.mutate({ id: editingExpense.id, data });
+    } else {
+      addMutation.mutate(data);
+    }
+  };
+
+  const handleEditClick = (expense: DailyExpense) => {
+    setFormMode('edit');
+    setEditingExpense(expense);
+    form.reset({
+      expenseDate: parseISO(expense.expenseDate),
+      description: expense.description,
+      category: expense.category,
+      amount: expense.amount,
+      notes: expense.notes || '',
+    });
+  };
+
+  const handleCancelEdit = () => {
+    setFormMode('add');
+    setEditingExpense(null);
+    form.reset(defaultFormValues);
+  };
+
+  const handleDeleteClick = (expense: DailyExpense) => {
+    setExpenseToDelete(expense);
+    setIsDeleteDialogOpen(true);
+  };
+
+  const confirmDelete = () => {
+    if (expenseToDelete) {
+        deleteMutation.mutate(expenseToDelete.id);
+    }
   };
 
   const filteredExpenses = useMemo(() => {
@@ -137,7 +238,6 @@ export default function ExpensesPage() {
     return filteredExpenses.reduce((sum, expense) => sum + expense.amount, 0);
   }, [filteredExpenses]);
 
-
   const totalPages = useMemo(() => {
     if (itemsPerPage === 'all' || filteredExpenses.length === 0) return 1;
     return Math.ceil(filteredExpenses.length / Number(itemsPerPage));
@@ -151,38 +251,24 @@ export default function ExpensesPage() {
     return filteredExpenses.slice(startIndex, endIndex);
   }, [filteredExpenses, currentPage, itemsPerPage]);
 
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [startDate, endDate, searchTerm, itemsPerPage]);
+  useEffect(() => { setCurrentPage(1); }, [startDate, endDate, searchTerm, itemsPerPage]);
 
   useEffect(() => {
     if (currentPage > totalPages && totalPages > 0) setCurrentPage(totalPages);
     else if (totalPages === 0 && filteredExpenses.length > 0) setCurrentPage(1);
   }, [filteredExpenses.length, totalPages, currentPage]);
 
-  const handleItemsPerPageChange = (value: string) => {
-    setItemsPerPage(value === 'all' ? 'all' : Number(value));
-  };
+  const handleItemsPerPageChange = (value: string) => { setItemsPerPage(value === 'all' ? 'all' : Number(value)); };
 
   const paginationStartItem = itemsPerPage === 'all' || filteredExpenses.length === 0 ? (filteredExpenses.length > 0 ? 1 : 0) : (currentPage - 1) * Number(itemsPerPage) + 1;
   const paginationEndItem = itemsPerPage === 'all' ? filteredExpenses.length : Math.min(currentPage * Number(itemsPerPage), filteredExpenses.length);
 
-  const itemsPerPageOptions = [
-    { value: '20', label: '20 per page' },
-    { value: '40', label: '40 per page' },
-    { value: 'all', label: 'Show All' },
-  ];
+  const itemsPerPageOptions = [{ value: '20', label: '20 per page' }, { value: '40', label: '40 per page' }, { value: 'all', label: 'Show All' }];
 
-  const handleClearFilters = () => {
-    setStartDate(undefined);
-    setEndDate(undefined);
-    // setSearchTerm(''); // Optionally clear search term as well
-  };
+  const handleClearFilters = () => { setStartDate(undefined); setEndDate(undefined); };
 
   const pageTitle = useMemo(() => {
-    if (startDate && endDate) {
-      return `Expenses from ${format(startDate, "PPP")} to ${format(endDate, "PPP")}`;
-    }
+    if (startDate && endDate) { return `Expenses from ${format(startDate, "PPP")} to ${format(endDate, "PPP")}`; }
     return "All Recorded Expenses";
   }, [startDate, endDate]);
 
@@ -192,56 +278,14 @@ export default function ExpensesPage() {
       <PageHeader title="Daily Expenses" description="Track and manage your daily operational costs.">
         <div className="flex items-center gap-2 flex-wrap">
             <Popover>
-              <PopoverTrigger asChild>
-                <Button
-                  variant={"outline"}
-                  className={cn(
-                    "w-full sm:w-[180px] justify-start text-left font-normal",
-                    !startDate && "text-muted-foreground"
-                  )}
-                >
-                  <CalendarIcon className="mr-2 h-4 w-4" />
-                  {startDate ? format(startDate, "PPP") : <span>Start Date</span>}
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-auto p-0">
-                <Calendar
-                  mode="single"
-                  selected={startDate}
-                  onSelect={setStartDate}
-                  disabled={(date) => endDate ? date > endDate : false}
-                  initialFocus
-                />
-              </PopoverContent>
+              <PopoverTrigger asChild><Button variant={"outline"} className={cn("w-full sm:w-[180px] justify-start text-left font-normal",!startDate && "text-muted-foreground")}><CalendarIcon className="mr-2 h-4 w-4" />{startDate ? format(startDate, "PPP") : <span>Start Date</span>}</Button></PopoverTrigger>
+              <PopoverContent className="w-auto p-0"><Calendar mode="single" selected={startDate} onSelect={setStartDate} disabled={(date) => endDate ? date > endDate : false} initialFocus/></PopoverContent>
             </Popover>
             <Popover>
-              <PopoverTrigger asChild>
-                <Button
-                  variant={"outline"}
-                  className={cn(
-                    "w-full sm:w-[180px] justify-start text-left font-normal",
-                    !endDate && "text-muted-foreground"
-                  )}
-                >
-                  <CalendarIcon className="mr-2 h-4 w-4" />
-                  {endDate ? format(endDate, "PPP") : <span>End Date</span>}
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-auto p-0">
-                <Calendar
-                  mode="single"
-                  selected={endDate}
-                  onSelect={setEndDate}
-                  disabled={(date) => startDate ? date < startDate : false}
-                  initialFocus
-                />
-              </PopoverContent>
+              <PopoverTrigger asChild><Button variant={"outline"} className={cn("w-full sm:w-[180px] justify-start text-left font-normal",!endDate && "text-muted-foreground")}><CalendarIcon className="mr-2 h-4 w-4" />{endDate ? format(endDate, "PPP") : <span>End Date</span>}</Button></PopoverTrigger>
+              <PopoverContent className="w-auto p-0"><Calendar mode="single" selected={endDate} onSelect={setEndDate} disabled={(date) => startDate ? date < startDate : false} initialFocus/></PopoverContent>
             </Popover>
-            {(startDate || endDate) && (
-              <Button variant="ghost" onClick={handleClearFilters} className="text-muted-foreground hover:text-destructive">
-                <FilterX className="mr-2 h-4 w-4" /> Clear
-              </Button>
-            )}
+            {(startDate || endDate) && (<Button variant="ghost" onClick={handleClearFilters} className="text-muted-foreground hover:text-destructive"><FilterX className="mr-2 h-4 w-4" /> Clear</Button>)}
         </div>
       </PageHeader>
 
@@ -252,104 +296,28 @@ export default function ExpensesPage() {
               <Card className="shadow-lg">
                 <CardHeader>
                   <CardTitle className="flex items-center">
-                    <PlusCircle className="mr-2 h-6 w-6 text-primary" />
-                    Add New Expense
+                    {formMode === 'edit' ? <Edit3 className="mr-2 h-6 w-6 text-accent" /> : <PlusCircle className="mr-2 h-6 w-6 text-primary" />}
+                    {formMode === 'edit' ? 'Edit Expense' : 'Add New Expense'}
                   </CardTitle>
+                  {formMode === 'edit' && editingExpense && <CardDescription>Editing: {editingExpense.description}</CardDescription>}
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  <FormField
-                    control={form.control}
-                    name="expenseDate"
-                    render={({ field }) => (
-                      <FormItem className="flex flex-col">
-                        <FormLabel>Expense Date *</FormLabel>
-                        <Popover>
-                          <PopoverTrigger asChild>
-                            <FormControl>
-                              <Button
-                                variant={"outline"}
-                                className={cn("w-full pl-3 text-left font-normal", !field.value && "text-muted-foreground")}
-                              >
-                                {field.value ? format(field.value, "PPP") : <span>Pick a date</span>}
-                                <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
-                              </Button>
-                            </FormControl>
-                          </PopoverTrigger>
-                          <PopoverContent className="w-auto p-0" align="start">
-                            <Calendar mode="single" selected={field.value} onSelect={field.onChange} initialFocus />
-                          </PopoverContent>
-                        </Popover>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={form.control}
-                    name="description"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Description *</FormLabel>
-                        <FormControl>
-                          <Input placeholder="e.g., Office electricity bill" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={form.control}
-                    name="category"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Category *</FormLabel>
-                        <Select onValueChange={field.onChange} defaultValue={field.value}>
-                          <FormControl>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Select a category" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            {expenseCategories.map(cat => (
-                              <SelectItem key={cat} value={cat}>{cat}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={form.control}
-                    name="amount"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Amount *</FormLabel>
-                        <FormControl>
-                          <Input type="number" step="0.01" placeholder="e.g., 75.50" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={form.control}
-                    name="notes"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Notes (Optional)</FormLabel>
-                        <FormControl>
-                          <Textarea placeholder="e.g., Paid via online transfer, ref #123" {...field} value={field.value ?? ''} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
+                  <FormField control={form.control} name="expenseDate" render={({ field }) => (
+                      <FormItem className="flex flex-col"><FormLabel>Expense Date *</FormLabel><Popover><PopoverTrigger asChild><FormControl><Button variant={"outline"} className={cn("w-full pl-3 text-left font-normal", !field.value && "text-muted-foreground")}>{field.value ? format(field.value, "PPP") : <span>Pick a date</span>}<CalendarIcon className="ml-auto h-4 w-4 opacity-50" /></Button></FormControl></PopoverTrigger><PopoverContent className="w-auto p-0" align="start"><Calendar mode="single" selected={field.value} onSelect={field.onChange} initialFocus /></PopoverContent></Popover><FormMessage /></FormItem>
+                  )} />
+                  <FormField control={form.control} name="description" render={({ field }) => ( <FormItem><FormLabel>Description *</FormLabel><FormControl><Input placeholder="e.g., Office electricity bill" {...field} /></FormControl><FormMessage /></FormItem> )} />
+                  <FormField control={form.control} name="category" render={({ field }) => (
+                      <FormItem><FormLabel>Category *</FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue placeholder="Select a category" /></SelectTrigger></FormControl><SelectContent>{expenseCategories.map(cat => (<SelectItem key={cat} value={cat}>{cat}</SelectItem>))}</SelectContent></Select><FormMessage /></FormItem>
+                  )} />
+                  <FormField control={form.control} name="amount" render={({ field }) => ( <FormItem><FormLabel>Amount *</FormLabel><FormControl><Input type="number" step="0.01" placeholder="e.g., 75.50" {...field} /></FormControl><FormMessage /></FormItem> )} />
+                  <FormField control={form.control} name="notes" render={({ field }) => ( <FormItem><FormLabel>Notes (Optional)</FormLabel><FormControl><Textarea placeholder="e.g., Paid via online transfer, ref #123" {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem> )} />
                 </CardContent>
-                <CardFooter>
-                  <Button type="submit" disabled={addMutation.isPending} className="w-full">
-                    {addMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
-                    {addMutation.isPending ? 'Saving...' : 'Save Expense'}
+                <CardFooter className="flex-col gap-2">
+                  <Button type="submit" disabled={addMutation.isPending || updateMutation.isPending} className="w-full">
+                    {addMutation.isPending || updateMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+                    {addMutation.isPending || updateMutation.isPending ? 'Saving...' : (formMode === 'edit' ? 'Update Expense' : 'Save Expense')}
                   </Button>
+                  {formMode === 'edit' && (<Button type="button" variant="outline" onClick={handleCancelEdit} className="w-full">Cancel Edit</Button>)}
                 </CardFooter>
               </Card>
             </form>
@@ -363,47 +331,31 @@ export default function ExpensesPage() {
                   <CardTitle className="flex items-center"><DollarSign className="mr-2 h-5 w-5 text-primary"/>{pageTitle}</CardTitle>
                   <span className="text-base sm:text-lg font-semibold text-primary">Total: {formatCurrency(totalFilteredExpensesAmount)}</span>
               </div>
-               <Input
-                  placeholder="Filter displayed expenses by description, category, notes..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="mt-2"
-                />
+               <Input placeholder="Filter displayed expenses by description, category, notes..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="mt-2"/>
             </CardHeader>
             <CardContent>
-              {isLoadingExpenses && (
-                <div className="flex justify-center items-center h-40"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
-              )}
-              {expensesError && (
-                <div className="text-destructive p-4 border border-destructive rounded-md">
-                  <AlertTriangle className="mr-2 h-5 w-5 inline-block" /> Failed to load expenses: {expensesError?.message}
-                </div>
-              )}
-              {!isLoadingExpenses && !expensesError && displayedExpenses.length === 0 && (
-                <p className="text-muted-foreground text-center py-4">No expenses recorded for the selected criteria.</p>
-              )}
+              {isLoadingExpenses && (<div className="flex justify-center items-center h-40"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>)}
+              {expensesError && (<div className="text-destructive p-4 border border-destructive rounded-md"><AlertTriangle className="mr-2 h-5 w-5 inline-block" /> Failed to load expenses: {expensesError?.message}</div>)}
+              {!isLoadingExpenses && !expensesError && displayedExpenses.length === 0 && (<p className="text-muted-foreground text-center py-4">No expenses recorded for the selected criteria.</p>)}
               {!isLoadingExpenses && !expensesError && displayedExpenses.length > 0 && (
                 <div className="rounded-lg border shadow-sm overflow-x-auto">
                   <Table>
                     <TableHeader>
-                      <TableRow>
-                        <TableHead className="w-[120px]">Date</TableHead>
-                        <TableHead>Description</TableHead>
-                        <TableHead className="w-[150px]">Category</TableHead>
-                        <TableHead className="text-right w-[100px]">Amount</TableHead>
-                        <TableHead>Notes</TableHead>
-                        <TableHead className="w-[100px]">Recorded At</TableHead>
-                      </TableRow>
+                      <TableRow><TableHead className="w-[120px]">Date</TableHead><TableHead>Description</TableHead><TableHead>Category</TableHead><TableHead className="text-right">Amount</TableHead><TableHead>Notes</TableHead><TableHead>Recorded At</TableHead><TableHead className="text-center w-[100px]">Actions</TableHead></TableRow>
                     </TableHeader>
                     <TableBody>
                       {displayedExpenses.map((expense) => (
                         <TableRow key={expense.id}>
                           <TableCell className="text-sm whitespace-nowrap">{format(parseISO(expense.expenseDate), 'MMM d, yyyy')}</TableCell>
                           <TableCell className="font-medium">{expense.description}</TableCell>
-                          <TableCell className="whitespace-nowrap">{expense.category}</TableCell>
-                          <TableCell className="text-right whitespace-nowrap">{formatCurrency(expense.amount)}</TableCell>
+                          <TableCell>{expense.category}</TableCell>
+                          <TableCell className="text-right">{formatCurrency(expense.amount)}</TableCell>
                           <TableCell className="text-sm text-muted-foreground">{expense.notes || 'N/A'}</TableCell>
-                           <TableCell className="text-sm whitespace-nowrap">{format(parseISO(expense.createdAt), 'p')}</TableCell>
+                          <TableCell className="text-sm whitespace-nowrap">{format(parseISO(expense.createdAt), 'p')}</TableCell>
+                          <TableCell className="text-center">
+                            <Button variant="ghost" size="icon" className="hover:text-accent h-8 w-8" onClick={() => handleEditClick(expense)} disabled={deleteMutation.isPending}><Edit3 className="h-4 w-4" /></Button>
+                            <Button variant="ghost" size="icon" className="hover:text-destructive h-8 w-8" onClick={() => handleDeleteClick(expense)} disabled={deleteMutation.isPending}><Trash2 className="h-4 w-4" /></Button>
+                          </TableCell>
                         </TableRow>
                       ))}
                     </TableBody>
@@ -413,29 +365,26 @@ export default function ExpensesPage() {
             </CardContent>
              {(!isLoadingExpenses && !expensesError && filteredExpenses.length > 0) && (
                 <CardFooter className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-4 border-t">
-                     <div className="flex items-center gap-2">
-                        <span className="text-sm text-muted-foreground">Rows per page:</span>
-                        <Select value={itemsPerPage.toString()} onValueChange={handleItemsPerPageChange}>
-                            <SelectTrigger className="w-[120px] h-9"><SelectValue placeholder="Items per page" /></SelectTrigger>
-                            <SelectContent>{itemsPerPageOptions.map(option => (<SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>))}</SelectContent>
-                        </Select>
-                    </div>
+                     <div className="flex items-center gap-2"><span className="text-sm text-muted-foreground">Rows per page:</span><Select value={itemsPerPage.toString()} onValueChange={handleItemsPerPageChange}><SelectTrigger className="w-[120px] h-9"><SelectValue placeholder="Items per page" /></SelectTrigger><SelectContent>{itemsPerPageOptions.map(option => (<SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>))}</SelectContent></Select></div>
                     <div className="text-sm text-muted-foreground">{filteredExpenses.length > 0 ? `Showing ${paginationStartItem}-${paginationEndItem} of ${filteredExpenses.length} expenses` : "No expenses"}</div>
-                    <div className="flex items-center gap-2">
-                        <Button variant="outline" size="sm" onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))} disabled={currentPage === 1 || itemsPerPage === 'all'}><ChevronLeft className="h-4 w-4 mr-1" /> Previous</Button>
-                        <span className="text-sm text-muted-foreground">Page {currentPage} of {totalPages}</span>
-                        <Button variant="outline" size="sm" onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))} disabled={currentPage === totalPages || itemsPerPage === 'all'}>Next <ChevronRight className="h-4 w-4 ml-1" /></Button>
-                    </div>
+                    <div className="flex items-center gap-2"><Button variant="outline" size="sm" onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))} disabled={currentPage === 1 || itemsPerPage === 'all'}><ChevronLeft className="h-4 w-4 mr-1" /> Previous</Button><span className="text-sm text-muted-foreground">Page {currentPage} of {totalPages}</span><Button variant="outline" size="sm" onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))} disabled={currentPage === totalPages || itemsPerPage === 'all'}>Next <ChevronRight className="h-4 w-4 ml-1" /></Button></div>
                 </CardFooter>
             )}
           </Card>
         </div>
       </div>
+      <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+            <AlertDialogDescription>This action cannot be undone. This will permanently delete the expense <span className="font-semibold">"{expenseToDelete?.description}"</span>.</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setExpenseToDelete(null)}>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDelete} disabled={deleteMutation.isPending} className="bg-destructive hover:bg-destructive/90 text-destructive-foreground">{deleteMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}Delete</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </AppLayout>
   );
 }
-
-
-    
-
-    
