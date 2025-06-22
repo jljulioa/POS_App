@@ -17,6 +17,7 @@ const pathLabels: Record<string, string> = {
   'inventory-adjustment-summary': 'Inventory Adjustment Summary',
   'top-selling-products': 'Top Selling Products',
   'profit-loss': 'Profit & Loss Statement',
+  'balance-sheet': 'Balance Sheet',
   customers: 'Customers',
   'purchase-invoices': 'Purchase Invoices',
   expenses: 'Expenses',

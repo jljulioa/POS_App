@@ -4,7 +4,7 @@ import AppLayout from '@/components/layout/AppLayout';
 import { PageHeader } from '@/components/PageHeader';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { BarChart3, ArrowRight, FileText, Barcode as BarcodeIcon, Package, Trophy, PieChart, Wrench } from 'lucide-react';
+import { BarChart3, ArrowRight, FileText, Barcode as BarcodeIcon, Package, Trophy, PieChart, Wrench, Landmark } from 'lucide-react';
 import Link from 'next/link';
 
 interface ReportOptionCardProps {
@@ -55,6 +55,13 @@ export default function ReportsAndToolsPage() {
               icon={PieChart}
               link="/reports/profit-loss"
               linkText="View P&L Statement"
+            />
+            <ReportOptionCard
+              title="Balance Sheet"
+              description="Get a snapshot of your company's assets, liabilities, and equity."
+              icon={Landmark}
+              link="/reports/balance-sheet"
+              linkText="View Balance Sheet"
             />
             <ReportOptionCard
               title="Sales Summary Report"
