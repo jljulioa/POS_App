@@ -64,8 +64,12 @@ export async function POST(request: NextRequest) {
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
       RETURNING * 
     `;
-    // New invoices start as 'Unpaid' and balance is the total amount
-    const params = [id, invoiceNumber, invoiceDate, supplierName, totalAmount, paymentTerms, false, 'Unpaid', totalAmount];
+    
+    const isCashPayment = paymentTerms === 'Cash';
+    const paymentStatus = isCashPayment ? 'Paid' : 'Unpaid';
+    const balanceDue = isCashPayment ? 0 : totalAmount;
+
+    const params = [id, invoiceNumber, invoiceDate, supplierName, totalAmount, paymentTerms, false, paymentStatus, balanceDue];
     
     const result = await query(sql, params);
     const newInvoice: PurchaseInvoice = parsePurchaseInvoiceFromDB(result[0]);
