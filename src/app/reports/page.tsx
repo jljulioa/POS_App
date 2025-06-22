@@ -4,7 +4,7 @@ import AppLayout from '@/components/layout/AppLayout';
 import { PageHeader } from '@/components/PageHeader';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { BarChart3, ArrowRight, FileText, Barcode as BarcodeIcon, Package, Trophy } from 'lucide-react';
+import { BarChart3, ArrowRight, FileText, Barcode as BarcodeIcon, Package, Trophy, PieChart } from 'lucide-react';
 import Link from 'next/link';
 
 interface ReportOptionCardProps {
@@ -49,6 +49,13 @@ export default function ReportsAndToolsPage() {
         <div>
           <h2 className="text-xl font-semibold mb-4 text-foreground">Available Reports</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <ReportOptionCard
+              title="Profit & Loss Statement"
+              description="View revenue, costs, and profits over a selected period."
+              icon={PieChart}
+              link="/reports/profit-loss"
+              linkText="View P&L Statement"
+            />
             <ReportOptionCard
               title="Sales Summary Report"
               description="Analyze sales revenue, COGS, profit, and item performance over selected periods."
