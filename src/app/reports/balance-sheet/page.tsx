@@ -8,21 +8,17 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableRow } from '@/components/ui/table';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, AlertTriangle, Printer, Calendar as CalendarIcon, Wallet, Landmark, Info } from 'lucide-react';
+import { Loader2, AlertTriangle, Printer, Wallet, Landmark, Info } from 'lucide-react';
 import React, { useState, useMemo, Suspense } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { format, endOfDay, subMonths, startOfMonth } from 'date-fns';
+import { format, endOfDay } from 'date-fns';
 import { useCurrency } from '@/contexts/CurrencyContext';
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Calendar } from "@/components/ui/calendar";
-import { cn } from "@/lib/utils";
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import type { BalanceSheetData } from '@/app/api/reports/balance-sheet/route';
 
-const fetchBalanceSheetDataAPI = async (endDate: Date): Promise<BalanceSheetData> => {
-  const params = new URLSearchParams({ endDate: format(endDate, 'yyyy-MM-dd') });
-  const res = await fetch(`/api/reports/balance-sheet?${params.toString()}`);
+const fetchBalanceSheetDataAPI = async (): Promise<BalanceSheetData> => {
+  const res = await fetch(`/api/reports/balance-sheet`);
   if (!res.ok) {
     const errorData = await res.json().catch(() => ({ message: 'Network response was not ok' }));
     throw new Error(errorData.message || 'Failed to fetch Balance Sheet data');
@@ -33,16 +29,12 @@ const fetchBalanceSheetDataAPI = async (endDate: Date): Promise<BalanceSheetData
 function BalanceSheetContent() {
   const { toast } = useToast();
   const { formatCurrency } = useCurrency();
-  const today = new Date();
   
-  const [asOfDate, setAsOfDate] = useState<Date>(endOfDay(today));
   const [cashAndBank, setCashAndBank] = useState<string>('0');
   
-  const queryKey = useMemo(() => ['balanceSheetData', format(asOfDate, 'yyyy-MM-dd')], [asOfDate]);
-  
-  const { data: reportData, isLoading, error, isError } = useQuery<BalanceSheetData, Error>({
-    queryKey,
-    queryFn: () => fetchBalanceSheetDataAPI(asOfDate),
+  const { data: reportData, isLoading, error, isError, refetch } = useQuery<BalanceSheetData, Error>({
+    queryKey: ['balanceSheetDataRealtime'],
+    queryFn: fetchBalanceSheetDataAPI,
   });
 
   const parsedCashAndBank = useMemo(() => parseFloat(cashAndBank) || 0, [cashAndBank]);
@@ -71,7 +63,7 @@ function BalanceSheetContent() {
   if (isLoading) {
     return (
       <>
-        <PageHeader title="Balance Sheet" description="Loading financial position..." />
+        <PageHeader title="Real-Time Balance Sheet" description="Loading financial position..." />
         <Skeleton className="h-10 w-full max-w-sm mb-6" />
         <Card className="shadow-lg"><CardContent><Skeleton className="h-96 w-full" /></CardContent></Card>
       </>
@@ -82,29 +74,17 @@ function BalanceSheetContent() {
     return (
        <Card>
           <CardHeader><CardTitle className="text-destructive flex items-center"><AlertTriangle className="mr-2"/>Error Loading Report</CardTitle></CardHeader>
-          <CardContent><p>{error?.message}</p></CardContent>
+          <CardContent>
+            <p>{error?.message}</p>
+            <Button onClick={() => refetch()} className="mt-4">Try Again</Button>
+          </CardContent>
        </Card>
     )
   }
   
   return (
     <TooltipProvider>
-      <PageHeader title="Balance Sheet" description={`A snapshot of your company's financial health as of ${format(asOfDate, 'PPP')}`}>
-          <div className="flex flex-wrap items-center gap-2">
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button variant={"outline"}>
-                    <CalendarIcon className="mr-2 h-4 w-4" /> 
-                    <span>{format(asOfDate, "PPP")}</span>
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0" align="end">
-                  <Calendar mode="single" selected={asOfDate} onSelect={(date) => date && setAsOfDate(endOfDay(date))} initialFocus />
-                </PopoverContent>
-              </Popover>
-               <Button onClick={() => setAsOfDate(endOfDay(today))}>Today</Button>
-               <Button onClick={() => setAsOfDate(endOfDay(startOfMonth(today)))} variant="outline">End of Last Month</Button>
-          </div>
+      <PageHeader title="Real-Time Balance Sheet" description={`A snapshot of your company's financial health as of now, ${format(new Date(reportData.asOfDate), 'PPP')}.`}>
       </PageHeader>
       
       <Card className="mb-6">
@@ -163,7 +143,7 @@ function BalanceSheetContent() {
             <CardContent>
               <Table>
                 <TableBody>
-                  <TableRow><TableCell className="pl-4 flex items-center">Retained Earnings <Tooltip><TooltipTrigger asChild><Info className="h-4 w-4 ml-2 text-muted-foreground cursor-help"/></TooltipTrigger><TooltipContent><p>Cumulative net profit of the business up to the selected date. (All Revenue - All COGS - All Expenses)</p></TooltipContent></Tooltip></TableCell><TableCell className="text-right">{formatCurrency(totalEquity)}</TableCell></TableRow>
+                  <TableRow><TableCell className="pl-4 flex items-center">Retained Earnings <Tooltip><TooltipTrigger asChild><Info className="h-4 w-4 ml-2 text-muted-foreground cursor-help"/></TooltipTrigger><TooltipContent><p>Cumulative net profit of the business. (All Revenue - All COGS - All Expenses)</p></TooltipContent></Tooltip></TableCell><TableCell className="text-right">{formatCurrency(totalEquity)}</TableCell></TableRow>
                   <TableRow className="bg-muted/50 hover:bg-muted/50"><TableCell className="font-bold">Total Equity</TableCell><TableCell className="text-right font-bold text-lg">{formatCurrency(totalEquity)}</TableCell></TableRow>
                 </TableBody>
               </Table>
