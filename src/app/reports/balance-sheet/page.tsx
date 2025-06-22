@@ -163,7 +163,7 @@ function BalanceSheetContent() {
             <CardContent>
               <Table>
                 <TableBody>
-                  <TableRow><TableCell className="pl-4 flex items-center">Retained Earnings <Tooltip><TooltipTrigger asChild><Info className="h-4 w-4 ml-2 text-muted-foreground cursor-help"/></TooltipTrigger><TooltipContent><p>Cumulative net profit of the business up to the selected date.</p></TooltipContent></Tooltip></TableCell><TableCell className="text-right">{formatCurrency(totalEquity)}</TableCell></TableRow>
+                  <TableRow><TableCell className="pl-4 flex items-center">Retained Earnings <Tooltip><TooltipTrigger asChild><Info className="h-4 w-4 ml-2 text-muted-foreground cursor-help"/></TooltipTrigger><TooltipContent><p>Cumulative net profit of the business up to the selected date. (All Revenue - All COGS - All Expenses)</p></TooltipContent></Tooltip></TableCell><TableCell className="text-right">{formatCurrency(totalEquity)}</TableCell></TableRow>
                   <TableRow className="bg-muted/50 hover:bg-muted/50"><TableCell className="font-bold">Total Equity</TableCell><TableCell className="text-right font-bold text-lg">{formatCurrency(totalEquity)}</TableCell></TableRow>
                 </TableBody>
               </Table>
