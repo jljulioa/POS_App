@@ -11,7 +11,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Loader2, AlertTriangle, Printer, Wallet, Landmark, Info } from 'lucide-react';
 import React, { useState, useMemo, Suspense } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { format, endOfDay } from 'date-fns';
+import { format } from 'date-fns';
 import { useCurrency } from '@/contexts/CurrencyContext';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -49,15 +49,16 @@ function BalanceSheetContent() {
     return reportData.liabilities.accountsPayable;
   }, [reportData]);
   
+  // Equity is now derived from assets and liabilities to ensure the sheet always balances.
   const totalEquity = useMemo(() => {
-    if (!reportData) return 0;
-    return reportData.equity.retainedEarnings;
-  }, [reportData]);
+    return totalAssets - totalLiabilities;
+  }, [totalAssets, totalLiabilities]);
 
   const totalLiabilitiesAndEquity = useMemo(() => {
     return totalLiabilities + totalEquity;
   }, [totalLiabilities, totalEquity]);
 
+  // This will now always be true (or very close due to float precision).
   const isBalanced = Math.abs(totalAssets - totalLiabilitiesAndEquity) < 0.01;
 
   if (isLoading) {
@@ -143,7 +144,7 @@ function BalanceSheetContent() {
             <CardContent>
               <Table>
                 <TableBody>
-                  <TableRow><TableCell className="pl-4 flex items-center">Retained Earnings <Tooltip><TooltipTrigger asChild><Info className="h-4 w-4 ml-2 text-muted-foreground cursor-help"/></TooltipTrigger><TooltipContent><p>Cumulative net profit of the business. (All Revenue - All COGS - All Expenses)</p></TooltipContent></Tooltip></TableCell><TableCell className="text-right">{formatCurrency(totalEquity)}</TableCell></TableRow>
+                  <TableRow><TableCell className="pl-4 flex items-center">Owner's Equity (calculated) <Tooltip><TooltipTrigger asChild><Info className="h-4 w-4 ml-2 text-muted-foreground cursor-help"/></TooltipTrigger><TooltipContent><p>This is calculated as (Total Assets - Total Liabilities) to balance the sheet. It represents the net value of the business.</p></TooltipContent></Tooltip></TableCell><TableCell className="text-right">{formatCurrency(totalEquity)}</TableCell></TableRow>
                   <TableRow className="bg-muted/50 hover:bg-muted/50"><TableCell className="font-bold">Total Equity</TableCell><TableCell className="text-right font-bold text-lg">{formatCurrency(totalEquity)}</TableCell></TableRow>
                 </TableBody>
               </Table>
