@@ -632,11 +632,11 @@ export default function POSPage() {
                 <div
                   key={ticket.id}
                   className={cn(
-                    "flex items-center justify-between rounded-md group text-sm min-h-[2.5rem] border transition-all",
+                    "flex items-center justify-between rounded-md group text-sm border transition-all",
                     ticket.id === activeTicketId
                       ? "bg-primary text-primary-foreground shadow-md" 
                       : "bg-card hover:bg-muted text-card-foreground hover:shadow-sm",
-                     "px-3 py-2" 
+                     "px-3 py-1" 
                   )}
                 >
                   <div
