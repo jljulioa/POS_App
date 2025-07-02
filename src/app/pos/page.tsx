@@ -690,9 +690,9 @@ export default function POSPage() {
               )}
             </div>
           </ScrollArea>
-          <Button size="sm" onClick={() => handleCreateNewTicket()} disabled={isProcessingAnyTicketAction || isProcessingSale} className="shrink-0">
-            <PlusSquare className="mr-2 h-4 w-4" />
-            <span className="hidden sm:inline">New Ticket</span>
+          <Button size="icon" onClick={() => handleCreateNewTicket()} disabled={isProcessingAnyTicketAction || isProcessingSale} className="shrink-0">
+            <PlusSquare className="h-4 w-4" />
+            <span className="sr-only">New Ticket</span>
           </Button>
         </div>
       </Card>
