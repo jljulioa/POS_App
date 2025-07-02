@@ -6,6 +6,7 @@ import { format, isValid, parseISO, startOfDay, endOfDay } from 'date-fns';
 export interface ProfitLossData {
   totalRevenue: number;
   totalCogs: number;
+  totalPurchases: number;
   grossProfit: number;
   expensesByCategory: { category: string; total: number }[];
   totalExpenses: number;
@@ -50,11 +51,18 @@ export async function GET(request: NextRequest) {
       [isoStartDate, isoEndDate]
     );
     const totalCogs = parseFloat(cogsResult[0]?.total_cogs || '0');
+
+    // 3. Calculate Total Purchases from PurchaseInvoices
+    const purchasesResult = await query(
+        `SELECT SUM(totalAmount) as total_purchases FROM PurchaseInvoices WHERE invoiceDate >= $1 AND invoiceDate <= $2`,
+        [format(startDate, 'yyyy-MM-dd'), format(endDate, 'yyyy-MM-dd')]
+    );
+    const totalPurchases = parseFloat(purchasesResult[0]?.total_purchases || '0');
     
-    // 3. Calculate Gross Profit
+    // 4. Calculate Gross Profit
     const grossProfit = totalRevenue - totalCogs;
 
-    // 4. Fetch and aggregate expenses by category
+    // 5. Fetch and aggregate expenses by category
     const expensesResult = await query(
       `SELECT category, SUM(amount) as total
        FROM DailyExpenses
@@ -70,12 +78,13 @@ export async function GET(request: NextRequest) {
     
     const totalExpenses = expensesByCategory.reduce((sum, current) => sum + current.total, 0);
     
-    // 5. Calculate Net Profit
+    // 6. Calculate Net Profit
     const netProfit = grossProfit - totalExpenses;
 
     const responseData: ProfitLossData = {
       totalRevenue,
       totalCogs,
+      totalPurchases,
       grossProfit,
       expensesByCategory,
       totalExpenses,

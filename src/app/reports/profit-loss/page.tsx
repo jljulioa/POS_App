@@ -7,7 +7,7 @@ import type { InvoiceSettings } from '@/lib/mockData';
 import type { ProfitLossData } from '@/app/api/reports/profit-loss/route';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
-import { Printer, Loader2, AlertTriangle, TrendingUp, TrendingDown, DollarSign, PieChart, FilterX, Calendar as CalendarIcon, BarChart3, ArrowLeft } from 'lucide-react';
+import { Printer, Loader2, AlertTriangle, TrendingUp, TrendingDown, DollarSign, PieChart, FilterX, Calendar as CalendarIcon, BarChart3, ArrowLeft, Info } from 'lucide-react';
 import React, { useState, useMemo, Suspense } from 'react';
 import { format, subMonths, startOfMonth, endOfMonth } from 'date-fns';
 import { useQuery } from '@tanstack/react-query';
@@ -21,6 +21,8 @@ import 'jspdf-autotable';
 import { useCurrency } from '@/contexts/CurrencyContext';
 import { Skeleton } from '@/components/ui/skeleton';
 import Link from 'next/link';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+
 
 // API fetch function for P&L data
 const fetchProfitLossData = async (startDate: Date, endDate: Date): Promise<ProfitLossData> => {
@@ -46,7 +48,7 @@ const fetchInvoiceSettingsAPI = async (): Promise<InvoiceSettings> => {
 const generatePdfReport = async (reportData: ProfitLossData, settings: InvoiceSettings | null, formatCurrencyFn: (value: number) => string) => {
   const { jsPDF } = await import('jspdf');
   const autoTable = (await import('jspdf-autotable')).default;
-  const doc = new jsPDF({ orientation: 'portrait', unit: 'pt', format: 'letter' });
+  doc = new jsPDF({ orientation: 'portrait', unit: 'pt', format: 'letter' });
 
   const pageHeight = doc.internal.pageSize.height;
   const pageWidth = doc.internal.pageSize.width;
@@ -70,10 +72,15 @@ const generatePdfReport = async (reportData: ProfitLossData, settings: InvoiceSe
   yPos += 10;
 
   // Main P&L Summary
+  const inventoryChange = reportData.totalPurchases - reportData.totalCogs;
   const pnlBody = [
     ['Total Revenue', formatCurrencyFn(reportData.totalRevenue)],
     ['Cost of Goods Sold (COGS)', `(${formatCurrencyFn(reportData.totalCogs)})`],
     ['Gross Profit', formatCurrencyFn(reportData.grossProfit)],
+    ['', ''], // Spacer
+    ['Total Purchases (for period)', formatCurrencyFn(reportData.totalPurchases)],
+    ['Change in Inventory Value (est.)', formatCurrencyFn(inventoryChange)],
+    ['', ''], // Spacer
     ['Total Operating Expenses', `(${formatCurrencyFn(reportData.totalExpenses)})`],
     ['Net Profit / (Loss)', formatCurrencyFn(reportData.netProfit)],
   ];
@@ -84,11 +91,11 @@ const generatePdfReport = async (reportData: ProfitLossData, settings: InvoiceSe
     styles: { fontSize: 11, cellPadding: { top: 5, bottom: 5 } },
     columnStyles: { 1: { halign: 'right' } },
     didDrawCell: (data) => {
-        if (data.row.index === 2 || data.row.index === 4) { // Gross Profit & Net Profit rows
+        if (data.row.index === 2 || data.row.index === 8) { // Gross Profit & Net Profit rows
           doc.setFont(undefined, 'bold');
           doc.setLineWidth(1.5);
           doc.line(data.cell.x, data.cell.y + data.cell.height, data.cell.x + data.cell.width, data.cell.y + data.cell.height);
-          if(data.row.index === 4) {
+          if(data.row.index === 8) {
              doc.line(data.cell.x, data.cell.y + data.cell.height + 2, data.cell.x + data.cell.width, data.cell.y + data.cell.height + 2);
           }
         }
@@ -168,7 +175,12 @@ function ProfitLossContent() {
 
   const netProfitClass = reportData && reportData.netProfit >= 0 ? 'text-green-600' : 'text-red-600';
   const grossProfitClass = reportData && reportData.grossProfit >= 0 ? 'text-green-600' : 'text-red-600';
-
+  
+  const inventoryChange = useMemo(() => {
+    if (!reportData) return 0;
+    return reportData.totalPurchases - reportData.totalCogs;
+  }, [reportData]);
+  const inventoryChangeClass = inventoryChange >= 0 ? 'text-blue-600' : 'text-orange-600';
 
   if (isLoading) {
     return (
@@ -195,7 +207,7 @@ function ProfitLossContent() {
   }
 
   return (
-    <>
+    <TooltipProvider>
       <PageHeader title="Profit & Loss Statement" description={`Financial performance from ${format(startDate, 'PPP')} to ${format(endDate, 'PPP')}`}>
         <div className="flex flex-wrap items-center gap-2">
             <Popover><PopoverTrigger asChild><Button variant={"outline"}><CalendarIcon className="mr-2 h-4 w-4" /> Date Range</Button></PopoverTrigger>
@@ -217,7 +229,25 @@ function ProfitLossContent() {
               <div className="flex justify-between items-center"><span className="text-muted-foreground">Total Revenue</span><span className="font-bold">{formatCurrency(reportData.totalRevenue)}</span></div>
               <div className="flex justify-between items-center"><span className="text-muted-foreground">Cost of Goods Sold (COGS)</span><span className="font-semibold text-orange-600">({formatCurrency(reportData.totalCogs)})</span></div>
               <div className="flex justify-between items-center border-t pt-3 mt-2"><span className="font-semibold">Gross Profit</span><span className={`font-bold ${grossProfitClass}`}>{formatCurrency(reportData.grossProfit)}</span></div>
-              <div className="flex justify-between items-center pt-4"><span className="text-muted-foreground">Total Operating Expenses</span><span className="font-semibold text-red-600">({formatCurrency(reportData.totalExpenses)})</span></div>
+              
+              <div className="flex justify-between items-center border-t pt-3 mt-2">
+                <span className="text-muted-foreground flex items-center">
+                  Total Purchases
+                  <Tooltip><TooltipTrigger asChild><Info className="ml-2 h-4 w-4 text-muted-foreground cursor-help"/></TooltipTrigger><TooltipContent><p>Total value of inventory purchased in this period.</p></TooltipContent></Tooltip>
+                </span>
+                <span className="font-semibold">{formatCurrency(reportData.totalPurchases)}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-muted-foreground flex items-center">
+                  Change in Inventory (est.)
+                  <Tooltip><TooltipTrigger asChild><Info className="ml-2 h-4 w-4 text-muted-foreground cursor-help"/></TooltipTrigger><TooltipContent><p>Purchases - COGS. A positive value indicates inventory has likely increased.</p></TooltipContent></Tooltip>
+                </span>
+                <span className={`font-semibold ${inventoryChangeClass}`}>
+                  {inventoryChange >= 0 ? '+' : ''}{formatCurrency(inventoryChange)}
+                </span>
+              </div>
+
+              <div className="flex justify-between items-center border-t pt-3 mt-2"><span className="text-muted-foreground">Total Operating Expenses</span><span className="font-semibold text-red-600">({formatCurrency(reportData.totalExpenses)})</span></div>
               <div className="flex justify-between items-center border-t-2 border-b-2 py-3 my-2"><span className="font-bold text-xl">Net Profit</span><span className={`font-extrabold text-xl ${netProfitClass}`}>{formatCurrency(reportData.netProfit)}</span></div>
             </CardContent>
           </Card>
@@ -243,7 +273,7 @@ function ProfitLossContent() {
           </Card>
         </div>
       </div>
-    </>
+    </TooltipProvider>
   )
 }
 
