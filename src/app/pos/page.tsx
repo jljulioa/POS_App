@@ -620,17 +620,13 @@ export default function POSPage() {
 
   return (
     <AppLayout>
-      <Card className="mb-4 shadow-md">
-        <CardHeader className="p-3">
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-2">
-            <CardTitle className="text-lg flex items-center"><Ticket className="mr-2 h-5 w-5 text-primary"/>Active Sales Tickets</CardTitle>
-            <Button size="sm" onClick={() => handleCreateNewTicket()} disabled={isProcessingAnyTicketAction || isProcessingSale}>
-              <PlusSquare className="mr-2 h-4 w-4" /> New Ticket
-            </Button>
+      <Card className="mb-4 shadow-md p-2">
+        <div className="flex items-center gap-4">
+          <div className="flex items-center shrink-0">
+            <Ticket className="mr-2 h-5 w-5 text-primary"/>
+            <span className="font-semibold text-foreground text-base hidden sm:inline">Tickets</span>
           </div>
-        </CardHeader>
-        <CardContent className="p-3">
-          <ScrollArea className="w-full whitespace-nowrap">
+          <ScrollArea className="w-full whitespace-nowrap sm:flex-grow">
             <div className="flex space-x-3 pb-2">
               {salesTickets && salesTickets.sort((a,b) => new Date(b.last_updated_at).getTime() - new Date(a.last_updated_at).getTime()).map(ticket => (
                 <div
@@ -694,11 +690,15 @@ export default function POSPage() {
               )}
             </div>
           </ScrollArea>
-        </CardContent>
+          <Button size="sm" onClick={() => handleCreateNewTicket()} disabled={isProcessingAnyTicketAction || isProcessingSale} className="shrink-0">
+            <PlusSquare className="mr-2 h-4 w-4" />
+            <span className="hidden sm:inline">New Ticket</span>
+          </Button>
+        </div>
       </Card>
 
       {activeTicket ? (
-        <div className="flex flex-col md:flex-row gap-4 sm:gap-6 h-[calc(100vh-4rem-3rem-10rem)]"> 
+        <div className="flex flex-col md:flex-row gap-4 sm:gap-6 h-[calc(100vh-4rem-3rem-5.5rem)]"> 
           <Card className="w-full md:w-2/5 flex flex-col shadow-lg">
             <CardHeader className="p-4 sm:p-6">
               <CardTitle className="text-base sm:text-lg">Product Search</CardTitle>
