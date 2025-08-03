@@ -18,13 +18,13 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import type { Customer } from '@/lib/mockData';
 
 const CustomerFormSchema = z.object({
-  name: z.string().min(2, { message: "Name must be at least 2 characters." }),
-  email: z.string().email({ message: "Invalid email address." }).optional().or(z.literal('')),
+  name: z.string().min(2, { message: "El nombre debe tener al menos 2 caracteres." }),
+  email: z.string().email({ message: "Dirección de correo electrónico no válida." }).optional().or(z.literal('')),
   phone: z.string().optional().or(z.literal('')),
   address: z.string().optional().or(z.literal('')),
   identificationNumber: z.string().optional().or(z.literal('')), // Added new field
   // purchaseHistoryCount and totalSpent will be managed by backend or derived, not typically part of create form
-  creditLimit: z.coerce.number().min(0, "Credit limit must be non-negative.").optional(),
+  creditLimit: z.coerce.number().min(0, "El límite de crédito debe ser no negativo.").optional(),
   outstandingBalance: z.coerce.number().optional(), // Can be negative if customer has credit
 });
 
@@ -68,8 +68,8 @@ export default function AddCustomerPage() {
     mutationFn: addCustomer,
     onSuccess: (data) => {
       toast({
-        title: "Customer Added Successfully",
-        description: `${data.name} has been added to the customer list.`,
+        title: "Cliente Añadido con Éxito",
+        description: `${data.name} ha sido añadido a la lista de clientes.`,
       });
       queryClient.invalidateQueries({ queryKey: ['customers'] });
       router.push('/customers');
@@ -77,8 +77,8 @@ export default function AddCustomerPage() {
     onError: (error) => {
       toast({
         variant: "destructive",
-        title: "Failed to Add Customer",
-        description: error.message || "An unexpected error occurred.",
+        title: "Error al Añadir Cliente",
+        description: error.message || "Ocurrió un error inesperado.",
       });
     },
   });
@@ -89,10 +89,10 @@ export default function AddCustomerPage() {
 
   return (
     <AppLayout>
-      <PageHeader title="Add New Customer" description="Fill in the details for the new customer.">
+      <PageHeader title="Añadir Nuevo Cliente" description="Rellene los datos del nuevo cliente.">
         <Button variant="outline" asChild>
           <Link href="/customers">
-            <ArrowLeft className="mr-2 h-4 w-4" /> Cancel
+            <ArrowLeft className="mr-2 h-4 w-4" /> Cancelar
           </Link>
         </Button>
       </PageHeader>
@@ -103,9 +103,9 @@ export default function AddCustomerPage() {
             <CardHeader>
               <CardTitle className="flex items-center">
                 <UserPlus className="mr-2 h-6 w-6 text-primary" />
-                Customer Information
+                Información del Cliente
               </CardTitle>
-              <CardDescription>Fields marked with * are required.</CardDescription>
+              <CardDescription>Los campos marcados con * son obligatorios.</CardDescription>
             </CardHeader>
             <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-6 p-6">
               <FormField
@@ -113,9 +113,9 @@ export default function AddCustomerPage() {
                 name="name"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Full Name *</FormLabel>
+                    <FormLabel>Nombre Completo *</FormLabel>
                     <FormControl>
-                      <Input placeholder="e.g., John Doe" {...field} />
+                      <Input placeholder="Ej., John Doe" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -126,9 +126,9 @@ export default function AddCustomerPage() {
                 name="identificationNumber"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Identification Number</FormLabel>
+                    <FormLabel>Número de Identificación</FormLabel>
                     <FormControl>
-                      <Input placeholder="e.g., National ID, DNI, Cédula" {...field} value={field.value ?? ''} />
+                      <Input placeholder="Ej., Cédula, DNI" {...field} value={field.value ?? ''} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -139,9 +139,9 @@ export default function AddCustomerPage() {
                 name="email"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Email Address</FormLabel>
+                    <FormLabel>Correo Electrónico</FormLabel>
                     <FormControl>
-                      <Input type="email" placeholder="e.g., john.doe@example.com" {...field} value={field.value ?? ''} />
+                      <Input type="email" placeholder="Ej., john.doe@example.com" {...field} value={field.value ?? ''} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -152,9 +152,9 @@ export default function AddCustomerPage() {
                 name="phone"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Phone Number</FormLabel>
+                    <FormLabel>Número de Teléfono</FormLabel>
                     <FormControl>
-                      <Input placeholder="e.g., (555) 123-4567" {...field} value={field.value ?? ''} />
+                      <Input placeholder="Ej., (555) 123-4567" {...field} value={field.value ?? ''} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -165,9 +165,9 @@ export default function AddCustomerPage() {
                 name="address"
                 render={({ field }) => (
                   <FormItem className="md:col-span-2">
-                    <FormLabel>Address</FormLabel>
+                    <FormLabel>Dirección</FormLabel>
                     <FormControl>
-                      <Input placeholder="e.g., 123 Main St, Anytown, USA" {...field} value={field.value ?? ''} />
+                      <Input placeholder="Ej., Av. Siempre Viva 123" {...field} value={field.value ?? ''} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -178,9 +178,9 @@ export default function AddCustomerPage() {
                 name="creditLimit"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Credit Limit ($)</FormLabel>
+                    <FormLabel>Límite de Crédito ($)</FormLabel>
                     <FormControl>
-                      <Input type="number" step="0.01" placeholder="e.g., 500.00" {...field} value={field.value ?? ''} />
+                      <Input type="number" step="0.01" placeholder="Ej., 500.00" {...field} value={field.value ?? ''} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -191,9 +191,9 @@ export default function AddCustomerPage() {
                 name="outstandingBalance"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Outstanding Balance ($)</FormLabel>
+                    <FormLabel>Saldo Pendiente ($)</FormLabel>
                     <FormControl>
-                      <Input type="number" step="0.01" placeholder="e.g., 50.00 or -10.00" {...field} value={field.value ?? ''} />
+                      <Input type="number" step="0.01" placeholder="Ej., 50.00 o -10.00" {...field} value={field.value ?? ''} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -207,7 +207,7 @@ export default function AddCustomerPage() {
                 ) : (
                   <Save className="mr-2 h-4 w-4" />
                 )}
-                {mutation.isPending ? 'Saving...' : 'Save Customer'}
+                {mutation.isPending ? 'Guardando...' : 'Guardar Cliente'}
               </Button>
             </CardFooter>
           </Card>

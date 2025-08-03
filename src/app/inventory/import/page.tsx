@@ -71,14 +71,14 @@ export default function ImportInventoryPage() {
       setImportResult(data);
       if (data.success) {
         toast({
-          title: "Import Successful",
+          title: "Importación Exitosa",
           description: data.message,
         });
         queryClient.invalidateQueries({ queryKey: ['products'] });
       } else {
         toast({
           variant: "destructive",
-          title: "Import Partially Failed or Failed",
+          title: "Importación Fallida o Parcialmente Fallida",
           description: data.message,
         });
       }
@@ -86,7 +86,7 @@ export default function ImportInventoryPage() {
     onError: (error) => {
       toast({
         variant: "destructive",
-        title: "Import Failed",
+        title: "Importación Fallida",
         description: error.message,
       });
       setImportResult({
@@ -112,8 +112,8 @@ export default function ImportInventoryPage() {
       } else {
         toast({
           variant: 'destructive',
-          title: 'Invalid File Type',
-          description: 'Please upload a CSV file.',
+          title: 'Tipo de Archivo Inválido',
+          description: 'Por favor, suba un archivo CSV.',
         });
       }
     }
@@ -121,7 +121,7 @@ export default function ImportInventoryPage() {
 
   const processFile = useCallback(() => {
     if (!file) {
-      toast({ variant: 'destructive', title: 'No File Selected', description: 'Please select a CSV file to process.' });
+      toast({ variant: 'destructive', title: 'No se ha seleccionado ningún archivo', description: 'Por favor, seleccione un archivo CSV para procesar.' });
       return;
     }
     setImportResult(null); // Reset previous results
@@ -137,12 +137,12 @@ export default function ImportInventoryPage() {
         results.data.forEach((row, index) => {
           const code = row.code?.trim();
           if (!code) {
-            processingErrors.push({ row: index + 1, error: "Product 'code' is missing or empty.", rawData: row });
+            processingErrors.push({ row: index + 1, error: "El 'código' del producto falta o está vacío.", rawData: row });
             return;
           }
           const name = row.name?.trim();
           if (!name) {
-            processingErrors.push({ row: index + 1, error: "Product 'name' is missing or empty.", rawData: row });
+            processingErrors.push({ row: index + 1, error: "El 'nombre' del producto falta o está vacío.", rawData: row });
             return;
           }
           
@@ -157,12 +157,12 @@ export default function ImportInventoryPage() {
           const categoryId = categoryIdFromFile ? parseInt(categoryIdFromFile, 10) : undefined;
 
 
-          if (isNaN(stock)) { processingErrors.push({row: index + 1, error: `Invalid 'stock' value for code ${code}. Must be a number.`, rawData: row }); return; }
-          if (isNaN(minStock)) { processingErrors.push({row: index + 1, error: `Invalid 'minStock' value for code ${code}. Must be a number.`, rawData: row }); return; }
-          if (maxStock !== undefined && isNaN(maxStock)) { processingErrors.push({row: index + 1, error: `Invalid 'maxStock' value for code ${code}. Must be a number.`, rawData: row }); return; }
-          if (isNaN(cost)) { processingErrors.push({row: index + 1, error: `Invalid 'cost' value for code ${code}. Must be a number.`, rawData: row }); return; }
-          if (isNaN(price)) { processingErrors.push({row: index + 1, error: `Invalid 'price' value for code ${code}. Must be a number.`, rawData: row }); return; }
-          if (categoryId !== undefined && isNaN(categoryId)) { processingErrors.push({row: index + 1, error: `Invalid 'category_id' for code ${code}. Must be a number.`, rawData: row }); return; }
+          if (isNaN(stock)) { processingErrors.push({row: index + 1, error: `Valor de 'stock' inválido para el código ${code}. Debe ser un número.`, rawData: row }); return; }
+          if (isNaN(minStock)) { processingErrors.push({row: index + 1, error: `Valor de 'minStock' inválido para el código ${code}. Debe ser un número.`, rawData: row }); return; }
+          if (maxStock !== undefined && isNaN(maxStock)) { processingErrors.push({row: index + 1, error: `Valor de 'maxStock' inválido para el código ${code}. Debe ser un número.`, rawData: row }); return; }
+          if (isNaN(cost)) { processingErrors.push({row: index + 1, error: `Valor de 'cost' inválido para el código ${code}. Debe ser un número.`, rawData: row }); return; }
+          if (isNaN(price)) { processingErrors.push({row: index + 1, error: `Valor de 'price' inválido para el código ${code}. Debe ser un número.`, rawData: row }); return; }
+          if (categoryId !== undefined && isNaN(categoryId)) { processingErrors.push({row: index + 1, error: `ID de categoría 'category_id' inválido para el código ${code}. Debe ser un número.`, rawData: row }); return; }
 
 
           productsToImport.push({
@@ -185,11 +185,11 @@ export default function ImportInventoryPage() {
         if (processingErrors.length > 0) {
             setImportResult({
                 success: false,
-                message: "Some rows had errors during client-side parsing and were not processed.",
+                message: "Algunas filas tuvieron errores durante el análisis del lado del cliente y no fueron procesadas.",
                 createdCount: 0, updatedCount: 0, errorCount: processingErrors.length,
                 errors: processingErrors.map(e => ({row: e.row, error: e.error}))
             });
-            toast({variant: 'destructive', title: 'Parsing Errors', description: `Found ${processingErrors.length} errors in the CSV file. Please correct them and try again.`})
+            toast({variant: 'destructive', title: 'Errores de Análisis', description: `Se encontraron ${processingErrors.length} errores en el archivo CSV. Por favor, corríjalos e intente de nuevo.`})
             setParsedData([]); // Clear parsed data if there are client-side errors
             return;
         }
@@ -200,23 +200,23 @@ export default function ImportInventoryPage() {
         } else if (results.data.length > 0 && productsToImport.length === 0 && processingErrors.length === 0) {
           // This case means all rows were processed but resulted in no valid productsToImport (might be all errors handled by backend)
           // But we now stop if processingErrors.length > 0
-          toast({title: 'No Valid Data', description: 'No valid product data found in the file to import after initial parsing.'});
+          toast({title: 'Sin Datos Válidos', description: 'No se encontraron datos de productos válidos en el archivo para importar después del análisis inicial.'});
         } else if (results.data.length === 0) {
-            toast({title: 'Empty File', description: 'The CSV file appears to be empty or contains no data rows.'});
+            toast({title: 'Archivo Vacío', description: 'El archivo CSV parece estar vacío o no contiene filas de datos.'});
         }
       },
       error: (error: any) => {
-        toast({ variant: 'destructive', title: 'CSV Parsing Error', description: error.message });
+        toast({ variant: 'destructive', title: 'Error de Análisis CSV', description: error.message });
       },
     });
   }, [file, toast, importMutation]);
 
   return (
     <AppLayout>
-      <PageHeader title="Import Products from CSV" description="Upload a CSV file to add or update products in bulk.">
+      <PageHeader title="Importar Productos desde CSV" description="Suba un archivo CSV para agregar o actualizar productos en masa.">
         <Button variant="outline" asChild>
           <Link href="/inventory">
-            <ArrowLeft className="mr-2 h-4 w-4" /> Back to Inventory
+            <ArrowLeft className="mr-2 h-4 w-4" /> Volver al Inventario
           </Link>
         </Button>
       </PageHeader>
@@ -224,14 +224,14 @@ export default function ImportInventoryPage() {
       <div className="grid md:grid-cols-2 gap-6">
         <Card className="shadow-lg">
           <CardHeader>
-            <CardTitle className="flex items-center"><Upload className="mr-2 h-5 w-5 text-primary"/>Upload CSV File</CardTitle>
+            <CardTitle className="flex items-center"><Upload className="mr-2 h-5 w-5 text-primary"/>Subir Archivo CSV</CardTitle>
             <CardDescription>
-              Ensure your CSV file has a header row. Expected columns:
+              Asegúrese de que su archivo CSV tenga una fila de encabezado. Columnas esperadas:
               <code className="block bg-muted p-2 rounded-md text-xs my-2 overflow-x-auto">
                 name, code, reference, barcode, stock, category_id, brand, minStock, maxStock, cost, price, imageUrl, dataAiHint
               </code>
-              <span className="font-semibold">'name', 'code', 'stock', 'minStock', 'cost', 'price'</span> are strictly required.
-              'category_id' must be the numeric ID of an existing category. Other fields are optional or will use defaults.
+              <span className="font-semibold">'name', 'code', 'stock', 'minStock', 'cost', 'price'</span> son estrictamente obligatorios.
+              'category_id' debe ser el ID numérico de una categoría existente. Otros campos son opcionales o usarán valores predeterminados.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -239,9 +239,9 @@ export default function ImportInventoryPage() {
               type="file"
               accept=".csv"
               onChange={handleFileChange}
-              className="file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary/10 file:text-primary hover:file:bg-primary/20"
+              className="file:mr-4 file:py-1 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary/10 file:text-primary hover:file:bg-primary/20"
             />
-            {fileName && <p className="text-sm text-muted-foreground">Selected file: {fileName}</p>}
+            {fileName && <p className="text-sm text-muted-foreground">Archivo seleccionado: {fileName}</p>}
           </CardContent>
           <CardFooter>
             <Button onClick={processFile} disabled={!file || importMutation.isPending} className="w-full">
@@ -250,7 +250,7 @@ export default function ImportInventoryPage() {
               ) : (
                 <FileText className="mr-2 h-4 w-4" />
               )}
-              Process and Import File
+              Procesar e Importar Archivo
             </Button>
           </CardFooter>
         </Card>
@@ -260,21 +260,21 @@ export default function ImportInventoryPage() {
             <CardHeader>
               <CardTitle className="flex items-center">
                 {importResult.success && !importResult.errorCount ? <CheckCircle className="mr-2 h-5 w-5 text-green-500"/> : <AlertTriangle className="mr-2 h-5 w-5 text-destructive"/>}
-                Import Result
+                Resultado de la Importación
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-2 text-sm">
               <p>{importResult.message}</p>
-              <p>Products Processed: {importResult.createdCount + importResult.updatedCount + (importResult.errorCount || 0)}</p>
-              <p className="text-green-600">New Products Created: {importResult.createdCount}</p>
-              <p className="text-blue-600">Existing Products Updated: {importResult.updatedCount}</p>
-              <p className="text-destructive">Rows with Errors: {importResult.errorCount}</p>
+              <p>Productos Procesados: {importResult.createdCount + importResult.updatedCount + (importResult.errorCount || 0)}</p>
+              <p className="text-green-600">Nuevos Productos Creados: {importResult.createdCount}</p>
+              <p className="text-blue-600">Productos Existentes Actualizados: {importResult.updatedCount}</p>
+              <p className="text-destructive">Filas con Errores: {importResult.errorCount}</p>
               {importResult.errors && importResult.errors.length > 0 && (
                 <div className="mt-2 max-h-60 overflow-y-auto border p-2 rounded-md">
-                  <h4 className="font-semibold mb-1">Error Details:</h4>
+                  <h4 className="font-semibold mb-1">Detalles de Errores:</h4>
                   <ul className="list-disc list-inside text-xs">
                     {importResult.errors.map((err, idx) => (
-                      <li key={idx}>Row {err.row}: {err.productCode ? `(Code: ${err.productCode}) ` : ''}{err.error}</li>
+                      <li key={idx}>Fila {err.row}: {err.productCode ? `(Código: ${err.productCode}) ` : ''}{err.error}</li>
                     ))}
                   </ul>
                 </div>
@@ -286,4 +286,3 @@ export default function ImportInventoryPage() {
     </AppLayout>
   );
 }
-

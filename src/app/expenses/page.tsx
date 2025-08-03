@@ -38,10 +38,10 @@ import {
 const ExpenseCategoryEnumSchema = z.enum(expenseCategories as [ExpenseCategoryEnum, ...ExpenseCategoryEnum[]]);
 
 const ExpenseFormSchema = z.object({
-  expenseDate: z.date({ required_error: "Expense date is required." }),
-  description: z.string().min(3, { message: "Description must be at least 3 characters." }),
+  expenseDate: z.date({ required_error: "La fecha del gasto es obligatoria." }),
+  description: z.string().min(3, { message: "La descripción debe tener al menos 3 caracteres." }),
   category: ExpenseCategoryEnumSchema,
-  amount: z.coerce.number().positive({ message: "Amount must be a positive number." }),
+  amount: z.coerce.number().positive({ message: "El monto debe ser un número positivo." }),
   notes: z.string().optional().or(z.literal('')),
 });
 
@@ -148,31 +148,31 @@ export default function ExpensesPage() {
   const addMutation = useMutation<DailyExpense, Error, ExpenseFormValues>({
     mutationFn: addExpenseAPI,
     onSuccess: (data) => {
-      toast({ title: "Expense Added", description: `${data.description} has been successfully recorded.` });
+      toast({ title: "Gasto Añadido", description: `${data.description} ha sido registrado con éxito.` });
       queryClient.invalidateQueries({ queryKey: ['expenses'] });
       form.reset(defaultFormValues);
     },
     onError: (error) => {
-      toast({ variant: "destructive", title: "Failed to Add Expense", description: error.message });
+      toast({ variant: "destructive", title: "Error al Añadir Gasto", description: error.message });
     },
   });
 
   const updateMutation = useMutation<DailyExpense, Error, { id: number; data: ExpenseFormValues }>({
     mutationFn: updateExpenseAPI,
     onSuccess: (data) => {
-      toast({ title: "Expense Updated", description: `${data.description} has been updated.` });
+      toast({ title: "Gasto Actualizado", description: `${data.description} ha sido actualizado.` });
       queryClient.invalidateQueries({ queryKey: ['expenses'] });
       handleCancelEdit();
     },
     onError: (error) => {
-      toast({ variant: "destructive", title: "Failed to Update Expense", description: error.message });
+      toast({ variant: "destructive", title: "Error al Actualizar Gasto", description: error.message });
     },
   });
 
   const deleteMutation = useMutation<{ message: string }, Error, number>({
     mutationFn: deleteExpenseAPI,
     onSuccess: (data, deletedExpenseId) => {
-        toast({ title: "Expense Deleted", description: `Expense has been deleted.` });
+        toast({ title: "Gasto Eliminado", description: `El gasto ha sido eliminado.` });
         queryClient.invalidateQueries({ queryKey: ['expenses'] });
         if (editingExpense?.id === deletedExpenseId) {
             handleCancelEdit();
@@ -181,7 +181,7 @@ export default function ExpensesPage() {
         setExpenseToDelete(null);
     },
     onError: (error) => {
-        toast({ variant: "destructive", title: "Failed to Delete Expense", description: error.message });
+        toast({ variant: "destructive", title: "Error al Eliminar Gasto", description: error.message });
         setIsDeleteDialogOpen(false);
         setExpenseToDelete(null);
     }
@@ -263,29 +263,29 @@ export default function ExpensesPage() {
   const paginationStartItem = itemsPerPage === 'all' || filteredExpenses.length === 0 ? (filteredExpenses.length > 0 ? 1 : 0) : (currentPage - 1) * Number(itemsPerPage) + 1;
   const paginationEndItem = itemsPerPage === 'all' ? filteredExpenses.length : Math.min(currentPage * Number(itemsPerPage), filteredExpenses.length);
 
-  const itemsPerPageOptions = [{ value: '20', label: '20 per page' }, { value: '40', label: '40 per page' }, { value: 'all', label: 'Show All' }];
+  const itemsPerPageOptions = [{ value: '20', label: '20' }, { value: '40', label: '40' }, { value: 'all', label: 'Todos' }];
 
   const handleClearFilters = () => { setStartDate(undefined); setEndDate(undefined); };
 
   const pageTitle = useMemo(() => {
-    if (startDate && endDate) { return `Expenses from ${format(startDate, "PPP")} to ${format(endDate, "PPP")}`; }
-    return "All Recorded Expenses";
+    if (startDate && endDate) { return `Gastos desde ${format(startDate, "PPP")} hasta ${format(endDate, "PPP")}`; }
+    return "Todos los Gastos Registrados";
   }, [startDate, endDate]);
 
 
   return (
     <AppLayout>
-      <PageHeader title="Daily Expenses" description="Track and manage your daily operational costs.">
+      <PageHeader title="Gastos Diarios" description="Rastree y gestione sus costos operativos diarios.">
         <div className="flex items-center gap-2 flex-wrap">
             <Popover>
-              <PopoverTrigger asChild><Button variant={"outline"} className={cn("w-full sm:w-[180px] justify-start text-left font-normal",!startDate && "text-muted-foreground")}><CalendarIcon className="mr-2 h-4 w-4" />{startDate ? format(startDate, "PPP") : <span>Start Date</span>}</Button></PopoverTrigger>
+              <PopoverTrigger asChild><Button variant={"outline"} className={cn("w-full sm:w-[180px] justify-start text-left font-normal",!startDate && "text-muted-foreground")}><CalendarIcon className="mr-2 h-4 w-4" />{startDate ? format(startDate, "PPP") : <span>Fecha de Inicio</span>}</Button></PopoverTrigger>
               <PopoverContent className="w-auto p-0"><Calendar mode="single" selected={startDate} onSelect={setStartDate} disabled={(date) => endDate ? date > endDate : false} initialFocus/></PopoverContent>
             </Popover>
             <Popover>
-              <PopoverTrigger asChild><Button variant={"outline"} className={cn("w-full sm:w-[180px] justify-start text-left font-normal",!endDate && "text-muted-foreground")}><CalendarIcon className="mr-2 h-4 w-4" />{endDate ? format(endDate, "PPP") : <span>End Date</span>}</Button></PopoverTrigger>
+              <PopoverTrigger asChild><Button variant={"outline"} className={cn("w-full sm:w-[180px] justify-start text-left font-normal",!endDate && "text-muted-foreground")}><CalendarIcon className="mr-2 h-4 w-4" />{endDate ? format(endDate, "PPP") : <span>Fecha de Fin</span>}</Button></PopoverTrigger>
               <PopoverContent className="w-auto p-0"><Calendar mode="single" selected={endDate} onSelect={setEndDate} disabled={(date) => startDate ? date < startDate : false} initialFocus/></PopoverContent>
             </Popover>
-            {(startDate || endDate) && (<Button variant="ghost" onClick={handleClearFilters} className="text-muted-foreground hover:text-destructive"><FilterX className="mr-2 h-4 w-4" /> Clear</Button>)}
+            {(startDate || endDate) && (<Button variant="ghost" onClick={handleClearFilters} className="text-muted-foreground hover:text-destructive"><FilterX className="mr-2 h-4 w-4" /> Limpiar</Button>)}
         </div>
       </PageHeader>
 
@@ -297,27 +297,27 @@ export default function ExpensesPage() {
                 <CardHeader>
                   <CardTitle className="flex items-center">
                     {formMode === 'edit' ? <Edit3 className="mr-2 h-6 w-6 text-accent" /> : <PlusCircle className="mr-2 h-6 w-6 text-primary" />}
-                    {formMode === 'edit' ? 'Edit Expense' : 'Add New Expense'}
+                    {formMode === 'edit' ? 'Editar Gasto' : 'Añadir Nuevo Gasto'}
                   </CardTitle>
-                  {formMode === 'edit' && editingExpense && <CardDescription>Editing: {editingExpense.description}</CardDescription>}
+                  {formMode === 'edit' && editingExpense && <CardDescription>Editando: {editingExpense.description}</CardDescription>}
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <FormField control={form.control} name="expenseDate" render={({ field }) => (
-                      <FormItem className="flex flex-col"><FormLabel>Expense Date *</FormLabel><Popover><PopoverTrigger asChild><FormControl><Button variant={"outline"} className={cn("w-full pl-3 text-left font-normal", !field.value && "text-muted-foreground")}>{field.value ? format(field.value, "PPP") : <span>Pick a date</span>}<CalendarIcon className="ml-auto h-4 w-4 opacity-50" /></Button></FormControl></PopoverTrigger><PopoverContent className="w-auto p-0" align="start"><Calendar mode="single" selected={field.value} onSelect={field.onChange} initialFocus /></PopoverContent></Popover><FormMessage /></FormItem>
+                      <FormItem className="flex flex-col"><FormLabel>Fecha del Gasto *</FormLabel><Popover><PopoverTrigger asChild><FormControl><Button variant={"outline"} className={cn("w-full pl-3 text-left font-normal", !field.value && "text-muted-foreground")}>{field.value ? format(field.value, "PPP") : <span>Seleccione una fecha</span>}<CalendarIcon className="ml-auto h-4 w-4 opacity-50" /></Button></FormControl></PopoverTrigger><PopoverContent className="w-auto p-0" align="start"><Calendar mode="single" selected={field.value} onSelect={field.onChange} initialFocus /></PopoverContent></Popover><FormMessage /></FormItem>
                   )} />
-                  <FormField control={form.control} name="description" render={({ field }) => ( <FormItem><FormLabel>Description *</FormLabel><FormControl><Input placeholder="e.g., Office electricity bill" {...field} /></FormControl><FormMessage /></FormItem> )} />
+                  <FormField control={form.control} name="description" render={({ field }) => ( <FormItem><FormLabel>Descripción *</FormLabel><FormControl><Input placeholder="Ej., Factura de electricidad de la oficina" {...field} /></FormControl><FormMessage /></FormItem> )} />
                   <FormField control={form.control} name="category" render={({ field }) => (
-                      <FormItem><FormLabel>Category *</FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue placeholder="Select a category" /></SelectTrigger></FormControl><SelectContent>{expenseCategories.map(cat => (<SelectItem key={cat} value={cat}>{cat}</SelectItem>))}</SelectContent></Select><FormMessage /></FormItem>
+                      <FormItem><FormLabel>Categoría *</FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue placeholder="Seleccione una categoría" /></SelectTrigger></FormControl><SelectContent>{expenseCategories.map(cat => (<SelectItem key={cat} value={cat}>{cat}</SelectItem>))}</SelectContent></Select><FormMessage /></FormItem>
                   )} />
-                  <FormField control={form.control} name="amount" render={({ field }) => ( <FormItem><FormLabel>Amount *</FormLabel><FormControl><Input type="number" step="0.01" placeholder="e.g., 75.50" {...field} /></FormControl><FormMessage /></FormItem> )} />
-                  <FormField control={form.control} name="notes" render={({ field }) => ( <FormItem><FormLabel>Notes (Optional)</FormLabel><FormControl><Textarea placeholder="e.g., Paid via online transfer, ref #123" {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem> )} />
+                  <FormField control={form.control} name="amount" render={({ field }) => ( <FormItem><FormLabel>Monto *</FormLabel><FormControl><Input type="number" step="0.01" placeholder="Ej., 75.50" {...field} /></FormControl><FormMessage /></FormItem> )} />
+                  <FormField control={form.control} name="notes" render={({ field }) => ( <FormItem><FormLabel>Notas (Opcional)</FormLabel><FormControl><Textarea placeholder="Ej., Pagado por transferencia en línea, ref #123" {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem> )} />
                 </CardContent>
                 <CardFooter className="flex-col gap-2">
                   <Button type="submit" disabled={addMutation.isPending || updateMutation.isPending} className="w-full">
                     {addMutation.isPending || updateMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
-                    {addMutation.isPending || updateMutation.isPending ? 'Saving...' : (formMode === 'edit' ? 'Update Expense' : 'Save Expense')}
+                    {addMutation.isPending || updateMutation.isPending ? 'Guardando...' : (formMode === 'edit' ? 'Actualizar Gasto' : 'Guardar Gasto')}
                   </Button>
-                  {formMode === 'edit' && (<Button type="button" variant="outline" onClick={handleCancelEdit} className="w-full">Cancel Edit</Button>)}
+                  {formMode === 'edit' && (<Button type="button" variant="outline" onClick={handleCancelEdit} className="w-full">Cancelar Edición</Button>)}
                 </CardFooter>
               </Card>
             </form>
@@ -331,17 +331,17 @@ export default function ExpensesPage() {
                   <CardTitle className="flex items-center"><DollarSign className="mr-2 h-5 w-5 text-primary"/>{pageTitle}</CardTitle>
                   <span className="text-base sm:text-lg font-semibold text-primary">Total: {formatCurrency(totalFilteredExpensesAmount)}</span>
               </div>
-               <Input placeholder="Filter displayed expenses by description, category, notes..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="mt-2"/>
+               <Input placeholder="Filtrar gastos por descripción, categoría, notas..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="mt-2"/>
             </CardHeader>
             <CardContent>
               {isLoadingExpenses && (<div className="flex justify-center items-center h-40"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>)}
-              {expensesError && (<div className="text-destructive p-4 border border-destructive rounded-md"><AlertTriangle className="mr-2 h-5 w-5 inline-block" /> Failed to load expenses: {expensesError?.message}</div>)}
-              {!isLoadingExpenses && !expensesError && displayedExpenses.length === 0 && (<p className="text-muted-foreground text-center py-4">No expenses recorded for the selected criteria.</p>)}
+              {expensesError && (<div className="text-destructive p-4 border border-destructive rounded-md"><AlertTriangle className="mr-2 h-5 w-5 inline-block" /> Error al cargar los gastos: {expensesError?.message}</div>)}
+              {!isLoadingExpenses && !expensesError && displayedExpenses.length === 0 && (<p className="text-muted-foreground text-center py-4">No se registraron gastos para los criterios seleccionados.</p>)}
               {!isLoadingExpenses && !expensesError && displayedExpenses.length > 0 && (
                 <div className="rounded-lg border shadow-sm overflow-x-auto">
                   <Table>
                     <TableHeader>
-                      <TableRow><TableHead className="w-[120px]">Date</TableHead><TableHead>Description</TableHead><TableHead>Category</TableHead><TableHead className="text-right">Amount</TableHead><TableHead>Notes</TableHead><TableHead>Recorded At</TableHead><TableHead className="text-center w-[100px]">Actions</TableHead></TableRow>
+                      <TableRow><TableHead className="w-[120px]">Fecha</TableHead><TableHead>Descripción</TableHead><TableHead>Categoría</TableHead><TableHead className="text-right">Monto</TableHead><TableHead>Notas</TableHead><TableHead>Registrado a las</TableHead><TableHead className="text-center w-[100px]">Acciones</TableHead></TableRow>
                     </TableHeader>
                     <TableBody>
                       {displayedExpenses.map((expense) => (
@@ -365,9 +365,9 @@ export default function ExpensesPage() {
             </CardContent>
              {(!isLoadingExpenses && !expensesError && filteredExpenses.length > 0) && (
                 <CardFooter className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-4 border-t">
-                     <div className="flex items-center gap-2"><span className="text-sm text-muted-foreground">Rows per page:</span><Select value={itemsPerPage.toString()} onValueChange={handleItemsPerPageChange}><SelectTrigger className="w-[120px] h-9"><SelectValue placeholder="Items per page" /></SelectTrigger><SelectContent>{itemsPerPageOptions.map(option => (<SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>))}</SelectContent></Select></div>
-                    <div className="text-sm text-muted-foreground">{filteredExpenses.length > 0 ? `Showing ${paginationStartItem}-${paginationEndItem} of ${filteredExpenses.length} expenses` : "No expenses"}</div>
-                    <div className="flex items-center gap-2"><Button variant="outline" size="sm" onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))} disabled={currentPage === 1 || itemsPerPage === 'all'}><ChevronLeft className="h-4 w-4 mr-1" /> Previous</Button><span className="text-sm text-muted-foreground">Page {currentPage} of {totalPages}</span><Button variant="outline" size="sm" onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))} disabled={currentPage === totalPages || itemsPerPage === 'all'}>Next <ChevronRight className="h-4 w-4 ml-1" /></Button></div>
+                     <div className="flex items-center gap-2"><span className="text-sm text-muted-foreground">Filas por página:</span><Select value={itemsPerPage.toString()} onValueChange={handleItemsPerPageChange}><SelectTrigger className="w-[120px] h-9"><SelectValue placeholder="Artículos por página" /></SelectTrigger><SelectContent>{itemsPerPageOptions.map(option => (<SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>))}</SelectContent></Select></div>
+                    <div className="text-sm text-muted-foreground">{filteredExpenses.length > 0 ? `Mostrando ${paginationStartItem}-${paginationEndItem} de ${filteredExpenses.length} gastos` : "No hay gastos"}</div>
+                    <div className="flex items-center gap-2"><Button variant="outline" size="sm" onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))} disabled={currentPage === 1 || itemsPerPage === 'all'}><ChevronLeft className="h-4 w-4 mr-1" /> Anterior</Button><span className="text-sm text-muted-foreground">Página {currentPage} de {totalPages}</span><Button variant="outline" size="sm" onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))} disabled={currentPage === totalPages || itemsPerPage === 'all'}>Siguiente <ChevronRight className="h-4 w-4 ml-1" /></Button></div>
                 </CardFooter>
             )}
           </Card>
@@ -376,12 +376,12 @@ export default function ExpensesPage() {
       <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
-            <AlertDialogDescription>This action cannot be undone. This will permanently delete the expense <span className="font-semibold">"{expenseToDelete?.description}"</span>.</AlertDialogDescription>
+            <AlertDialogTitle>¿Está absolutamente seguro?</AlertDialogTitle>
+            <AlertDialogDescription>Esta acción no se puede deshacer. Esto eliminará permanentemente el gasto <span className="font-semibold">"{expenseToDelete?.description}"</span>.</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel onClick={() => setExpenseToDelete(null)}>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={confirmDelete} disabled={deleteMutation.isPending} className="bg-destructive hover:bg-destructive/90 text-destructive-foreground">{deleteMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}Delete</AlertDialogAction>
+            <AlertDialogCancel onClick={() => setExpenseToDelete(null)}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDelete} disabled={deleteMutation.isPending} className="bg-destructive hover:bg-destructive/90 text-destructive-foreground">{deleteMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}Eliminar</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

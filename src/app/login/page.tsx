@@ -54,16 +54,16 @@ export default function LoginPage() {
               <Bike className="h-12 w-12 text-primary" />
             </div>
             <CardTitle className="text-3xl font-bold">MotoFox POS</CardTitle>
-            <CardDescription>Enter your credentials to access the system</CardDescription>
+            <CardDescription>Ingrese sus credenciales para acceder al sistema</CardDescription>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-6">
               <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
+                <Label htmlFor="email">Correo Electrónico</Label>
                 <Input
                   id="email"
                   type="email"
-                  placeholder="user@example.com"
+                  placeholder="usuario@ejemplo.com"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required
@@ -72,7 +72,7 @@ export default function LoginPage() {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="password">Password</Label>
+                <Label htmlFor="password">Contraseña</Label>
                 <Input
                   id="password"
                   type="password"
@@ -81,7 +81,7 @@ export default function LoginPage() {
                   required
                   className="text-base"
                   disabled={isLoading}
-                  placeholder="Password"
+                  placeholder="Contraseña"
                 />
               </div>
               <Button type="submit" className="w-full text-lg py-6" disabled={isLoading}>
@@ -90,12 +90,12 @@ export default function LoginPage() {
                 ) : (
                   <LogIn className="mr-2 h-5 w-5" />
                 )}
-                {isLoading ? 'Signing In...' : 'Sign In'}
+                {isLoading ? 'Iniciando Sesión...' : 'Iniciar Sesión'}
               </Button>
             </form>
           </CardContent>
           <CardFooter className="text-center text-sm text-muted-foreground">
-            <p>Contact support if you have trouble logging in.</p>
+            <p>Contacte a soporte si tiene problemas para iniciar sesión.</p>
           </CardFooter>
         </Card>
       </div>

@@ -36,7 +36,7 @@ const parseCustomerFromDB = (dbCustomer: any): Customer => {
 
 // GET handler to fetch a single customer by ID
 export async function GET(request: NextRequest, { params }: { params: { customerId: string } }) {
-  const { customerId } = params;
+  const customerId = params.customerId;
   try {
     const dbCustomers = await query('SELECT id, name, email, phone, address, identification_number, purchasehistorycount, totalspent, creditlimit, outstandingbalance FROM Customers WHERE id = $1', [customerId]);
     if (dbCustomers.length === 0) {
@@ -52,7 +52,7 @@ export async function GET(request: NextRequest, { params }: { params: { customer
 
 // PUT handler to update an existing customer
 export async function PUT(request: NextRequest, { params }: { params: { customerId: string } }) {
-  const { customerId } = params;
+  const customerId = params.customerId;
   try {
     const body = await request.json();
     const validation = CustomerUpdateSchema.safeParse(body);
@@ -98,5 +98,29 @@ export async function PUT(request: NextRequest, { params }: { params: { customer
         return NextResponse.json({ message: `Failed to update customer: The ${field} might already exist for another customer.`, error: (error as Error).message }, { status: 409 });
     }
     return NextResponse.json({ message: 'Failed to update customer', error: (error as Error).message }, { status: 500 });
+  }
+}
+
+// DELETE handler to remove a customer
+export async function DELETE(request: NextRequest, { params }: { params: { customerId: string } }) {
+  const customerId = params.customerId;
+  try {
+    // Optional: Check for related records (e.g., sales) before deleting
+    // For this example, we'll proceed with direct deletion.
+    const result = await query('DELETE FROM Customers WHERE id = $1 RETURNING id, name', [customerId]);
+
+    if (result.length === 0) {
+      return NextResponse.json({ message: 'Customer not found' }, { status: 404 });
+    }
+
+    return NextResponse.json({ message: `Customer "${result[0].name}" deleted successfully` }, { status: 200 });
+
+  } catch (error) {
+    console.error(`Failed to delete customer ${customerId}:`, error);
+    // Handle potential foreign key constraints, e.g., if customer has sales records
+    if (error instanceof Error && (error as any).code === '23503') {
+      return NextResponse.json({ message: 'Cannot delete customer with existing sales records or transactions.' }, { status: 409 });
+    }
+    return NextResponse.json({ message: 'Failed to delete customer', error: (error as Error).message }, { status: 500 });
   }
 }

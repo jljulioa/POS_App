@@ -6,7 +6,7 @@ import { z } from 'zod';
 
 // Ensure SaleItem type includes costPrice if it's not already globally defined and imported
 // For consistency, let's define SaleItem locally here for tickets, ensuring costPrice is present.
-interface SaleItemForTicket {
+export interface SaleItemForTicket {
   productId: string;
   productName: string;
   quantity: number;
@@ -75,7 +75,7 @@ const parseSalesTicketFromDB = (dbTicket: any): SalesTicketDB => {
       discountPercentage: discountPercentage,
       totalPrice: parseFloat(String(item.totalPrice || '0')) || (unitPrice * quantity),
     };
-  }).filter((item): item is SaleItemForTicket => item !== null); 
+  }).filter((item: SaleItemForTicket | null): item is SaleItemForTicket => item !== null); 
 
   return {
     id: String(dbTicket.id),

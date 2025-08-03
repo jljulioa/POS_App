@@ -25,11 +25,11 @@ import { cn } from "@/lib/utils";
 
 
 const PurchaseInvoiceFormSchema = z.object({
-  invoiceNumber: z.string().min(1, { message: "Invoice number cannot be empty." }),
-  invoiceDate: z.date({ required_error: "Invoice date is required." }),
-  supplierName: z.string().min(1, { message: "Supplier name cannot be empty." }),
-  totalAmount: z.coerce.number().min(0, { message: "Total amount must be non-negative." }),
-  paymentTerms: z.enum(['Credit', 'Cash'], { required_error: "Payment terms are required." }),
+  invoiceNumber: z.string().min(1, { message: "El número de factura no puede estar vacío." }),
+  invoiceDate: z.date({ required_error: "La fecha de la factura es obligatoria." }),
+  supplierName: z.string().min(1, { message: "El nombre del proveedor no puede estar vacío." }),
+  totalAmount: z.coerce.number().min(0, { message: "El monto total debe ser no negativo." }),
+  paymentTerms: z.enum(['Credit', 'Cash'], { required_error: "Los términos de pago son obligatorios." }),
 });
 
 type PurchaseInvoiceFormValues = z.infer<typeof PurchaseInvoiceFormSchema>;
@@ -74,8 +74,8 @@ export default function AddPurchaseInvoicePage() {
     mutationFn: addPurchaseInvoiceAPI,
     onSuccess: (data) => {
       toast({
-        title: "Purchase Invoice Added",
-        description: `Invoice ${data.invoiceNumber} has been successfully added.`,
+        title: "Factura de Compra Añadida",
+        description: `La factura ${data.invoiceNumber} ha sido añadida con éxito.`,
       });
       queryClient.invalidateQueries({ queryKey: ['purchaseInvoices'] });
       router.push('/purchase-invoices');
@@ -83,7 +83,7 @@ export default function AddPurchaseInvoicePage() {
     onError: (error) => {
       toast({
         variant: "destructive",
-        title: "Failed to Add Invoice",
+        title: "Error al Añadir Factura",
         description: error.message,
       });
     },
@@ -95,10 +95,10 @@ export default function AddPurchaseInvoicePage() {
 
   return (
     <AppLayout>
-      <PageHeader title="Add New Purchase Invoice" description="Enter the details of the supplier invoice.">
+      <PageHeader title="Añadir Nueva Factura de Compra" description="Introduzca los detalles de la factura del proveedor.">
         <Button variant="outline" asChild>
           <Link href="/purchase-invoices">
-            <ArrowLeft className="mr-2 h-4 w-4" /> Cancel
+            <ArrowLeft className="mr-2 h-4 w-4" /> Cancelar
           </Link>
         </Button>
       </PageHeader>
@@ -109,9 +109,9 @@ export default function AddPurchaseInvoicePage() {
             <CardHeader>
               <CardTitle className="flex items-center">
                 <FilePlus className="mr-2 h-6 w-6 text-primary" />
-                Invoice Information
+                Información de la Factura
               </CardTitle>
-              <CardDescription>Fields marked with * are required.</CardDescription>
+              <CardDescription>Los campos marcados con * son obligatorios.</CardDescription>
             </CardHeader>
             <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-6 p-6">
               <FormField
@@ -119,9 +119,9 @@ export default function AddPurchaseInvoicePage() {
                 name="invoiceNumber"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Invoice Number *</FormLabel>
+                    <FormLabel>Número de Factura *</FormLabel>
                     <FormControl>
-                      <Input placeholder="e.g., INV-2024-001" {...field} />
+                      <Input placeholder="Ej., FAC-2024-001" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -132,7 +132,7 @@ export default function AddPurchaseInvoicePage() {
                 name="invoiceDate"
                 render={({ field }) => (
                   <FormItem className="flex flex-col">
-                    <FormLabel>Invoice Date *</FormLabel>
+                    <FormLabel>Fecha de la Factura *</FormLabel>
                     <Popover>
                       <PopoverTrigger asChild>
                         <FormControl>
@@ -146,7 +146,7 @@ export default function AddPurchaseInvoicePage() {
                             {field.value ? (
                               format(field.value, "PPP")
                             ) : (
-                              <span>Pick a date</span>
+                              <span>Seleccione una fecha</span>
                             )}
                             <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
                           </Button>
@@ -173,9 +173,9 @@ export default function AddPurchaseInvoicePage() {
                 name="supplierName"
                 render={({ field }) => (
                   <FormItem className="md:col-span-2">
-                    <FormLabel>Supplier Name *</FormLabel>
+                    <FormLabel>Nombre del Proveedor *</FormLabel>
                     <FormControl>
-                      <Input placeholder="e.g., ACME Parts Co." {...field} />
+                      <Input placeholder="Ej., ACME Parts Co." {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -186,9 +186,9 @@ export default function AddPurchaseInvoicePage() {
                 name="totalAmount"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Total Amount ($) *</FormLabel>
+                    <FormLabel>Monto Total ($) *</FormLabel>
                     <FormControl>
-                      <Input type="number" step="0.01" placeholder="e.g., 1250.75" {...field} />
+                      <Input type="number" step="0.01" placeholder="Ej., 1250.75" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -199,16 +199,16 @@ export default function AddPurchaseInvoicePage() {
                 name="paymentTerms"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Payment Terms *</FormLabel>
+                    <FormLabel>Términos de Pago *</FormLabel>
                     <Select onValueChange={field.onChange} defaultValue={field.value}>
                       <FormControl>
                         <SelectTrigger>
-                          <SelectValue placeholder="Select payment terms" />
+                          <SelectValue placeholder="Seleccione los términos de pago" />
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        <SelectItem value="Credit">Credit</SelectItem>
-                        <SelectItem value="Cash">Cash</SelectItem>
+                        <SelectItem value="Credit">Crédito</SelectItem>
+                        <SelectItem value="Cash">Efectivo</SelectItem>
                       </SelectContent>
                     </Select>
                     <FormMessage />
@@ -223,7 +223,7 @@ export default function AddPurchaseInvoicePage() {
                 ) : (
                   <Save className="mr-2 h-4 w-4" /> 
                 )}
-                {mutation.isPending ? 'Saving...' : 'Save Invoice'}
+                {mutation.isPending ? 'Guardando...' : 'Guardar Factura'}
               </Button>
             </CardFooter>
           </Card>

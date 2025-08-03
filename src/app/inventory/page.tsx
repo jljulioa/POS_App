@@ -112,21 +112,21 @@ function ProductRowActions({ product, deleteMutation, onBarcodeClick }: ProductR
         </AlertDialogTrigger>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+            <AlertDialogTitle>¿Está completamente seguro?</AlertDialogTitle>
             <AlertDialogDescription>
-              This action cannot be undone. This will permanently delete the product
-              <span className="font-semibold"> {product.name}</span> and remove its data from our servers.
+              Esta acción no se puede deshacer. Esto eliminará permanentemente el producto
+              <span className="font-semibold"> {product.name}</span> y eliminará sus datos de nuestros servidores.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
             <AlertDialogAction
               onClick={handleDeleteConfirm}
               disabled={deleteMutation.isPending && deleteMutation.variables === product.id}
               className="bg-destructive hover:bg-destructive/90 text-destructive-foreground"
             >
               {(deleteMutation.isPending && deleteMutation.variables === product.id) ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-              Delete
+              Eliminar
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -215,16 +215,16 @@ function InventoryPageContent({ productsData, categoriesData }: { productsData: 
     mutationFn: deleteProductAPI,
     onSuccess: (data, productId) => { 
       toast({
-        title: "Product Deleted",
-        description: `Product has been successfully deleted.`,
+        title: "Producto Eliminado",
+        description: `El producto ha sido eliminado exitosamente.`,
       });
       queryClient.invalidateQueries({ queryKey: ['products'] });
     },
     onError: (error: Error) => {
       toast({
         variant: "destructive",
-        title: "Failed to Delete Product",
-        description: error.message || "An unexpected error occurred.",
+        title: "Error al Eliminar el Producto",
+        description: error.message || "Ocurrió un error inesperado.",
       });
     },
   });
@@ -232,7 +232,7 @@ function InventoryPageContent({ productsData, categoriesData }: { productsData: 
   const uniqueBrands = useMemo(() => ['all', ...new Set(productsData.map(p => p.brand).filter(Boolean).sort((a, b) => a.localeCompare(b)))], [productsData]);
   
   const categoryFilterOptions = useMemo(() => {
-    const options = [{ value: 'all', label: 'All Categories' }];
+    const options = [{ value: 'all', label: 'Todas las Categorías' }];
     categoriesData.forEach(cat => {
       if (cat.name) { 
         options.push({ value: cat.name, label: cat.name });
@@ -299,16 +299,16 @@ function InventoryPageContent({ productsData, categoriesData }: { productsData: 
   const paginationEndItem = itemsPerPage === 'all' ? currentFilteredProducts.length : Math.min(currentPage * Number(itemsPerPage), currentFilteredProducts.length);
 
   const stockStatusOptions: { value: StockStatusFilter; label: string }[] = [
-    { value: 'all', label: 'All Statuses' },
-    { value: 'in_stock', label: 'In Stock' },
-    { value: 'low_stock', label: 'Low Stock' },
-    { value: 'out_of_stock', label: 'Out of Stock' },
+    { value: 'all', label: 'Todos los Estados' },
+    { value: 'in_stock', label: 'En Stock' },
+    { value: 'low_stock', label: 'Stock Bajo' },
+    { value: 'out_of_stock', label: 'Agotado' },
   ];
 
   const itemsPerPageOptions = [
-    { value: '50', label: '50 per page' },
-    { value: '100', label: '100 per page' },
-    { value: 'all', label: 'Show All' },
+    { value: '50', label: '50' },
+    { value: '100', label: '100' },
+    { value: 'all', label: 'Todos' },
   ];
 
   const handleBarcodeModalOpen = (product: Product) => {
@@ -395,7 +395,7 @@ function InventoryPageContent({ productsData, categoriesData }: { productsData: 
       const maxNameWidth = labelWidth - 4; // mm, allowing small horizontal padding
 
       doc.setFontSize(8);
-      doc.setFont(undefined, 'normal');
+      doc.setFont('helvetica', 'normal');
 
       if (doc.getTextWidth(productNameText) > maxNameWidth) {
         let truncatedName = productNameText;
@@ -411,9 +411,9 @@ function InventoryPageContent({ productsData, categoriesData }: { productsData: 
 
       // Product Code (Bold)
       doc.setFontSize(7);
-      doc.setFont(undefined, 'bold');
+      doc.setFont('helvetica', 'bold');
       doc.text(selectedProductForBarcode.code, currentX + labelWidth / 2, currentY + barcodeHeightMM + textYOffsetFromBarcodeMM + (textLineHeightMM * 2), { align: 'center', maxWidth: labelWidth - 2 });
-      doc.setFont(undefined, 'normal'); // Reset font
+      doc.setFont('helvetica', 'normal'); // Reset font
 
       currentX += labelWidth + xSpacing;
       labelsOnPageCount++;
@@ -422,7 +422,7 @@ function InventoryPageContent({ productsData, categoriesData }: { productsData: 
     doc.save(`Barcodes_${selectedProductForBarcode.code}_${Date.now()}.pdf`);
     setIsGeneratingPdf(false);
     handleCloseBarcodeModal();
-    toast({ title: "PDF Generated", description: "Barcode PDF has been downloaded." });
+    toast({ title: "PDF Generado", description: "El PDF del código de barras ha sido descargado." });
   };
 
 
@@ -430,14 +430,14 @@ function InventoryPageContent({ productsData, categoriesData }: { productsData: 
     <>
       <div className="mb-6 flex flex-col sm:flex-row flex-wrap gap-2 sm:gap-4">
         <Input
-          placeholder="Search by name, code, reference, barcode..."
+          placeholder="Buscar por nombre, código, referencia, código de barras..."
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
           className="w-full sm:flex-1 md:flex-none md:max-w-xs lg:max-w-sm"
         />
         <Select value={filterBrand} onValueChange={setFilterBrand}>
-          <SelectTrigger className="w-full sm:w-auto md:w-[180px]"><SelectValue placeholder="Filter by brand" /></SelectTrigger>
-          <SelectContent>{uniqueBrands.map(brand => (<SelectItem key={brand} value={brand}>{brand === 'all' ? 'All Brands' : brand}</SelectItem>))}</SelectContent>
+          <SelectTrigger className="w-full sm:w-auto md:w-[180px]"><SelectValue placeholder="Filtrar por marca" /></SelectTrigger>
+          <SelectContent>{uniqueBrands.map(brand => (<SelectItem key={brand} value={brand}>{brand === 'all' ? 'Todas las Marcas' : brand}</SelectItem>))}</SelectContent>
         </Select>
         <Select 
           value={filterCategoryName} 
@@ -448,7 +448,7 @@ function InventoryPageContent({ productsData, categoriesData }: { productsData: 
             router.push(`/inventory?${newQuery.toString()}`, { scroll: false });
           }}
         >
-          <SelectTrigger className="w-full sm:w-auto md:w-[180px]"><SelectValue placeholder={"Filter by category"} /></SelectTrigger>
+          <SelectTrigger className="w-full sm:w-auto md:w-[180px]"><SelectValue placeholder={"Filtrar por categoría"} /></SelectTrigger>
           <SelectContent>{categoryFilterOptions.map(opt => (<SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>))}</SelectContent>
         </Select>
         <Select 
@@ -461,16 +461,16 @@ function InventoryPageContent({ productsData, categoriesData }: { productsData: 
             router.push(`/inventory?${newQuery.toString()}`, { scroll: false });
           }}
         >
-          <SelectTrigger className="w-full sm:w-auto md:w-[180px]"><SelectValue placeholder="Filter by stock status" /></SelectTrigger>
+          <SelectTrigger className="w-full sm:w-auto md:w-[180px]"><SelectValue placeholder="Filtrar por estado de stock" /></SelectTrigger>
           <SelectContent>{stockStatusOptions.map(opt => (<SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>))}</SelectContent>
         </Select>
       </div>
 
       <Card className="mb-6 shadow-md">
-        <CardHeader><CardTitle className="text-lg flex items-center"><DollarSign className="mr-2 h-5 w-5 text-blue-500" />Filtered Inventory Value</CardTitle></CardHeader>
+        <CardHeader><CardTitle className="text-lg flex items-center"><DollarSign className="mr-2 h-5 w-5 text-blue-500" />Valor del Inventario Filtrado</CardTitle></CardHeader>
         <CardContent>
-          <p className="text-2xl font-bold">Total COGS: {formatCurrency(totalFilteredCogs)}</p>
-          <p className="text-sm text-muted-foreground">Based on {currentFilteredProducts.length} product(s) matching current filters.</p>
+          <p className="text-2xl font-bold">COGS Total: {formatCurrency(totalFilteredCogs)}</p>
+          <p className="text-sm text-muted-foreground">Basado en {currentFilteredProducts.length} producto(s) que coinciden con los filtros actuales.</p>
         </CardContent>
       </Card>
 
@@ -478,18 +478,18 @@ function InventoryPageContent({ productsData, categoriesData }: { productsData: 
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead className="w-[60px] sm:w-[80px]">Image</TableHead>
-              <TableHead>Name</TableHead>
-              <TableHead className="hidden md:table-cell">Code</TableHead>
-              <TableHead className="hidden lg:table-cell">Reference</TableHead>
-              <TableHead className="hidden md:table-cell">Brand</TableHead>
-              <TableHead>Category</TableHead>
+              <TableHead className="w-[60px] sm:w-[80px]">Imagen</TableHead>
+              <TableHead>Nombre</TableHead>
+              <TableHead className="hidden md:table-cell">Código</TableHead>
+              <TableHead className="hidden lg:table-cell">Referencia</TableHead>
+              <TableHead className="hidden md:table-cell">Marca</TableHead>
+              <TableHead>Categoría</TableHead>
               <TableHead className="text-right">Stock</TableHead>
-              <TableHead className="text-right hidden sm:table-cell">Cost</TableHead>
-              <TableHead className="text-right">Price</TableHead>
-              <TableHead className="text-right hidden sm:table-cell">Profit</TableHead>
-              <TableHead className="text-center hidden sm:table-cell">Status</TableHead>
-              <TableHead className="text-center w-[100px] sm:w-[120px]">Actions</TableHead>
+              <TableHead className="text-right hidden sm:table-cell">Costo</TableHead>
+              <TableHead className="text-right">Precio</TableHead>
+              <TableHead className="text-right hidden sm:table-cell">Ganancia</TableHead>
+              <TableHead className="text-center hidden sm:table-cell">Estado</TableHead>
+              <TableHead className="text-center w-[100px] sm:w-[120px]">Acciones</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -506,39 +506,39 @@ function InventoryPageContent({ productsData, categoriesData }: { productsData: 
                 <TableCell className="text-right">{formatCurrency(product.price)}</TableCell>
                 <TableCell className="text-right font-semibold text-green-600 hidden sm:table-cell">{formatCurrency(product.price - product.cost)}</TableCell>
                 <TableCell className="text-center hidden sm:table-cell">
-                  {product.stock === 0 ? <Badge variant="destructive">Out of Stock</Badge> :
-                   product.stock < product.minStock ? <Badge variant="outline" className="border-yellow-500 text-yellow-600">Low Stock</Badge> :
-                   <Badge variant="secondary" className="border-green-500 text-green-600 bg-green-100">In Stock</Badge>}
+                  {product.stock === 0 ? <Badge variant="destructive">Agotado</Badge> :
+                   product.stock < product.minStock ? <Badge variant="outline" className="border-yellow-500 text-yellow-600">Stock Bajo</Badge> :
+                   <Badge variant="secondary" className="border-green-500 text-green-600 bg-green-100">En Stock</Badge>}
                 </TableCell>
                 <TableCell className="text-center"><ProductRowActions product={product} deleteMutation={deleteMutation} onBarcodeClick={handleBarcodeModalOpen} /></TableCell>
               </TableRow>
             ))}
-            {displayedProducts.length === 0 && (<TableRow><TableCell colSpan={11} className="h-24 text-center">No products found matching your criteria.</TableCell></TableRow>)}
+            {displayedProducts.length === 0 && (<TableRow><TableCell colSpan={11} className="h-24 text-center">No se encontraron productos que coincidan con sus criterios.</TableCell></TableRow>)}
           </TableBody>
         </Table>
       </div>
       
       <div className="mt-6 flex flex-col sm:flex-row items-center justify-between gap-4">
         <div className="flex items-center gap-2">
-          <span className="text-sm text-muted-foreground">Rows per page:</span>
+          <span className="text-sm text-muted-foreground">Filas por página:</span>
           <Select value={itemsPerPage.toString()} onValueChange={handleItemsPerPageChange}>
-            <SelectTrigger className="w-[120px] h-9"><SelectValue placeholder="Items per page" /></SelectTrigger>
+            <SelectTrigger className="w-[120px] h-9"><SelectValue placeholder="Items por página" /></SelectTrigger>
             <SelectContent>{itemsPerPageOptions.map(option => (<SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>))}</SelectContent>
           </Select>
         </div>
-        <div className="text-sm text-muted-foreground">{currentFilteredProducts.length > 0 ? `Showing ${paginationStartItem}-${paginationEndItem} of ${currentFilteredProducts.length} products` : "No products"}</div>
+        <div className="text-sm text-muted-foreground">{currentFilteredProducts.length > 0 ? `Mostrando ${paginationStartItem}-${paginationEndItem} de ${currentFilteredProducts.length} productos` : "No hay productos"}</div>
         <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))} disabled={currentPage === 1 || itemsPerPage === 'all'}><ChevronLeft className="h-4 w-4 mr-1" /> Previous</Button>
-          <span className="text-sm text-muted-foreground">Page {currentPage} of {totalPages}</span>
-          <Button variant="outline" size="sm" onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))} disabled={currentPage === totalPages || itemsPerPage === 'all'}>Next <ChevronRight className="h-4 w-4 ml-1" /></Button>
+          <Button variant="outline" size="sm" onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))} disabled={currentPage === 1 || itemsPerPage === 'all'}><ChevronLeft className="h-4 w-4 mr-1" /> Anterior</Button>
+          <span className="text-sm text-muted-foreground">Página {currentPage} de {totalPages}</span>
+          <Button variant="outline" size="sm" onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))} disabled={currentPage === totalPages || itemsPerPage === 'all'}>Siguiente <ChevronRight className="h-4 w-4 ml-1" /></Button>
         </div>
       </div>
       {isBarcodeModalOpen && selectedProductForBarcode && (
             <Dialog open={isBarcodeModalOpen} onOpenChange={handleCloseBarcodeModal}>
                 <DialogContent className="sm:max-w-md">
                     <DialogHeader>
-                        <DialogTitle className="flex items-center"><BarcodeIcon className="mr-2 h-6 w-6 text-primary" />Barcode for: {selectedProductForBarcode.name}</DialogTitle>
-                        <DialogDescription>Product Code (Source for Barcode): {selectedProductForBarcode.code}</DialogDescription>
+                        <DialogTitle className="flex items-center"><BarcodeIcon className="mr-2 h-6 w-6 text-primary" />Código de Barras para: {selectedProductForBarcode.name}</DialogTitle>
+                        <DialogDescription>Código de Producto (Fuente para Código de Barras): {selectedProductForBarcode.code}</DialogDescription>
                     </DialogHeader>
                     <div className="my-4 flex flex-col items-center justify-center">
                         <ProductBarcode 
@@ -548,7 +548,7 @@ function InventoryPageContent({ productsData, categoriesData }: { productsData: 
                         />
                     </div>
                     <div className="space-y-2">
-                        <label htmlFor="barcode-quantity" className="text-sm font-medium">Quantity to Print:</label>
+                        <label htmlFor="barcode-quantity" className="text-sm font-medium">Cantidad a Imprimir:</label>
                         <Input 
                             id="barcode-quantity"
                             type="number" 
@@ -559,7 +559,7 @@ function InventoryPageContent({ productsData, categoriesData }: { productsData: 
                         />
                     </div>
                     <DialogFooter className="mt-4">
-                        <Button type="button" variant="outline" onClick={handleCloseBarcodeModal}>Cancel</Button>
+                        <Button type="button" variant="outline" onClick={handleCloseBarcodeModal}>Cancelar</Button>
                         {selectedProductForBarcode.code ? (
                              <Button 
                                 type="button" 
@@ -567,11 +567,11 @@ function InventoryPageContent({ productsData, categoriesData }: { productsData: 
                                 disabled={isGeneratingPdf || barcodeQuantityToPrint < 1}
                             >
                                 {isGeneratingPdf ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Printer className="mr-2 h-4 w-4" />}
-                                Print to PDF
+                                Imprimir en PDF
                             </Button>
                         ) : (
-                            <Button type="button" disabled={true} title="Product has no code to generate a barcode.">
-                                <Printer className="mr-2 h-4 w-4" /> No Code Data
+                            <Button type="button" disabled={true} title="El producto no tiene código para generar un código de barras.">
+                                <Printer className="mr-2 h-4 w-4" /> Sin Datos de Código
                             </Button>
                         )}
                     </DialogFooter>
@@ -596,7 +596,7 @@ export default function InventoryPage() {
   if (isLoadingProducts || isLoadingCategories) {
     return (
       <AppLayout>
-        <PageHeader title="Inventory Management" description="Loading product stock..." />
+        <PageHeader title="Gestion de Inventario" description="Cargando stock de productos..." />
         <InventoryContentLoading />
       </AppLayout>
     );
@@ -605,13 +605,13 @@ export default function InventoryPage() {
   if (isProductsError || isCategoriesError) {
     return (
       <AppLayout>
-        <PageHeader title="Inventory Management" description="Error loading products or categories." />
+        <PageHeader title="Gestion de Inventario" description="Error al cargar productos o categorías." />
         <div className="bg-destructive/10 border border-destructive text-destructive p-4 rounded-md">
           <div className="flex items-center">
             <AlertTriangle className="mr-2 h-6 w-6" />
-            <h3 className="font-semibold">Failed to Load Data</h3>
+            <h3 className="font-semibold">Error al Cargar Datos</h3>
           </div>
-          <p>{(productsError || categoriesError)?.message || "An unknown error occurred."}</p>
+          <p>{(productsError || categoriesError)?.message || "Ocurrió un error desconocido."}</p>
         </div>
       </AppLayout>
     );
@@ -619,10 +619,10 @@ export default function InventoryPage() {
 
   return (
     <AppLayout>
-      <PageHeader title="Inventory Management" description="View and manage your product stock.">
-        <Button asChild><Link href="/inventory/add"><PlusCircle className="mr-2 h-4 w-4" /> Add Product</Link></Button>
-        <Button variant="outline" asChild><Link href="/inventory/import"><Upload className="mr-2 h-4 w-4" /> Import Products</Link></Button>
-        <Button variant="outline"><FileDown className="mr-2 h-4 w-4" /> Export CSV</Button>
+      <PageHeader title="Gestion de Inventario" description="Ver y gestionar el stock de sus productos.">
+        <Button asChild><Link href="/inventory/add"><PlusCircle className="mr-2 h-4 w-4" /> Añadir Producto</Link></Button>
+        <Button variant="outline" asChild><Link href="/inventory/import"><Upload className="mr-2 h-4 w-4" /> Importar Productos</Link></Button>
+        <Button variant="outline"><FileDown className="mr-2 h-4 w-4" /> Exportar CSV</Button>
       </PageHeader>
 
       <Suspense fallback={<InventoryContentLoading />}>
@@ -631,4 +631,3 @@ export default function InventoryPage() {
     </AppLayout>
   );
 }
-

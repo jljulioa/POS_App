@@ -20,19 +20,19 @@ import type { Product } from '@/lib/mockData';
 import type { ProductCategory } from '@/app/api/categories/route';
 
 const ProductFormSchema = z.object({
-  name: z.string().min(3, { message: "Name must be at least 3 characters." }),
-  code: z.string().min(3, { message: "Code must be at least 3 characters." }),
-  reference: z.string().min(3, { message: "Reference must be at least 3 characters." }),
+  name: z.string().min(3, { message: "El nombre debe tener al menos 3 caracteres." }),
+  code: z.string().min(3, { message: "El código debe tener al menos 3 caracteres." }),
+  reference: z.string().min(3, { message: "La referencia debe tener al menos 3 caracteres." }),
   barcode: z.string().optional().or(z.literal('')),
-  stock: z.coerce.number().int().min(0, { message: "Stock must be a non-negative integer." }),
-  categoryId: z.coerce.number().int().positive({ message: "Category is required." }), // Changed from category: string
-  brand: z.string().min(2, { message: "Brand is required." }),
-  minStock: z.coerce.number().int().min(0, { message: "Min. stock must be a non-negative integer." }),
-  maxStock: z.coerce.number().int().min(0, { message: "Max. stock must be a non-negative integer." }).optional(),
-  cost: z.coerce.number().min(0, { message: "Cost must be a non-negative number." }),
-  price: z.coerce.number().min(0, { message: "Price must be a non-negative number." }),
-  imageUrl: z.string().url({ message: "Please enter a valid URL." }).optional().or(z.literal('')),
-  dataAiHint: z.string().max(50, { message: "AI Hint cannot exceed 50 characters."}).optional(),
+  stock: z.coerce.number().int().min(0, { message: "El stock debe ser un número entero no negativo." }),
+  categoryId: z.coerce.number().int().positive({ message: "La categoría es obligatoria." }), // Changed from category: string
+  brand: z.string().min(2, { message: "La marca es obligatoria." }),
+  minStock: z.coerce.number().int().min(0, { message: "El stock mínimo debe ser un número entero no negativo." }),
+  maxStock: z.coerce.number().int().min(0, { message: "El stock máximo debe ser un número entero no negativo." }).optional(),
+  cost: z.coerce.number().min(0, { message: "El costo debe ser un número no negativo." }),
+  price: z.coerce.number().min(0, { message: "El precio debe ser un número no negativo." }),
+  imageUrl: z.string().url({ message: "Por favor, ingrese una URL válida." }).optional().or(z.literal('')),
+  dataAiHint: z.string().max(50, { message: "La pista de IA no puede exceder los 50 caracteres."}).optional(),
 });
 
 type ProductFormValues = z.infer<typeof ProductFormSchema>;
@@ -96,8 +96,8 @@ export default function AddProductPage() {
     mutationFn: addProductAPI,
     onSuccess: (data) => {
       toast({
-        title: "Product Added Successfully",
-        description: `${data.name} has been added to the product list.`,
+        title: "Producto Agregado Exitosamente",
+        description: `${data.name} ha sido agregado a la lista de productos.`,
       });
       queryClient.invalidateQueries({ queryKey: ['products'] });
       router.push('/inventory');
@@ -105,8 +105,8 @@ export default function AddProductPage() {
     onError: (error) => {
       toast({
         variant: "destructive",
-        title: "Failed to Add Product",
-        description: error.message || "An unexpected error occurred.",
+        title: "Error al Agregar el Producto",
+        description: error.message || "Ocurrió un error inesperado.",
       });
     },
   });
@@ -117,10 +117,10 @@ export default function AddProductPage() {
 
   return (
     <AppLayout>
-      <PageHeader title="Add New Product" description="Fill in the details for the new product.">
+      <PageHeader title="Agregar Nuevo Producto" description="Complete los detalles del nuevo producto.">
         <Button variant="outline" asChild>
           <Link href="/inventory">
-            <ArrowLeft className="mr-2 h-4 w-4" /> Cancel
+            <ArrowLeft className="mr-2 h-4 w-4" /> Cancelar
           </Link>
         </Button>
       </PageHeader>
@@ -131,9 +131,9 @@ export default function AddProductPage() {
             <CardHeader>
               <CardTitle className="flex items-center">
                 <PackagePlus className="mr-2 h-6 w-6 text-primary" />
-                Product Information
+                Información del Producto
               </CardTitle>
-              <CardDescription>Fields marked with * are required.</CardDescription>
+              <CardDescription>Los campos marcados con * son obligatorios.</CardDescription>
             </CardHeader>
             <CardContent className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 p-6">
               <FormField
@@ -141,9 +141,9 @@ export default function AddProductPage() {
                 name="name"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Product Name *</FormLabel>
+                    <FormLabel>Nombre del Producto *</FormLabel>
                     <FormControl>
-                      <Input placeholder="e.g., Spark Plug NGK CR9E" {...field} />
+                      <Input placeholder="Ej: Bujía NGK CR9E" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -154,9 +154,9 @@ export default function AddProductPage() {
                 name="code"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Product Code *</FormLabel>
+                    <FormLabel>Código del Producto *</FormLabel>
                     <FormControl>
-                      <Input placeholder="e.g., SPK-NGK-CR9E" {...field} />
+                      <Input placeholder="Ej: SPK-NGK-CR9E" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -167,9 +167,9 @@ export default function AddProductPage() {
                 name="reference"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Reference *</FormLabel>
+                    <FormLabel>Referencia *</FormLabel>
                     <FormControl>
-                      <Input placeholder="e.g., REF-SPK-001" {...field} />
+                      <Input placeholder="Ej: REF-SPK-001" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -180,9 +180,9 @@ export default function AddProductPage() {
                 name="barcode"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Barcode (EAN/UPC)</FormLabel>
+                    <FormLabel>Código de Barras (EAN/UPC)</FormLabel>
                     <FormControl>
-                      <Input placeholder="e.g., 1234567890123" {...field} value={field.value ?? ''} />
+                      <Input placeholder="Ej: 1234567890123" {...field} value={field.value ?? ''} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -193,7 +193,7 @@ export default function AddProductPage() {
                 name="categoryId"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Category *</FormLabel>
+                    <FormLabel>Categoría *</FormLabel>
                     <Select 
                       onValueChange={(value) => field.onChange(Number(value))} // Convert string value from Select to number
                       value={field.value?.toString()} // Convert number to string for Select value
@@ -201,14 +201,14 @@ export default function AddProductPage() {
                     >
                       <FormControl>
                         <SelectTrigger>
-                          <SelectValue placeholder={isLoadingCategories ? "Loading categories..." : "Select a category"} />
+                          <SelectValue placeholder={isLoadingCategories ? "Cargando categorías..." : "Seleccione una categoría"} />
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
                         {isLoadingCategories ? (
-                            <SelectItem value="loading" disabled>Loading...</SelectItem>
+                            <SelectItem value="loading" disabled>Cargando...</SelectItem>
                         ) : categories.length === 0 ? (
-                            <SelectItem value="no-categories" disabled>No categories found. Add one first.</SelectItem>
+                            <SelectItem value="no-categories" disabled>No se encontraron categorías. Agregue una primero.</SelectItem>
                         ) : (
                           categories.map((category) => (
                             <SelectItem key={category.id} value={category.id.toString()}> {/* Use category.id as value */}
@@ -227,9 +227,9 @@ export default function AddProductPage() {
                 name="brand"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Brand *</FormLabel>
+                    <FormLabel>Marca *</FormLabel>
                     <FormControl>
-                      <Input placeholder="e.g., NGK" {...field} />
+                      <Input placeholder="Ej: NGK" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -240,9 +240,9 @@ export default function AddProductPage() {
                 name="stock"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Current Stock *</FormLabel>
+                    <FormLabel>Stock Actual *</FormLabel>
                     <FormControl>
-                      <Input type="number" placeholder="e.g., 150" {...field} />
+                      <Input type="number" placeholder="Ej: 150" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -253,9 +253,9 @@ export default function AddProductPage() {
                 name="minStock"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Minimum Stock *</FormLabel>
+                    <FormLabel>Stock Mínimo *</FormLabel>
                     <FormControl>
-                      <Input type="number" placeholder="e.g., 20" {...field} />
+                      <Input type="number" placeholder="Ej: 20" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -266,9 +266,9 @@ export default function AddProductPage() {
                 name="maxStock"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Maximum Stock</FormLabel>
+                    <FormLabel>Stock Máximo</FormLabel>
                     <FormControl>
-                      <Input type="number" placeholder="e.g., 200" {...field} value={field.value ?? ''} />
+                      <Input type="number" placeholder="Ej: 200" {...field} value={field.value ?? ''} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -279,9 +279,9 @@ export default function AddProductPage() {
                 name="cost"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Cost Price *</FormLabel>
+                    <FormLabel>Precio de Costo *</FormLabel>
                     <FormControl>
-                      <Input type="number" step="0.01" placeholder="e.g., 2.50" {...field} />
+                      <Input type="number" step="0.01" placeholder="Ej: 2.50" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -292,9 +292,9 @@ export default function AddProductPage() {
                 name="price"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Selling Price *</FormLabel>
+                    <FormLabel>Precio de Venta *</FormLabel>
                     <FormControl>
-                      <Input type="number" step="0.01" placeholder="e.g., 5.00" {...field} />
+                      <Input type="number" step="0.01" placeholder="Ej: 5.00" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -305,12 +305,12 @@ export default function AddProductPage() {
                 name="imageUrl"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Image URL</FormLabel>
+                    <FormLabel>URL de la Imagen</FormLabel>
                     <FormControl>
                       <Input placeholder="https://placehold.co/100x100.png" {...field} value={field.value ?? ''} />
                     </FormControl>
                      <FormDescription>
-                      Enter a valid image URL or leave blank for a default placeholder.
+                      Ingrese una URL de imagen válida o déjela en blanco para un marcador de posición predeterminado.
                     </FormDescription>
                     <FormMessage />
                   </FormItem>
@@ -321,12 +321,12 @@ export default function AddProductPage() {
                 name="dataAiHint"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>AI Image Hint</FormLabel>
+                    <FormLabel>Pista de Imagen para IA</FormLabel>
                     <FormControl>
-                      <Input placeholder="e.g., spark plug" {...field} value={field.value ?? ''} />
+                      <Input placeholder="Ej: bujía" {...field} value={field.value ?? ''} />
                     </FormControl>
                     <FormDescription>
-                      Keywords for AI to find a relevant image (max 2 words).
+                      Palabras clave para que la IA encuentre una imagen relevante (máx. 2 palabras).
                     </FormDescription>
                     <FormMessage />
                   </FormItem>
@@ -340,7 +340,7 @@ export default function AddProductPage() {
                 ) : (
                   <Save className="mr-2 h-4 w-4" /> 
                 )}
-                {mutation.isPending ? 'Saving...' : 'Save Product'}
+                {mutation.isPending ? 'Guardando...' : 'Guardar Producto'}
               </Button>
             </CardFooter>
           </Card>

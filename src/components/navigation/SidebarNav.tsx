@@ -10,15 +10,15 @@ import { SidebarMenu, SidebarMenuItem, SidebarMenuButton, SidebarMenuSub, Sideba
 
 const mainNavItems = [
   { href: '/', label: 'Dashboard', icon: LayoutDashboard },
-  { href: '/pos', label: 'Point of Sale', icon: Barcode },
-  { href: '/inventory', label: 'Inventory', icon: Package },
-  { href: '/transactions', label: 'Transactions', icon: ArrowRightLeft },
-  { href: '/categories', label: 'Manage Categories', icon: Tag },
-  { href: '/sales', label: 'Sales Records', icon: ShoppingCart },
-  { href: '/customers', label: 'Customers', icon: Users },
-  { href: '/purchase-invoices', label: 'Purchase Invoices', icon: FileText },
-  { href: '/expenses', label: 'Expenses', icon: Landmark },
-  { href: '/reordering', label: 'Smart Reordering', icon: Bot },
+  { href: '/pos', label: 'Punto de Venta', icon: Barcode },
+  { href: '/inventory', label: 'Inventario', icon: Package },
+  { href: '/transactions', label: 'Transacciones', icon: ArrowRightLeft },
+  { href: '/categories', label: 'Categorias', icon: Tag },
+  { href: '/sales', label: 'Registro de Ventas', icon: ShoppingCart },
+  { href: '/customers', label: 'Clientes', icon: Users },
+  { href: '/purchase-invoices', label: 'Facturas de Compra', icon: FileText },
+  { href: '/expenses', label: 'Gastos', icon: Landmark },
+  { href: '/reordering', label: 'Reordenamiento IA', icon: Bot },
 ];
 
 export function SidebarNav() {

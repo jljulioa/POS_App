@@ -701,12 +701,12 @@ export default function POSPage() {
         <div className="flex flex-col md:flex-row gap-4 sm:gap-6 h-[calc(100vh-4rem-3rem-5.5rem)]"> 
           <Card className="w-full md:w-2/5 flex flex-col shadow-lg">
             <CardHeader className="p-4 sm:p-6">
-              <CardTitle className="text-base sm:text-lg">Product Search</CardTitle>
+              <CardTitle className="text-base sm:text-lg">Buscar Producto</CardTitle>
               <div className="relative mt-2">
                 <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
                   type="text"
-                  placeholder="Search by name, code, reference..."
+                  placeholder="Buscar por nombre, código o descripción..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className="pl-8 py-2 text-sm sm:text-base"
@@ -750,7 +750,7 @@ export default function POSPage() {
                   <p className="text-center text-muted-foreground py-4 text-sm">No products found for "{searchTerm}".</p>
                 )}
                 {!isLoadingProducts && !isProductsError && !searchTerm && (
-                  <p className="text-center text-muted-foreground py-4 text-sm">Start typing to search for products.</p>
+                  <p className="text-center text-muted-foreground py-4 text-sm">Escribe para buscar productos...</p>
                 )}
               </ScrollArea>
             </CardContent>
@@ -779,7 +779,7 @@ export default function POSPage() {
                         <UserRound className="mr-1 h-3 w-3 sm:h-4 sm:w-4" />
                         {activeTicket.customer_name ? 
                           <span className="truncate max-w-[100px] sm:max-w-[150px]">{activeTicket.customer_name} (ID: {activeTicket.customer_id})</span> : 
-                          "Assign Customer"
+                          "Asignar Cliente"
                         }
                       </Button>
                     </DropdownMenuTrigger>
@@ -888,7 +888,7 @@ export default function POSPage() {
                     </TableBody>
                   </Table>
                 ) : (
-                  <p className="text-center text-muted-foreground py-10 text-sm">Cart empty. Add products from the left.</p>
+                  <p className="text-center text-muted-foreground py-10 text-sm">Carrito vacío, agrega productos</p>
                 )}
               </ScrollArea>
             </CardContent>

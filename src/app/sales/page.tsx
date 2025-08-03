@@ -52,13 +52,13 @@ const fetchSales = async (startDate?: Date, endDate?: Date): Promise<Sale[]> => 
 
 const ReturnItemSchema = z.object({
   productId: z.string(),
-  quantity: z.number().int().min(0, "Return quantity cannot be negative."),
+  quantity: z.number().int().min(0, "La cantidad de devolución no puede ser negativa."),
   unitPrice: z.number(),
 });
 
 const ProcessReturnSchema = z.object({
   saleId: z.string(),
-  itemsToReturn: z.array(ReturnItemSchema).min(1, "At least one item must be selected for return."),
+  itemsToReturn: z.array(ReturnItemSchema).min(1, "Se debe seleccionar al menos un artículo para la devolución."),
 });
 
 type ReturnItemFormValues = {
@@ -95,8 +95,8 @@ const fetchInvoiceSettingsAPI = async (): Promise<InvoiceSettings> => {
 const defaultInvoiceSettings: InvoiceSettings = {
   companyName: 'MotoFox POS',
   nit: 'N/A',
-  address: 'Your Store Address',
-  footerMessage: 'Thank you for your business!',
+  address: 'La Dirección de su Tienda',
+  footerMessage: '¡Gracias por su compra!',
 };
 
 // Function to generate PDF receipt using jsPDF
@@ -117,14 +117,14 @@ const generateSaleReceiptPdf = async (sale: Sale, settings: InvoiceSettings, for
   const contentWidth = 76 - (leftMargin * 2);
 
   doc.setFontSize(12);
-  doc.setFont(undefined, 'bold');
+  doc.setFont('helvetica', 'bold');
   const companyNameText = settings.companyName || defaultInvoiceSettings.companyName;
   const companyNameWidth = doc.getTextWidth(companyNameText);
   doc.text(companyNameText, (76 - companyNameWidth) / 2, yPos);
   yPos += lineSpacing;
 
   doc.setFontSize(8);
-  doc.setFont(undefined, 'normal');
+  doc.setFont('helvetica', 'normal');
   const addressText = settings.address || defaultInvoiceSettings.address;
   const addressLines = doc.splitTextToSize(addressText, contentWidth);
   addressLines.forEach((line: string) => {
@@ -141,24 +141,24 @@ const generateSaleReceiptPdf = async (sale: Sale, settings: InvoiceSettings, for
   doc.text('-------------------------------------', leftMargin, yPos); 
   yPos += smallLineSpacing;
 
-  doc.text(`Receipt No: ${sale.id}`, leftMargin, yPos);
+  doc.text(`Recibo No: ${sale.id}`, leftMargin, yPos);
   yPos += smallLineSpacing;
-  doc.text(`Date: ${format(new Date(sale.date), 'dd/MM/yyyy HH:mm')}`, leftMargin, yPos);
+  doc.text(`Fecha: ${format(new Date(sale.date), 'dd/MM/yyyy HH:mm')}`, leftMargin, yPos);
   yPos += smallLineSpacing;
   if (sale.cashierId) {
-    doc.text(`Cashier: ${sale.cashierId}`, leftMargin, yPos);
+    doc.text(`Cajero: ${sale.cashierId}`, leftMargin, yPos);
     yPos += smallLineSpacing;
   }
   if (sale.customerName) {
-    doc.text(`Customer: ${sale.customerName}`, leftMargin, yPos);
+    doc.text(`Cliente: ${sale.customerName}`, leftMargin, yPos);
     yPos += smallLineSpacing;
   }
   yPos += smallLineSpacing; 
 
   const tableColumn = [
-    { header: 'Item', dataKey: 'name' },
-    { header: 'Qty', dataKey: 'qty' },
-    { header: 'Price', dataKey: 'unit' },
+    { header: 'Artículo', dataKey: 'name' },
+    { header: 'Cant', dataKey: 'qty' },
+    { header: 'Precio', dataKey: 'unit' },
     { header: 'Total', dataKey: 'total' },
   ];
   const tableRows = sale.items.map(item => ({
@@ -197,14 +197,14 @@ const generateSaleReceiptPdf = async (sale: Sale, settings: InvoiceSettings, for
   yPos += smallLineSpacing;
 
   doc.setFontSize(9);
-  doc.setFont(undefined, 'bold');
+  doc.setFont('helvetica', 'bold');
   doc.text('TOTAL:', leftMargin + 35, yPos, { align: 'right' }); 
   doc.text(formatCurrencyFn(sale.totalAmount, globalCurrencyCode), 76 - leftMargin, yPos, { align: 'right' });
   yPos += lineSpacing;
 
   doc.setFontSize(8);
-  doc.setFont(undefined, 'normal');
-  doc.text(`Payment: ${sale.paymentMethod}`, leftMargin, yPos);
+  doc.setFont('helvetica', 'normal');
+  doc.text(`Pago: ${sale.paymentMethod}`, leftMargin, yPos);
   yPos += lineSpacing;
 
   doc.text('-------------------------------------', leftMargin, yPos); 
@@ -246,15 +246,18 @@ export default function SalesPage() {
   const { data: sales = [], isLoading, error, isError, refetch } = useQuery<Sale[], Error>({
     queryKey: ['sales', startDate, endDate],
     queryFn: () => fetchSales(startDate, endDate),
-    enabled: true, 
-    onError: (err) => {
+    enabled: true,
+  });
+
+  useEffect(() => {
+    if (isError) {
       toast({
         variant: "destructive",
-        title: "Failed to Load Sales Records",
-        description: err.message || "An unexpected error occurred.",
+        title: "Error al Cargar los Registros de Ventas",
+        description: error?.message || "Ocurrió un error inesperado.",
       });
     }
-  });
+  }, [isError, error, toast]);
 
   const { data: invoiceSettings, isLoading: isLoadingInvoiceSettings } = useQuery<InvoiceSettings, Error>({
     queryKey: ['invoiceSettings'], 
@@ -263,10 +266,11 @@ export default function SalesPage() {
   });
   
   const filteredSales = useMemo(() => {
-    return sales.filter(sale =>
+    if (!sales) return [];
+    return sales.filter((sale: Sale) =>
       sale.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
       (sale.customerName && sale.customerName.toLowerCase().includes(searchTerm.toLowerCase())) ||
-      sale.items.some(item => item.productName.toLowerCase().includes(searchTerm.toLowerCase()))
+      sale.items.some((item: SaleItem) => item.productName.toLowerCase().includes(searchTerm.toLowerCase()))
     );
   }, [searchTerm, sales]);
 
@@ -345,8 +349,8 @@ export default function SalesPage() {
     mutationFn: processReturnAPI,
     onSuccess: (data) => {
       toast({
-        title: "Return Processed Successfully",
-        description: `${data.message}. Total Refund: ${formatCurrency(data.totalRefundAmount)}`,
+        title: "Devolución Procesada Exitosamente",
+        description: `${data.message}. Reembolso Total: ${formatCurrency(data.totalRefundAmount)}`,
       });
       queryClient.invalidateQueries({ queryKey: ['products'] });
       queryClient.invalidateQueries({ queryKey: ['sales', startDate, endDate] });
@@ -358,7 +362,7 @@ export default function SalesPage() {
     onError: (error) => {
       toast({
         variant: "destructive",
-        title: "Failed to Process Return",
+        title: "Error al Procesar la Devolución",
         description: error.message,
       });
     },
@@ -376,7 +380,7 @@ export default function SalesPage() {
       }));
 
     if (itemsToSubmit.length === 0) {
-      toast({ variant: "destructive", title: "No Items to Return", description: "Please specify a quantity greater than 0 for at least one item." });
+      toast({ variant: "destructive", title: "No hay Artículos para Devolver", description: "Por favor, especifique una cantidad mayor que 0 para al menos un artículo." });
       return;
     }
 
@@ -387,7 +391,7 @@ export default function SalesPage() {
 
     if (!validation.success) {
       console.error("Return validation error:", validation.error.format());
-      toast({ variant: "destructive", title: "Invalid Return Data", description: validation.error.flatten().fieldErrors.itemsToReturn?.join(', ') || "Please check return quantities." });
+      toast({ variant: "destructive", title: "Datos de Devolución Inválidos", description: validation.error.flatten().fieldErrors.itemsToReturn?.join(', ') || "Por favor, verifique las cantidades de devolución." });
       return;
     }
     processReturnMutation.mutate(validation.data);
@@ -395,12 +399,12 @@ export default function SalesPage() {
 
   const handlePrintSaleReceipt = async (saleToPrint: Sale | null) => {
     if (!saleToPrint) {
-      toast({ variant: 'destructive', title: 'Print Error', description: 'No sale selected for printing.' });
+      toast({ variant: 'destructive', title: 'Error de Impresión', description: 'No se ha seleccionado ninguna venta para imprimir.' });
       return;
     }
     if (isPrintingReceipt) return;
     if (isLoadingInvoiceSettings) {
-        toast({ variant: 'outline', title: 'Please wait', description: 'Loading settings...' });
+        toast({ title: 'Por favor espere', description: 'Cargando configuración...' });
         return;
     }
 
@@ -409,13 +413,13 @@ export default function SalesPage() {
 
     try {
       await generateSaleReceiptPdf(saleToPrint, settingsToUse, formatCurrency, globalCurrency); // Removed taxSettings
-      toast({ title: 'Receipt Downloaded', description: `Receipt for sale ${saleToPrint.id} has been generated.` });
+      toast({ title: 'Recibo Descargado', description: `Se ha generado el recibo para la venta ${saleToPrint.id}.` });
     } catch (error) {
       console.error('Error generating PDF receipt:', error);
       toast({
         variant: 'destructive',
-        title: 'Print Error',
-        description: (error as Error).message || "Unknown error during PDF generation.",
+        title: 'Error de Impresión',
+        description: (error as Error).message || "Error desconocido durante la generación del PDF.",
       });
     } finally {
       setIsPrintingReceipt(false);
@@ -435,9 +439,9 @@ export default function SalesPage() {
   const paginationEndItem = itemsPerPage === 'all' ? filteredSales.length : Math.min(currentPage * Number(itemsPerPage), filteredSales.length);
 
   const itemsPerPageOptions = [
-    { value: '20', label: '20 per page' },
-    { value: '40', label: '40 per page' },
-    { value: 'all', label: 'Show All' },
+    { value: '20', label: '20' },
+    { value: '40', label: '40' },
+    { value: 'all', label: 'Todos' },
   ];
 
   useEffect(() => {
@@ -447,7 +451,7 @@ export default function SalesPage() {
   if (isLoading && !sales.length) {
     return (
       <AppLayout>
-        <PageHeader title="Sales Records" description="Loading sales history..." />
+        <PageHeader title="Registros de Ventas" description="Cargando historial de ventas..." />
         <div className="flex justify-center items-center h-64">
           <Loader2 className="h-12 w-12 animate-spin text-primary" />
         </div>
@@ -458,16 +462,16 @@ export default function SalesPage() {
   if (isError) {
     return (
       <AppLayout>
-        <PageHeader title="Sales Records" description="Error loading sales data." />
+        <PageHeader title="Registros de Ventas" description="Error al cargar los datos de ventas." />
         <Card className="shadow-md">
           <CardHeader>
             <CardTitle className="flex items-center text-destructive">
               <AlertTriangle className="mr-2 h-6 w-6" />
-              Failed to Load Sales Records
+              Error al Cargar los Registros de Ventas
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p>{error?.message || "An unknown error occurred while fetching sales data."}</p>
+            <p>{error?.message || "Ocurrió un error desconocido al obtener los datos de ventas."}</p>
           </CardContent>
         </Card>
       </AppLayout>
@@ -476,15 +480,15 @@ export default function SalesPage() {
 
   return (
     <AppLayout>
-      <PageHeader title="Sales Records" description="View and analyze your sales history.">
+      <PageHeader title="Registros de Ventas" description="Vea y analice su historial de ventas.">
         <Button variant="outline">
-          <FileDown className="mr-2 h-4 w-4" /> Export CSV
+          <FileDown className="mr-2 h-4 w-4" /> Exportar CSV
         </Button>
       </PageHeader>
 
       <div className="mb-6 flex flex-col sm:flex-row flex-wrap gap-2 sm:gap-4 items-center">
         <Input
-          placeholder="Search by Sale ID, Customer, Product..."
+          placeholder="Buscar por ID de Venta, Cliente, Producto..."
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
           className="w-full sm:max-w-xs md:max-w-sm"
@@ -500,7 +504,7 @@ export default function SalesPage() {
                 )}
               >
                 <CalendarIcon className="mr-2 h-4 w-4" />
-                {startDate ? format(startDate, "PPP") : <span>Start Date</span>}
+                {startDate ? format(startDate, "PPP") : <span>Fecha de Inicio</span>}
               </Button>
             </PopoverTrigger>
             <PopoverContent className="w-auto p-0">
@@ -522,7 +526,7 @@ export default function SalesPage() {
                 )}
               >
                 <CalendarIcon className="mr-2 h-4 w-4" />
-                {endDate ? format(endDate, "PPP") : <span>End Date</span>}
+                {endDate ? format(endDate, "PPP") : <span>Fecha de Fin</span>}
               </Button>
             </PopoverTrigger>
             <PopoverContent className="w-auto p-0">
@@ -539,7 +543,7 @@ export default function SalesPage() {
         {(startDate || endDate) && (
           <Button variant="ghost" size="icon" onClick={handleClearFilters} className="text-muted-foreground hover:text-destructive">
             <FilterX className="h-5 w-5" />
-            <span className="sr-only">Clear Date Filters</span>
+            <span className="sr-only">Limpiar Filtros de Fecha</span>
           </Button>
         )}
         {isLoading && <Loader2 className="h-5 w-5 animate-spin text-primary ml-2" />}
@@ -549,14 +553,14 @@ export default function SalesPage() {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Sale ID</TableHead>
-              <TableHead className="hidden sm:table-cell">Date</TableHead>
-              <TableHead>Customer</TableHead>
-              <TableHead className="hidden md:table-cell">Items</TableHead>
+              <TableHead>ID de Venta</TableHead>
+              <TableHead className="hidden sm:table-cell">Fecha</TableHead>
+              <TableHead>Cliente</TableHead>
+              <TableHead className="hidden md:table-cell">Artículos</TableHead>
               {/* Subtotal and Tax columns removed */}
               <TableHead className="text-right">Total</TableHead>
-              <TableHead className="text-center hidden sm:table-cell">Payment</TableHead>
-              <TableHead className="text-center">Actions</TableHead>
+              <TableHead className="text-center hidden sm:table-cell">Pago</TableHead>
+              <TableHead className="text-center">Acciones</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -586,7 +590,7 @@ export default function SalesPage() {
             {displayedSales.length === 0 && (
               <TableRow>
                 <TableCell colSpan={7} className="h-24 text-center"> {/* Adjusted colSpan */}
-                  No sales records found for the selected criteria.
+                  No se encontraron registros de ventas para los criterios seleccionados.
                 </TableCell>
               </TableRow>
             )}
@@ -596,17 +600,17 @@ export default function SalesPage() {
 
       <div className="mt-6 flex flex-col sm:flex-row items-center justify-between gap-4">
         <div className="flex items-center gap-2">
-          <span className="text-sm text-muted-foreground">Rows per page:</span>
+          <span className="text-sm text-muted-foreground">Filas por página:</span>
           <Select value={itemsPerPage.toString()} onValueChange={handleItemsPerPageChange}>
-            <SelectTrigger className="w-[120px] h-9"><SelectValue placeholder="Items per page" /></SelectTrigger>
+            <SelectTrigger className="w-[120px] h-9"><SelectValue placeholder="Items por página" /></SelectTrigger>
             <SelectContent>{itemsPerPageOptions.map(option => (<SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>))}</SelectContent>
           </Select>
         </div>
-        <div className="text-sm text-muted-foreground">{filteredSales.length > 0 ? `Showing ${paginationStartItem}-${paginationEndItem} of ${filteredSales.length} sales` : "No sales"}</div>
+        <div className="text-sm text-muted-foreground">{filteredSales.length > 0 ? `Mostrando ${paginationStartItem}-${paginationEndItem} de ${filteredSales.length} ventas` : "No hay ventas"}</div>
         <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))} disabled={currentPage === 1 || itemsPerPage === 'all'}><ChevronLeft className="h-4 w-4 mr-1" /> Previous</Button>
-          <span className="text-sm text-muted-foreground">Page {currentPage} of {totalPages}</span>
-          <Button variant="outline" size="sm" onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))} disabled={currentPage === totalPages || itemsPerPage === 'all'}>Next <ChevronRight className="h-4 w-4 ml-1" /></Button>
+          <Button variant="outline" size="sm" onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))} disabled={currentPage === 1 || itemsPerPage === 'all'}><ChevronLeft className="h-4 w-4 mr-1" /> Anterior</Button>
+          <span className="text-sm text-muted-foreground">Página {currentPage} de {totalPages}</span>
+          <Button variant="outline" size="sm" onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))} disabled={currentPage === totalPages || itemsPerPage === 'all'}>Siguiente <ChevronRight className="h-4 w-4 ml-1" /></Button>
         </div>
       </div>
 
@@ -616,22 +620,22 @@ export default function SalesPage() {
             <DialogHeader>
               <DialogTitle className="flex items-center">
                 <ShoppingCart className="mr-2 h-6 w-6 text-primary" />
-                Sale Details: {selectedSale.id}
+                Detalles de la Venta: {selectedSale.id}
               </DialogTitle>
               <DialogDescription>
-                Date: {format(parseISO(selectedSale.date), 'PPPp')} <br />
-                Customer: {selectedSale.customerName || 'N/A'} | Payment: {selectedSale.paymentMethod} | Cashier: {selectedSale.cashierId}
+                Fecha: {format(parseISO(selectedSale.date), 'PPPp')} <br />
+                Cliente: {selectedSale.customerName || 'N/A'} | Pago: {selectedSale.paymentMethod} | Cajero: {selectedSale.cashierId}
               </DialogDescription>
             </DialogHeader>
             <div className="py-4">
-              <h4 className="font-semibold mb-2">Items Sold:</h4>
+              <h4 className="font-semibold mb-2">Artículos Vendidos:</h4>
               <div className="max-h-[300px] overflow-y-auto rounded-md border">
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Product</TableHead>
-                      <TableHead className="text-center">Qty</TableHead>
-                      <TableHead className="text-right">Unit Price</TableHead>
+                      <TableHead>Producto</TableHead>
+                      <TableHead className="text-center">Cant</TableHead>
+                      <TableHead className="text-right">Precio Unitario</TableHead>
                       <TableHead className="text-right">Total</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -649,7 +653,7 @@ export default function SalesPage() {
               </div>
               <div className="mt-4 space-y-1 text-right">
                 {/* Subtotal and Tax display removed */}
-                <p className="font-bold text-lg">Grand Total: {formatCurrency(selectedSale.totalAmount)}</p>
+                <p className="font-bold text-lg">Total General: {formatCurrency(selectedSale.totalAmount)}</p>
               </div>
             </div>
             <DialogFooter className="flex-col sm:flex-row sm:justify-between items-center">
@@ -661,18 +665,18 @@ export default function SalesPage() {
                   className="w-full sm:w-auto"
                 >
                   {isPrintingReceipt || isLoadingInvoiceSettings ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Printer className="mr-2 h-4 w-4" />}
-                  Print Receipt
+                  Imprimir Recibo
                 </Button>
                 <Button
                   variant="outline"
                   onClick={() => handleOpenReturnModal(selectedSale)}
                   className="w-full sm:w-auto"
                 >
-                  <CornerDownLeft className="mr-2 h-4 w-4" /> Return Items
+                  <CornerDownLeft className="mr-2 h-4 w-4" /> Devolver Artículos
                 </Button>
               </div>
               <DialogClose asChild>
-                <Button type="button" variant="secondary" className="w-full sm:w-auto mt-2 sm:mt-0">Close</Button>
+                <Button type="button" variant="secondary" className="w-full sm:w-auto mt-2 sm:mt-0">Cerrar</Button>
               </DialogClose>
             </DialogFooter>
           </DialogContent>
@@ -690,10 +694,10 @@ export default function SalesPage() {
             <DialogHeader>
               <DialogTitle className="flex items-center">
                 <CornerDownLeft className="mr-2 h-6 w-6 text-primary" />
-                Return Items from Sale: {selectedSale.id}
+                Devolver Artículos de la Venta: {selectedSale.id}
               </DialogTitle>
               <DialogDescription>
-                Specify quantities to return. Max quantity is what was originally purchased.
+                Especifique las cantidades a devolver. La cantidad máxima es la que se compró originalmente.
               </DialogDescription>
             </DialogHeader>
             <div className="py-4">
@@ -702,7 +706,7 @@ export default function SalesPage() {
                   <div key={item.productId} className="grid grid-cols-3 items-center gap-3 p-2 border rounded-md">
                     <div className="col-span-2">
                       <p className="font-medium text-sm">{item.productName}</p>
-                      <p className="text-xs text-muted-foreground">Purchased: {item.quantity} @ {formatCurrency(item.unitPrice)}</p>
+                      <p className="text-xs text-muted-foreground">Comprado: {item.quantity} @ {formatCurrency(item.unitPrice)}</p>
                     </div>
                     <Input
                       type="number"
@@ -711,23 +715,23 @@ export default function SalesPage() {
                       value={returnItems[item.productId]?.quantity ?? 0}
                       onChange={(e) => handleReturnQuantityChange(item.productId, e.target.value)}
                       className="h-9 text-center"
-                      placeholder="Qty"
+                      placeholder="Cant"
                     />
                   </div>
                 ))}
               </div>
               <div className="text-right font-semibold text-lg pt-3">
-                Total Refund Amount: {formatCurrency(totalReturnAmount)}
+                Monto Total del Reembolso: {formatCurrency(totalReturnAmount)}
               </div>
             </div>
             <DialogFooter>
-              <Button variant="outline" onClick={() => { setIsReturnModalOpen(false); setSelectedSale(null); }}>Cancel</Button>
+              <Button variant="outline" onClick={() => { setIsReturnModalOpen(false); setSelectedSale(null); }}>Cancelar</Button>
               <Button
                 onClick={handleSubmitReturn}
                 disabled={processReturnMutation.isPending || totalReturnAmount === 0}
               >
                 {processReturnMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                Confirm Return
+                Confirmar Devolución
               </Button>
             </DialogFooter>
           </DialogContent>
@@ -736,4 +740,3 @@ export default function SalesPage() {
     </AppLayout>
   );
 }
-

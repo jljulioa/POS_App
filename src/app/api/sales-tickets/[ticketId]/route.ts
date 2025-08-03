@@ -71,7 +71,7 @@ const parseSalesTicketFromDB = (dbTicket: any): SalesTicketDB => {
       discountPercentage: discountPercentage,
       totalPrice: parseFloat(String(item.totalPrice || '0')) || (unitPrice * quantity),
     };
-  }).filter((item): item is SaleItemForTicket => item !== null);
+  }).filter((item: SaleItemForTicket | null): item is SaleItemForTicket => item !== null);
 
   return {
     id: String(dbTicket.id),
@@ -120,7 +120,7 @@ export async function PUT(request: NextRequest, { params }: { params: { ticketId
     // const currentTicket = parseSalesTicketFromDB(currentTicketResult[0]); // Not strictly needed if we update all provided fields
 
     const updateFields = [];
-    const queryParams = [];
+    const queryParams: any[] = [];
     let paramIndex = 1;
 
     const addParam = (value: any) => {
@@ -164,7 +164,7 @@ export async function PUT(request: NextRequest, { params }: { params: { ticketId
 }
 
 // DELETE handler to remove a sales ticket
-export async function DELETE(request: NextRequest, { params }: { params: { ticketId: string } }) {
+export async function DELETE(_request: NextRequest, { params }: { params: { ticketId: string } }) {
   const { ticketId } = params;
   try {
     const result = await query('DELETE FROM SalesTickets WHERE id = $1 RETURNING id', [ticketId]);

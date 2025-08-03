@@ -19,14 +19,14 @@ import type { Customer } from '@/lib/mockData';
 import React, { useEffect } from 'react';
 
 const CustomerFormSchema = z.object({
-  name: z.string().min(2, { message: "Name must be at least 2 characters." }),
-  email: z.string().email({ message: "Invalid email address." }).optional().or(z.literal('')),
+  name: z.string().min(2, { message: "El nombre debe tener al menos 2 caracteres." }),
+  email: z.string().email({ message: "Dirección de correo electrónico no válida." }).optional().or(z.literal('')),
   phone: z.string().optional().or(z.literal('')),
   address: z.string().optional().or(z.literal('')),
   identificationNumber: z.string().optional().or(z.literal('')), // Added new field
   purchaseHistoryCount: z.coerce.number().int().min(0).optional(),
   totalSpent: z.coerce.number().min(0).optional(),
-  creditLimit: z.coerce.number().min(0, "Credit limit must be non-negative.").optional(),
+  creditLimit: z.coerce.number().min(0, "El límite de crédito debe ser no negativo.").optional(),
   outstandingBalance: z.coerce.number().optional(),
 });
 
@@ -36,8 +36,8 @@ type CustomerFormValues = z.infer<typeof CustomerFormSchema>;
 const fetchCustomer = async (customerId: string): Promise<Customer> => {
   const response = await fetch(`/api/customers/${customerId}`);
   if (!response.ok) {
-    const errorData = await response.json().catch(() => ({ message: 'Failed to fetch customer and could not parse error' }));
-    throw new Error(errorData.message || 'Failed to fetch customer');
+    const errorData = await response.json().catch(() => ({ message: 'Error al obtener el cliente y no se pudo analizar el error' }));
+    throw new Error(errorData.message || 'Error al obtener el cliente');
   }
   return response.json();
 };
@@ -52,8 +52,8 @@ const updateCustomer = async ({ customerId, data }: { customerId: string; data: 
     body: JSON.stringify(data),
   });
   if (!response.ok) {
-    const errorData = await response.json().catch(() => ({ message: 'Failed to update customer and could not parse error' }));
-    throw new Error(errorData.message || 'Failed to update customer');
+    const errorData = await response.json().catch(() => ({ message: 'Error al actualizar el cliente y no se pudo analizar el error' }));
+    throw new Error(errorData.message || 'Error al actualizar el cliente');
   }
   return response.json();
 };
@@ -106,8 +106,8 @@ export default function EditCustomerPage() {
     mutationFn: (data) => updateCustomer({ customerId, data }),
     onSuccess: (data) => {
       toast({
-        title: "Customer Updated Successfully",
-        description: `${data.name} has been updated.`,
+        title: "Cliente Actualizado con Éxito",
+        description: `${data.name} ha sido actualizado.`,
       });
       queryClient.invalidateQueries({ queryKey: ['customers'] });
       queryClient.invalidateQueries({ queryKey: ['customer', customerId] });
@@ -116,8 +116,8 @@ export default function EditCustomerPage() {
     onError: (error) => {
       toast({
         variant: "destructive",
-        title: "Failed to Update Customer",
-        description: error.message || "An unexpected error occurred.",
+        title: "Error al Actualizar Cliente",
+        description: error.message || "Ocurrió un error inesperado.",
       });
     },
   });
@@ -129,7 +129,7 @@ export default function EditCustomerPage() {
   if (isLoadingCustomer) {
     return (
       <AppLayout>
-        <PageHeader title="Edit Customer" description="Loading customer details..." />
+        <PageHeader title="Editar Cliente" description="Cargando detalles del cliente..." />
         <div className="flex justify-center items-center h-64">
           <Loader2 className="h-12 w-12 animate-spin text-primary" />
         </div>
@@ -140,21 +140,21 @@ export default function EditCustomerPage() {
   if (isCustomerError || !customer) {
     return (
       <AppLayout>
-        <PageHeader title="Error" description="Could not load customer details." />
+        <PageHeader title="Error" description="No se pudieron cargar los detalles del cliente." />
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center text-destructive">
               <AlertTriangle className="mr-2 h-6 w-6" />
-              Failed to Load Customer
+              Error al Cargar Cliente
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p>{customerError?.message || "The customer could not be found or an error occurred."}</p>
+            <p>{customerError?.message || "No se pudo encontrar el cliente o se produjo un error."}</p>
           </CardContent>
           <CardFooter>
             <Button variant="outline" asChild>
               <Link href="/customers">
-                <ArrowLeft className="mr-2 h-4 w-4" /> Back to Customers
+                <ArrowLeft className="mr-2 h-4 w-4" /> Volver a Clientes
               </Link>
             </Button>
           </CardFooter>
@@ -165,10 +165,10 @@ export default function EditCustomerPage() {
 
   return (
     <AppLayout>
-      <PageHeader title={`Edit Customer: ${customer.name}`} description="Update the customer details below.">
+      <PageHeader title={`Editar Cliente: ${customer.name}`} description="Actualice los detalles del cliente a continuación.">
         <Button variant="outline" asChild>
           <Link href="/customers">
-            <ArrowLeft className="mr-2 h-4 w-4" /> Cancel
+            <ArrowLeft className="mr-2 h-4 w-4" /> Cancelar
           </Link>
         </Button>
       </PageHeader>
@@ -179,9 +179,9 @@ export default function EditCustomerPage() {
             <CardHeader>
               <CardTitle className="flex items-center">
                 <UserCog className="mr-2 h-6 w-6 text-primary" />
-                Customer Information
+                Información del Cliente
               </CardTitle>
-              <CardDescription>Fields marked with * are required.</CardDescription>
+              <CardDescription>Los campos marcados con * son obligatorios.</CardDescription>
             </CardHeader>
             <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-6 p-6">
               <FormField
@@ -189,9 +189,9 @@ export default function EditCustomerPage() {
                 name="name"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Full Name *</FormLabel>
+                    <FormLabel>Nombre Completo *</FormLabel>
                     <FormControl>
-                      <Input placeholder="e.g., John Doe" {...field} />
+                      <Input placeholder="Ej., John Doe" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -202,9 +202,9 @@ export default function EditCustomerPage() {
                 name="identificationNumber"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Identification Number</FormLabel>
+                    <FormLabel>Número de Identificación</FormLabel>
                     <FormControl>
-                      <Input placeholder="e.g., National ID, DNI, Cédula" {...field} value={field.value ?? ''} />
+                      <Input placeholder="Ej., Cédula, DNI" {...field} value={field.value ?? ''} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -215,9 +215,9 @@ export default function EditCustomerPage() {
                 name="email"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Email Address</FormLabel>
+                    <FormLabel>Correo Electrónico</FormLabel>
                     <FormControl>
-                      <Input type="email" placeholder="e.g., john.doe@example.com" {...field} value={field.value ?? ''} />
+                      <Input type="email" placeholder="Ej., john.doe@example.com" {...field} value={field.value ?? ''} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -228,9 +228,9 @@ export default function EditCustomerPage() {
                 name="phone"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Phone Number</FormLabel>
+                    <FormLabel>Número de Teléfono</FormLabel>
                     <FormControl>
-                      <Input placeholder="e.g., (555) 123-4567" {...field} value={field.value ?? ''} />
+                      <Input placeholder="Ej., (555) 123-4567" {...field} value={field.value ?? ''} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -241,9 +241,9 @@ export default function EditCustomerPage() {
                 name="address"
                 render={({ field }) => (
                   <FormItem className="md:col-span-2">
-                    <FormLabel>Address</FormLabel>
+                    <FormLabel>Dirección</FormLabel>
                     <FormControl>
-                      <Input placeholder="e.g., 123 Main St, Anytown, USA" {...field} value={field.value ?? ''} />
+                      <Input placeholder="Ej., Av. Siempre Viva 123" {...field} value={field.value ?? ''} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -254,7 +254,7 @@ export default function EditCustomerPage() {
                 name="purchaseHistoryCount"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Purchase History Count</FormLabel>
+                    <FormLabel>Historial de Compras</FormLabel>
                     <FormControl>
                       <Input type="number" {...field} value={field.value ?? 0} readOnly className="bg-muted/50"/>
                     </FormControl>
@@ -267,7 +267,7 @@ export default function EditCustomerPage() {
                 name="totalSpent"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Total Spent ($)</FormLabel>
+                    <FormLabel>Total Gastado ($)</FormLabel>
                     <FormControl>
                       <Input type="number" step="0.01" {...field} value={field.value ?? 0} readOnly className="bg-muted/50"/>
                     </FormControl>
@@ -280,9 +280,9 @@ export default function EditCustomerPage() {
                 name="creditLimit"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Credit Limit ($)</FormLabel>
+                    <FormLabel>Límite de Crédito ($)</FormLabel>
                     <FormControl>
-                      <Input type="number" step="0.01" placeholder="e.g., 500.00" {...field} value={field.value ?? ''} />
+                      <Input type="number" step="0.01" placeholder="Ej., 500.00" {...field} value={field.value ?? ''} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -293,9 +293,9 @@ export default function EditCustomerPage() {
                 name="outstandingBalance"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Outstanding Balance ($)</FormLabel>
+                    <FormLabel>Saldo Pendiente ($)</FormLabel>
                     <FormControl>
-                      <Input type="number" step="0.01" placeholder="e.g., 50.00" {...field} value={field.value ?? ''} />
+                      <Input type="number" step="0.01" placeholder="Ej., 50.00" {...field} value={field.value ?? ''} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -309,7 +309,7 @@ export default function EditCustomerPage() {
                 ) : (
                   <Save className="mr-2 h-4 w-4" />
                 )}
-                {mutation.isPending ? 'Saving...' : 'Save Changes'}
+                {mutation.isPending ? 'Guardando...' : 'Guardar Cambios'}
               </Button>
             </CardFooter>
           </Card>

@@ -63,13 +63,13 @@ const processInvoiceAPI = async ({ invoiceId, data }: { invoiceId: string; data:
 
 // Zod schema for quick product creation in modal
 const QuickProductCreateSchema = z.object({
-  name: z.string().min(3, "Name must be at least 3 characters."),
-  code: z.string().min(3, "Code must be at least 3 characters."),
-  reference: z.string().min(3, "Reference must be at least 3 characters."),
-  categoryId: z.coerce.number().int().positive({ message: "Category is required." }),
-  brand: z.string().min(2, "Brand is required."),
-  price: z.coerce.number().min(0, "Selling price must be non-negative."),
-  cost: z.coerce.number().min(0, "Cost price must be non-negative.").optional(),
+  name: z.string().min(3, "El nombre debe tener al menos 3 caracteres."),
+  code: z.string().min(3, "El código debe tener al menos 3 caracteres."),
+  reference: z.string().min(3, "La referencia debe tener al menos 3 caracteres."),
+  categoryId: z.coerce.number().int().positive({ message: "La categoría es obligatoria." }),
+  brand: z.string().min(2, "La marca es obligatoria."),
+  price: z.coerce.number().min(0, "El precio de venta debe ser no negativo."),
+  cost: z.coerce.number().min(0, "El precio de costo debe ser no negativo.").optional(),
   minStock: z.coerce.number().int().min(0).optional().default(0),
   maxStock: z.coerce.number().int().min(0).optional().default(0), // Added maxStock with default
 });
@@ -132,7 +132,7 @@ export default function ProcessPurchaseInvoicePage() {
   const processMutation = useMutation<PurchaseInvoice, Error, { invoiceId: string; data: Partial<PurchaseInvoice> & { items: Array<{productId: string; quantity: number; costPrice: number; newSellingPrice?: number}> } }>({
     mutationFn: processInvoiceAPI,
     onSuccess: (data) => {
-      toast({ title: "Invoice Processed", description: `Invoice ${data.invoiceNumber} has been successfully processed.` });
+      toast({ title: "Factura Procesada", description: `La factura ${data.invoiceNumber} ha sido procesada con éxito.` });
       queryClient.invalidateQueries({ queryKey: ['purchaseInvoices'] });
       queryClient.invalidateQueries({ queryKey: ['purchaseInvoice', invoiceId] });
       queryClient.invalidateQueries({ queryKey: ['products'] });
@@ -140,7 +140,7 @@ export default function ProcessPurchaseInvoicePage() {
       router.push('/purchase-invoices');
     },
     onError: (error) => {
-      toast({ variant: "destructive", title: "Processing Failed", description: error.message });
+      toast({ variant: "destructive", title: "Procesamiento Fallido", description: error.message });
     },
   });
 
@@ -162,7 +162,7 @@ export default function ProcessPurchaseInvoicePage() {
   const addProductMutation = useMutation<Product, Error, QuickProductCreateFormValues>({
     mutationFn: addProductAPI,
     onSuccess: (newProduct) => {
-      toast({ title: "Product Created", description: `${newProduct.name} has been successfully created.` });
+      toast({ title: "Producto Creado", description: `${newProduct.name} ha sido creado con éxito.` });
       queryClient.invalidateQueries({ queryKey: ['products'] });
       setIsCreateProductModalOpen(false);
       quickProductForm.reset();
@@ -171,7 +171,7 @@ export default function ProcessPurchaseInvoicePage() {
       // setProductSearchTerm(newProduct.name); // Or code
     },
     onError: (error) => {
-      toast({ variant: "destructive", title: "Failed to Create Product", description: error.message });
+      toast({ variant: "destructive", title: "Error al Crear Producto", description: error.message });
     },
   });
 
@@ -199,7 +199,7 @@ export default function ProcessPurchaseInvoicePage() {
 
   const handleAddItemToProcess = () => {
     if (!selectedProductDetails || Number(quantity) <= 0 || costPrice === "" || Number(costPrice) < 0) {
-      toast({ variant: "destructive", title: "Invalid Item", description: "Please select a product and enter valid quantity and cost price." });
+      toast({ variant: "destructive", title: "Artículo Inválido", description: "Por favor, seleccione un producto e ingrese una cantidad y precio de costo válidos." });
       return;
     }
 
@@ -243,13 +243,16 @@ export default function ProcessPurchaseInvoicePage() {
   const handleFinalizeProcessing = () => {
     if (!invoice) return;
     if (itemsToProcess.length === 0) {
-      toast({ variant: "destructive", title: "No Items", description: "Please add items to process for this invoice." });
+      toast({ variant: "destructive", title: "No hay Artículos", description: "Por favor, añada artículos para procesar esta factura." });
       return;
     }
     const itemsForAPI = itemsToProcess.map(item => ({
         productId: item.productId,
+        productName: item.productName,
+        productCode: item.productCode,
         quantity: item.quantity,
         costPrice: item.costPrice,
+        totalCost: item.totalCost,
         newSellingPrice: item.newSellingPrice,
     }));
     processMutation.mutate({ invoiceId: invoice.id, data: { processed: true, items: itemsForAPI } });
@@ -258,7 +261,7 @@ export default function ProcessPurchaseInvoicePage() {
   if (isLoadingInvoice || isLoadingProducts) {
     return (
       <AppLayout>
-        <PageHeader title="Process Purchase Invoice" description="Loading invoice details..." />
+        <PageHeader title="Procesar Factura de Compra" description="Cargando detalles de la factura..." />
         <div className="flex justify-center items-center h-64"><Loader2 className="h-12 w-12 animate-spin text-primary" /></div>
       </AppLayout>
     );
@@ -276,9 +279,9 @@ export default function ProcessPurchaseInvoicePage() {
   if (!invoice) {
     return (
       <AppLayout>
-        <PageHeader title="Invoice Not Found" />
-        <Card><CardContent className="p-4">The requested purchase invoice could not be found.</CardContent></Card>
-        <Button onClick={() => router.push('/purchase-invoices')} className="mt-4"><ArrowLeft className="mr-2 h-4 w-4" /> Back to Invoices</Button>
+        <PageHeader title="Factura no Encontrada" />
+        <Card><CardContent className="p-4">No se pudo encontrar la factura de compra solicitada.</CardContent></Card>
+        <Button onClick={() => router.push('/purchase-invoices')} className="mt-4"><ArrowLeft className="mr-2 h-4 w-4" /> Volver a Facturas</Button>
       </AppLayout>
     );
   }
@@ -286,24 +289,24 @@ export default function ProcessPurchaseInvoicePage() {
   if (invoice.processed) {
      return (
       <AppLayout>
-        <PageHeader title={`Invoice ${invoice.invoiceNumber}`} description="This invoice has already been processed." />
+        <PageHeader title={`Factura ${invoice.invoiceNumber}`} description="Esta factura ya ha sido procesada." />
          <Card>
           <CardHeader>
-            <CardTitle className="flex items-center"><CheckCircle className="mr-2 h-6 w-6 text-green-500"/>Invoice Already Processed</CardTitle>
+            <CardTitle className="flex items-center"><CheckCircle className="mr-2 h-6 w-6 text-green-500"/>Factura ya Procesada</CardTitle>
             <CardDescription>
-              The items for invoice <span className="font-semibold">{invoice.invoiceNumber}</span> from supplier <span className="font-semibold">{invoice.supplierName}</span> have already been added to inventory.
+              Los artículos de la factura <span className="font-semibold">{invoice.invoiceNumber}</span> del proveedor <span className="font-semibold">{invoice.supplierName}</span> ya han sido añadidos al inventario.
             </CardDescription>
           </CardHeader>
            <CardContent>
-            <h4 className="font-semibold mb-2">Processed Items:</h4>
+            <h4 className="font-semibold mb-2">Artículos Procesados:</h4>
             {invoice.items && invoice.items.length > 0 ? (
               <div className="rounded-md border">
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Product Name</TableHead>
-                      <TableHead className="text-center">Qty</TableHead>
-                      <TableHead className="text-right">Cost/Unit</TableHead>
+                      <TableHead>Nombre del Producto</TableHead>
+                      <TableHead className="text-center">Cant.</TableHead>
+                      <TableHead className="text-right">Costo/Unidad</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -318,12 +321,12 @@ export default function ProcessPurchaseInvoicePage() {
                 </Table>
               </div>
             ) : (
-              <p className="text-muted-foreground">No items were recorded for this processed invoice.</p>
+              <p className="text-muted-foreground">No se registraron artículos para esta factura procesada.</p>
             )}
           </CardContent>
           <CardFooter>
             <Button onClick={() => router.push('/purchase-invoices')}>
-              <ArrowLeft className="mr-2 h-4 w-4" /> Back to Purchase Invoices
+              <ArrowLeft className="mr-2 h-4 w-4" /> Volver a Facturas de Compra
             </Button>
           </CardFooter>
         </Card>
@@ -336,11 +339,11 @@ export default function ProcessPurchaseInvoicePage() {
   return (
     <AppLayout>
       <PageHeader 
-        title={`Process Invoice: ${invoice.invoiceNumber}`} 
-        description={`Supplier: ${invoice.supplierName} | Invoice Total: ${formatCurrency(invoice.totalAmount)}`}
+        title={`Procesar Factura: ${invoice.invoiceNumber}`} 
+        description={`Proveedor: ${invoice.supplierName} | Total Factura: ${formatCurrency(invoice.totalAmount)}`}
       >
         <Button onClick={() => router.push('/purchase-invoices')} variant="outline">
-          <ArrowLeft className="mr-2 h-4 w-4" /> Cancel
+          <ArrowLeft className="mr-2 h-4 w-4" /> Cancelar
         </Button>
       </PageHeader>
 
@@ -348,49 +351,49 @@ export default function ProcessPurchaseInvoicePage() {
         <Card className="lg:col-span-1 shadow-lg">
           <CardHeader>
             <CardTitle className="flex items-center justify-between">
-                <div className="flex items-center"><PlusCircle className="mr-2 h-5 w-5"/>Add Item to Invoice</div>
+                <div className="flex items-center"><PlusCircle className="mr-2 h-5 w-5"/>Añadir Artículo a la Factura</div>
                  <Dialog open={isCreateProductModalOpen} onOpenChange={setIsCreateProductModalOpen}>
                     <DialogTrigger asChild>
                       <Button variant="outline" size="sm">
-                        <PackagePlus className="mr-2 h-4 w-4" /> New Product
+                        <PackagePlus className="mr-2 h-4 w-4" /> Nuevo Producto
                       </Button>
                     </DialogTrigger>
                     <DialogContent className="sm:max-w-lg">
                       <DialogHeader>
-                        <DialogTitle>Create New Product</DialogTitle>
+                        <DialogTitle>Crear Nuevo Producto</DialogTitle>
                         <DialogDescription>
-                          Quickly add a new product to the system. Stock will be initialized to 0.
+                          Añada rápidamente un nuevo producto al sistema. El stock se inicializará a 0.
                         </DialogDescription>
                       </DialogHeader>
                       <Form {...quickProductForm}>
                         <form onSubmit={quickProductForm.handleSubmit(onQuickProductSubmit)} className="space-y-4 py-4">
-                          <FormField control={quickProductForm.control} name="name" render={({ field }) => (<FormItem><FormLabel>Name *</FormLabel><FormControl><Input placeholder="Product Name" {...field} /></FormControl><FormMessage /></FormItem>)} />
+                          <FormField control={quickProductForm.control} name="name" render={({ field }) => (<FormItem><FormLabel>Nombre *</FormLabel><FormControl><Input placeholder="Nombre del Producto" {...field} /></FormControl><FormMessage /></FormItem>)} />
                           <div className="grid grid-cols-2 gap-4">
-                            <FormField control={quickProductForm.control} name="code" render={({ field }) => (<FormItem><FormLabel>Code *</FormLabel><FormControl><Input placeholder="Product Code" {...field} /></FormControl><FormMessage /></FormItem>)} />
-                            <FormField control={quickProductForm.control} name="reference" render={({ field }) => (<FormItem><FormLabel>Reference *</FormLabel><FormControl><Input placeholder="Product Reference" {...field} /></FormControl><FormMessage /></FormItem>)} />
+                            <FormField control={quickProductForm.control} name="code" render={({ field }) => (<FormItem><FormLabel>Código *</FormLabel><FormControl><Input placeholder="Código del Producto" {...field} /></FormControl><FormMessage /></FormItem>)} />
+                            <FormField control={quickProductForm.control} name="reference" render={({ field }) => (<FormItem><FormLabel>Referencia *</FormLabel><FormControl><Input placeholder="Referencia del Producto" {...field} /></FormControl><FormMessage /></FormItem>)} />
                           </div>
                           <FormField control={quickProductForm.control} name="categoryId" render={({ field }) => (
                               <FormItem>
-                                <FormLabel>Category *</FormLabel>
+                                <FormLabel>Categoría *</FormLabel>
                                 <Select onValueChange={(value) => field.onChange(Number(value))} value={field.value?.toString()} disabled={isLoadingCategories}>
-                                  <FormControl><SelectTrigger><SelectValue placeholder={isLoadingCategories ? "Loading..." : "Select category"} /></SelectTrigger></FormControl>
+                                  <FormControl><SelectTrigger><SelectValue placeholder={isLoadingCategories ? "Cargando..." : "Seleccione una categoría"} /></SelectTrigger></FormControl>
                                   <SelectContent>{!isLoadingCategories && categories.map(cat => (<SelectItem key={cat.id} value={cat.id.toString()}>{cat.name}</SelectItem>))}</SelectContent>
                                 </Select><FormMessage />
                               </FormItem>
                             )} />
-                          <FormField control={quickProductForm.control} name="brand" render={({ field }) => (<FormItem><FormLabel>Brand *</FormLabel><FormControl><Input placeholder="Product Brand" {...field} /></FormControl><FormMessage /></FormItem>)} />
+                          <FormField control={quickProductForm.control} name="brand" render={({ field }) => (<FormItem><FormLabel>Marca *</FormLabel><FormControl><Input placeholder="Marca del Producto" {...field} /></FormControl><FormMessage /></FormItem>)} />
                           <div className="grid grid-cols-2 gap-4">
-                            <FormField control={quickProductForm.control} name="price" render={({ field }) => (<FormItem><FormLabel>Selling Price *</FormLabel><FormControl><Input type="number" step="0.01" placeholder="0.00" {...field} /></FormControl><FormMessage /></FormItem>)} />
-                            <FormField control={quickProductForm.control} name="cost" render={({ field }) => (<FormItem><FormLabel>Cost Price</FormLabel><FormControl><Input type="number" step="0.01" placeholder="0.00" {...field} /></FormControl><FormMessage /></FormItem>)} />
+                            <FormField control={quickProductForm.control} name="price" render={({ field }) => (<FormItem><FormLabel>Precio de Venta *</FormLabel><FormControl><Input type="number" step="0.01" placeholder="0.00" {...field} /></FormControl><FormMessage /></FormItem>)} />
+                            <FormField control={quickProductForm.control} name="cost" render={({ field }) => (<FormItem><FormLabel>Precio de Costo</FormLabel><FormControl><Input type="number" step="0.01" placeholder="0.00" {...field} /></FormControl><FormMessage /></FormItem>)} />
                           </div>
                           <div className="grid grid-cols-2 gap-4">
-                            <FormField control={quickProductForm.control} name="minStock" render={({ field }) => (<FormItem><FormLabel>Min. Stock</FormLabel><FormControl><Input type="number" placeholder="0" {...field} /></FormControl><FormMessage /></FormItem>)} />
-                            <FormField control={quickProductForm.control} name="maxStock" render={({ field }) => (<FormItem><FormLabel>Max. Stock</FormLabel><FormControl><Input type="number" placeholder="0" {...field} /></FormControl><FormMessage /></FormItem>)} />
+                            <FormField control={quickProductForm.control} name="minStock" render={({ field }) => (<FormItem><FormLabel>Stock Mín.</FormLabel><FormControl><Input type="number" placeholder="0" {...field} /></FormControl><FormMessage /></FormItem>)} />
+                            <FormField control={quickProductForm.control} name="maxStock" render={({ field }) => (<FormItem><FormLabel>Stock Máx.</FormLabel><FormControl><Input type="number" placeholder="0" {...field} /></FormControl><FormMessage /></FormItem>)} />
                           </div>
                           <DialogFooter>
-                            <Button type="button" variant="outline" onClick={() => setIsCreateProductModalOpen(false)}>Cancel</Button>
+                            <Button type="button" variant="outline" onClick={() => setIsCreateProductModalOpen(false)}>Cancelar</Button>
                             <Button type="submit" disabled={addProductMutation.isPending}>
-                              {addProductMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Create Product
+                              {addProductMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Crear Producto
                             </Button>
                           </DialogFooter>
                         </form>
@@ -401,7 +404,7 @@ export default function ProcessPurchaseInvoicePage() {
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="relative">
-              <label htmlFor="product-search" className="block text-sm font-medium text-foreground mb-1">Search Product (Code, Name, Ref) *</label>
+              <label htmlFor="product-search" className="block text-sm font-medium text-foreground mb-1">Buscar Producto (Código, Nombre, Ref) *</label>
               <div className="relative">
                 <SearchIcon className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input 
@@ -409,12 +412,12 @@ export default function ProcessPurchaseInvoicePage() {
                   type="text" 
                   value={productSearchTerm} 
                   onChange={e => setProductSearchTerm(e.target.value)} 
-                  placeholder="Type to search..."
+                  placeholder="Escriba para buscar..."
                   className="pl-8"
                   disabled={!!selectedProductDetails || isLoadingProducts}
                 />
               </div>
-              {isLoadingProducts && productSearchTerm && <p className="text-xs text-muted-foreground mt-1">Loading products...</p>}
+              {isLoadingProducts && productSearchTerm && <p className="text-xs text-muted-foreground mt-1">Cargando productos...</p>}
               {productSearchTerm && filteredProductsForSearch.length > 0 && !selectedProductDetails && (
                 <ScrollArea className="absolute z-10 w-full bg-background border rounded-md shadow-lg max-h-48 mt-1">
                   {filteredProductsForSearch.map(p => (
@@ -435,32 +438,32 @@ export default function ProcessPurchaseInvoicePage() {
                 <div className="flex justify-between items-start">
                     <div>
                         <p className="text-sm font-semibold">{selectedProductDetails.name}</p>
-                        <p className="text-xs text-muted-foreground">Code: {selectedProductDetails.code} | Ref: {selectedProductDetails.reference}</p>
+                        <p className="text-xs text-muted-foreground">Código: {selectedProductDetails.code} | Ref: {selectedProductDetails.reference}</p>
                     </div>
-                    <Button variant="link" size="sm" className="p-0 h-auto text-xs text-destructive" onClick={() => {setSelectedProductDetails(null); setCostPrice(""); setNewSellingPriceInput(""); setQuantity(1); }}>Clear</Button>
+                    <Button variant="link" size="sm" className="p-0 h-auto text-xs text-destructive" onClick={() => {setSelectedProductDetails(null); setCostPrice(""); setNewSellingPriceInput(""); setQuantity(1); }}>Limpiar</Button>
                 </div>
-                <p className="text-xs text-muted-foreground">Current Stock: {selectedProductDetails.stock}</p>
-                <p className="text-xs text-muted-foreground">Current Cost: {formatCurrency(selectedProductDetails.cost)}</p>
-                <p className="text-xs text-muted-foreground">Current Price: {formatCurrency(selectedProductDetails.price)}</p>
+                <p className="text-xs text-muted-foreground">Stock Actual: {selectedProductDetails.stock}</p>
+                <p className="text-xs text-muted-foreground">Costo Actual: {formatCurrency(selectedProductDetails.cost)}</p>
+                <p className="text-xs text-muted-foreground">Precio Actual: {formatCurrency(selectedProductDetails.price)}</p>
               </Card>
             )}
 
             {selectedProductDetails && (
               <>
                 <div>
-                  <label htmlFor="quantity" className="block text-sm font-medium text-foreground mb-1">Quantity Received *</label>
-                  <Input id="quantity" type="number" value={quantity} onChange={e => setQuantity(e.target.value === '' ? '' : Number(e.target.value))} placeholder="e.g., 10" min="1"/>
+                  <label htmlFor="quantity" className="block text-sm font-medium text-foreground mb-1">Cantidad Recibida *</label>
+                  <Input id="quantity" type="number" value={quantity} onChange={e => setQuantity(e.target.value === '' ? '' : Number(e.target.value))} placeholder="Ej., 10" min="1"/>
                 </div>
                 <div>
-                  <label htmlFor="costPrice" className="block text-sm font-medium text-foreground mb-1">Cost Price (per unit on Invoice) *</label>
-                  <Input id="costPrice" type="number" value={costPrice} onChange={e => setCostPrice(e.target.value)} placeholder="e.g., 25.50" step="0.01" min="0"/>
+                  <label htmlFor="costPrice" className="block text-sm font-medium text-foreground mb-1">Precio de Costo (por unidad en Factura) *</label>
+                  <Input id="costPrice" type="number" value={costPrice} onChange={e => setCostPrice(e.target.value)} placeholder="Ej., 25.50" step="0.01" min="0"/>
                 </div>
                  <div>
-                  <label htmlFor="newSellingPrice" className="block text-sm font-medium text-foreground mb-1">New Selling Price (optional)</label>
-                  <Input id="newSellingPrice" type="number" value={newSellingPriceInput} onChange={e => setNewSellingPriceInput(e.target.value)} placeholder={`Current: ${formatCurrency(selectedProductDetails.price)}`} step="0.01" min="0"/>
+                  <label htmlFor="newSellingPrice" className="block text-sm font-medium text-foreground mb-1">Nuevo Precio de Venta (opcional)</label>
+                  <Input id="newSellingPrice" type="number" value={newSellingPriceInput} onChange={e => setNewSellingPriceInput(e.target.value)} placeholder={`Actual: ${formatCurrency(selectedProductDetails.price)}`} step="0.01" min="0"/>
                 </div>
                 <Button onClick={handleAddItemToProcess} className="w-full">
-                  <ShoppingBag className="mr-2 h-4 w-4"/> Add Item
+                  <ShoppingBag className="mr-2 h-4 w-4"/> Añadir Artículo
                 </Button>
               </>
             )}
@@ -469,10 +472,10 @@ export default function ProcessPurchaseInvoicePage() {
 
         <Card className="lg:col-span-2 shadow-lg">
           <CardHeader>
-            <CardTitle>Items to Process for this Invoice</CardTitle>
+            <CardTitle>Artículos a Procesar para esta Factura</CardTitle>
             <CardDescription>
-              Review items before finalizing. Stock levels, product costs, and optionally selling prices will be updated.
-              Items Total: <span className="font-bold">{formatCurrency(totalCostOfItems)}</span>
+              Revise los artículos antes de finalizar. Se actualizarán los niveles de stock, los costos de los productos y, opcionalmente, los precios de venta.
+              Total de Artículos: <span className="font-bold">{formatCurrency(totalCostOfItems)}</span>
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -481,12 +484,12 @@ export default function ProcessPurchaseInvoicePage() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Product</TableHead>
-                      <TableHead className="text-center">Qty</TableHead>
-                      <TableHead className="text-right">Cost/Unit</TableHead>
-                      <TableHead className="text-right">New Price</TableHead>
-                      <TableHead className="text-right">Total Cost</TableHead>
-                      <TableHead className="text-center">Actions</TableHead>
+                      <TableHead>Producto</TableHead>
+                      <TableHead className="text-center">Cant.</TableHead>
+                      <TableHead className="text-right">Costo/Unidad</TableHead>
+                      <TableHead className="text-right">Nuevo Precio</TableHead>
+                      <TableHead className="text-right">Costo Total</TableHead>
+                      <TableHead className="text-center">Acciones</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -508,13 +511,13 @@ export default function ProcessPurchaseInvoicePage() {
                 </Table>
               </ScrollArea>
             ) : (
-              <p className="text-muted-foreground text-center py-4">No items added for processing yet.</p>
+              <p className="text-muted-foreground text-center py-4">Aún no se han añadido artículos para procesar.</p>
             )}
           </CardContent>
           <CardFooter className="flex justify-end">
             <Button onClick={handleFinalizeProcessing} disabled={itemsToProcess.length === 0 || processMutation.isPending} className="w-full md:w-auto">
               {processMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <CheckCircle className="mr-2 h-4 w-4"/>}
-              Finalize and Add to Inventory
+              Finalizar y Añadir al Inventario
             </Button>
           </CardFooter>
         </Card>
@@ -522,4 +525,3 @@ export default function ProcessPurchaseInvoicePage() {
     </AppLayout>
   );
 }
-

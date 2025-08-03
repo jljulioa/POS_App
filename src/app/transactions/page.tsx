@@ -84,17 +84,27 @@ export default function InventoryTransactionsPage() {
     }
   };
 
+  const translateTransactionType = (type: InventoryTransactionDB['transaction_type']): string => {
+    switch (type) {
+      case 'Sale': return 'Venta';
+      case 'Purchase': return 'Compra';
+      case 'Return': return 'Devolución';
+      case 'Adjustment': return 'Ajuste';
+      default: return type;
+    }
+  };
+
   const itemsPerPageOptions = [
-    { value: '20', label: '20 per page' },
-    { value: '40', label: '40 per page' },
-    { value: 'all', label: 'Show All' },
+    { value: '20', label: '20' },
+    { value: '40', label: '40' },
+    { value: 'all', label: 'Todos' },
   ];
 
 
   if (isLoading) {
     return (
       <AppLayout>
-        <PageHeader title="Inventory Transactions" description="Loading transaction history..." />
+        <PageHeader title="Transacciones de Inventario" description="Cargando historial de transacciones..." />
         <div className="flex justify-center items-center h-64">
           <Loader2 className="h-12 w-12 animate-spin text-primary" />
         </div>
@@ -105,10 +115,10 @@ export default function InventoryTransactionsPage() {
   if (isError) {
     return (
       <AppLayout>
-        <PageHeader title="Inventory Transactions" description="Error loading transaction data." />
+        <PageHeader title="Transacciones de Inventario" description="Error al cargar los datos de las transacciones." />
         <div className="bg-destructive/10 border border-destructive text-destructive p-4 rounded-md">
           <div className="flex items-center"><AlertTriangle className="mr-2 h-6 w-6" /> Error</div>
-          <p>{error?.message || "An unknown error occurred."}</p>
+          <p>{error?.message || "Ocurrió un error desconocido."}</p>
         </div>
       </AppLayout>
     );
@@ -116,11 +126,11 @@ export default function InventoryTransactionsPage() {
 
   return (
     <AppLayout>
-      <PageHeader title="Inventory Transactions" description="View all product stock movements.">
+      <PageHeader title="Transacciones de Inventario" description="Ver todos los movimientos de stock de productos.">
         <div className="relative w-full max-w-sm">
             <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
-              placeholder="Search by Product Name, ID, Document, Type..."
+              placeholder="Buscar por Nombre de Producto, ID, Documento, Tipo..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="pl-8" 
@@ -132,15 +142,15 @@ export default function InventoryTransactionsPage() {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Date</TableHead>
-              <TableHead>Product ID</TableHead>
-              <TableHead>Product Name</TableHead>
-              <TableHead className="text-center">Type</TableHead>
-              <TableHead className="text-center">Qty Change</TableHead>
-              <TableHead className="text-center">Stock Before</TableHead>
-              <TableHead className="text-center">Stock After</TableHead>
-              <TableHead>Related Document</TableHead>
-              <TableHead>Notes</TableHead>
+              <TableHead>Fecha</TableHead>
+              <TableHead>ID de Producto</TableHead>
+              <TableHead>Nombre del Producto</TableHead>
+              <TableHead className="text-center">Tipo</TableHead>
+              <TableHead className="text-center">Cambio de Cantidad</TableHead>
+              <TableHead className="text-center">Stock Anterior</TableHead>
+              <TableHead className="text-center">Stock Posterior</TableHead>
+              <TableHead>Documento Relacionado</TableHead>
+              <TableHead>Notas</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -151,7 +161,7 @@ export default function InventoryTransactionsPage() {
                 <TableCell className="font-medium">{transaction.product_name}</TableCell>
                 <TableCell className="text-center">
                   <Badge variant={getBadgeVariant(transaction.transaction_type)}>
-                    {transaction.transaction_type}
+                    {translateTransactionType(transaction.transaction_type)}
                   </Badge>
                 </TableCell>
                 <TableCell className={`text-center font-semibold ${transaction.quantity_change > 0 ? 'text-green-600' : 'text-red-600'}`}>
@@ -166,7 +176,7 @@ export default function InventoryTransactionsPage() {
             {displayedTransactions.length === 0 && (
               <TableRow>
                 <TableCell colSpan={9} className="h-24 text-center">
-                  No inventory transactions found.
+                  No se encontraron transacciones de inventario.
                 </TableCell>
               </TableRow>
             )}
@@ -175,20 +185,19 @@ export default function InventoryTransactionsPage() {
       </div>
       <div className="mt-6 flex flex-col sm:flex-row items-center justify-between gap-4">
         <div className="flex items-center gap-2">
-          <span className="text-sm text-muted-foreground">Rows per page:</span>
+          <span className="text-sm text-muted-foreground">Filas por página:</span>
           <Select value={itemsPerPage.toString()} onValueChange={handleItemsPerPageChange}>
-            <SelectTrigger className="w-[120px] h-9"><SelectValue placeholder="Items per page" /></SelectTrigger>
+            <SelectTrigger className="w-[120px] h-9"><SelectValue placeholder="Items por página" /></SelectTrigger>
             <SelectContent>{itemsPerPageOptions.map(option => (<SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>))}</SelectContent>
           </Select>
         </div>
-        <div className="text-sm text-muted-foreground">{filteredTransactions.length > 0 ? `Showing ${paginationStartItem}-${paginationEndItem} of ${filteredTransactions.length} transactions` : "No transactions"}</div>
+        <div className="text-sm text-muted-foreground">{filteredTransactions.length > 0 ? `Mostrando ${paginationStartItem}-${paginationEndItem} de ${filteredTransactions.length} transacciones` : "No hay transacciones"}</div>
         <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))} disabled={currentPage === 1 || itemsPerPage === 'all'}><ChevronLeft className="h-4 w-4 mr-1" /> Previous</Button>
-          <span className="text-sm text-muted-foreground">Page {currentPage} of {totalPages}</span>
-          <Button variant="outline" size="sm" onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))} disabled={currentPage === totalPages || itemsPerPage === 'all'}>Next <ChevronRight className="h-4 w-4 ml-1" /></Button>
+          <Button variant="outline" size="sm" onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))} disabled={currentPage === 1 || itemsPerPage === 'all'}><ChevronLeft className="h-4 w-4 mr-1" /> Anterior</Button>
+          <span className="text-sm text-muted-foreground">Página {currentPage} de {totalPages}</span>
+          <Button variant="outline" size="sm" onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))} disabled={currentPage === totalPages || itemsPerPage === 'all'}>Siguiente <ChevronRight className="h-4 w-4 ml-1" /></Button>
         </div>
       </div>
     </AppLayout>
   );
 }
-

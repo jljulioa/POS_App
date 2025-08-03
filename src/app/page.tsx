@@ -152,73 +152,73 @@ export default function DashboardPage() {
   return (
     <AppLayout>
       <div className="space-y-6">
-        <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground">Dashboard Overview</h1>
+        <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground">Dashboard General</h1>
         
         <div className="grid gap-4 sm:gap-6 md:grid-cols-2 lg:grid-cols-3">
           <StatCard 
-            title="Start New Sale" 
+            title="Empezar Nueva Venta" 
             value="POS" 
             icon={Barcode} 
             description="Quickly process customer transactions."
             ctaLink="/pos"
-            ctaText="Go to POS"
+            ctaText="Ir a POS"
             colorClass="text-green-500"
           />
           <StatCard 
-            title="Total Products" 
+            title="Productos en Stock" 
             value={productStats?.totalProducts ?? 'N/A'}
             icon={Package}
             description="Current unique items in stock."
             ctaLink="/inventory"
-            ctaText="View Inventory"
+            ctaText="Ver Inventario"
             colorClass="text-blue-500"
             isLoading={isLoadingProductStats}
             isError={isErrorProductStats}
             errorMessage={(productStatsError as Error)?.message}
           />
           <StatCard 
-            title="Today's Sales" 
+            title="Ventas Totales Hoy" 
             value={salesStats?.totalSalesAmount !== undefined ? formatCurrency(salesStats.totalSalesAmount) : 'N/A'}
             icon={ShoppingCart}
             description={`${salesStats?.totalSalesCount ?? 0} transactions today`}
             ctaLink="/reports/sales-summary?period=today"
-            ctaText="View Today's Report"
+            ctaText="Ver Ventas"
             colorClass="text-purple-500"
             isLoading={isLoadingSalesStats}
             isError={isErrorSalesStats}
             errorMessage={(salesStatsError as Error)?.message}
           />
           <StatCard 
-            title="Total Customers" 
+            title="Total Clientes" 
             value={customerStats?.totalCustomers ?? 'N/A'}
             icon={Users}
             description="Total registered customers."
             ctaLink="/customers"
-            ctaText="Manage Customers"
+            ctaText="Ver Clientes"
             colorClass="text-orange-500"
             isLoading={isLoadingCustomerStats}
             isError={isErrorCustomerStats}
             errorMessage={(customerStatsError as Error)?.message}
           />
           <StatCard
-            title="Low Stock Items"
+            title="Items Bajos en Stock"
             value={lowStockStats?.totalLowStockItems ?? 'N/A'}
             icon={AlertTriangle}
             description="Items needing reorder soon."
             ctaLink="/inventory?status=low_stock"
-            ctaText="View Low Stock"
+            ctaText="Ver Bajos en Stock"
             colorClass="text-yellow-500"
             isLoading={isLoadingLowStockStats}
             isError={isErrorLowStockStats}
             errorMessage={(lowStockStatsError as Error)?.message}
           />
           <StatCard
-            title="Out of Stock Items"
+            title="Items Agotados"
             value={outOfStockStats?.totalOutOfStockItems ?? 'N/A'}
             icon={Archive}
             description="Items currently unavailable."
             ctaLink="/inventory?status=out_of_stock"
-            ctaText="View Out of Stock"
+            ctaText="Ver Agotados"
             colorClass="text-red-500"
             isLoading={isLoadingOutOfStockStats}
             isError={isErrorOutOfStockStats}
@@ -230,9 +230,9 @@ export default function DashboardPage() {
           <CardHeader>
             <CardTitle className="flex items-center">
               <TrendingUp className="mr-2 h-6 w-6 text-primary" />
-              Last 5 Days Sales Performance
+              Ventas Ulitmos 5 días
             </CardTitle>
-            <CardDescription>Revenue, COGS, and Profit for {dailySalesSummary && dailySalesSummary.length > 0 ? `${dailySalesSummary[0].date} - ${dailySalesSummary[dailySalesSummary.length - 1].date}` : 'the last 5 days'}.</CardDescription>
+            <CardDescription>Ingresos, COGS, y Ganancia: {dailySalesSummary && dailySalesSummary.length > 0 ? `${dailySalesSummary[0].date} - ${dailySalesSummary[dailySalesSummary.length - 1].date}` : 'the last 5 days'}.</CardDescription>
           </CardHeader>
           <CardContent>
             {isLoadingDailySummary && (
@@ -302,22 +302,22 @@ export default function DashboardPage() {
           <CardContent className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
             <Button asChild variant="outline" className="py-4 sm:py-6 text-sm sm:text-base">
               <Link href="/inventory/add">
-                <Package className="mr-2 h-4 w-4 sm:h-5 sm:w-5" /> Add Product
+                <Package className="mr-2 h-4 w-4 sm:h-5 sm:w-5" /> Agregar Inventario
               </Link>
             </Button>
             <Button asChild variant="outline" className="py-4 sm:py-6 text-sm sm:text-base">
               <Link href="/reordering">
-                <Bot className="mr-2 h-4 w-4 sm:h-5 sm:w-5" /> Smart Reorder
+                <Bot className="mr-2 h-4 w-4 sm:h-5 sm:w-5" /> Reordenamiento IA
               </Link>
             </Button>
              <Button asChild variant="outline" className="py-4 sm:py-6 text-sm sm:text-base">
               <Link href="/reports/sales-summary">
-                <FileText className="mr-2 h-4 w-4 sm:h-5 sm:w-5" /> Sales Report
+                <FileText className="mr-2 h-4 w-4 sm:h-5 sm:w-5" /> Reporte de Ventas
               </Link>
             </Button>
              <Button asChild variant="outline" className="py-4 sm:py-6 text-sm sm:text-base">
               <Link href="/customers/add">
-                <Users className="mr-2 h-4 w-4 sm:h-5 sm:w-5" /> Add Customer
+                <Users className="mr-2 h-4 w-4 sm:h-5 sm:w-5" /> Agregar Clientes
               </Link>
             </Button>
           </CardContent>

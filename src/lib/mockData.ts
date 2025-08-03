@@ -109,7 +109,7 @@ export type ExpenseCategoryEnum =
     | 'Meals & Entertainment'
     | 'Other';
 
-export const expenseCategories: ExpenseCategoryEnum[] = [
+export const expenseCategories: ExpenseCategoryEnum[] = [ 
     'Rent', 'Utilities', 'Supplies', 'Salaries', 'Marketing', 'Maintenance',
     'Office', 'Travel', 'Taxes', 'Insurance', 'Bank Fees', 'Shipping', 'Meals & Entertainment', 'Other'
 ];

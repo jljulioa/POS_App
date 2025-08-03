@@ -188,7 +188,7 @@ export default function CategoriesPage() {
 
   return (
     <AppLayout>
-      <PageHeader title="Product Categories" description="Manage your product categories." />
+      <PageHeader title="Categorias de Productos" description="Gestion de Categorias" />
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6">
         <div className="md:col-span-1">
@@ -198,7 +198,7 @@ export default function CategoriesPage() {
                 <CardHeader>
                   <CardTitle className="flex items-center">
                     {formMode === 'edit' ? <Edit3 className="mr-2 h-6 w-6 text-accent" /> : <ListPlus className="mr-2 h-6 w-6 text-primary" />}
-                    {formMode === 'edit' ? 'Edit Category' : 'Add New Category'}
+                    {formMode === 'edit' ? 'Editando Categoría' : 'Add Nueva Categoría'}
                   </CardTitle>
                   {formMode === 'edit' && editingCategory && <CardDescription>Editing: {editingCategory.name}</CardDescription>}
                 </CardHeader>
@@ -208,9 +208,9 @@ export default function CategoriesPage() {
                     name="name"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Category Name *</FormLabel>
+                        <FormLabel>Nombre Categoria *</FormLabel>
                         <FormControl>
-                          <Input placeholder="e.g., Engine Parts" {...field} />
+                          <Input placeholder="e.g., Partes de Motor" {...field} />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -221,9 +221,9 @@ export default function CategoriesPage() {
                     name="description"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Description (Optional)</FormLabel>
+                        <FormLabel>Descripcion (Opcional)</FormLabel>
                         <FormControl>
-                          <Textarea placeholder="Brief description of the category" {...field} value={field.value ?? ''} />
+                          <Textarea placeholder="Descripción de la categoría" {...field} value={field.value ?? ''} />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -237,7 +237,7 @@ export default function CategoriesPage() {
                     ) : (
                       <Save className="mr-2 h-4 w-4" />
                     )}
-                    {addMutation.isPending || updateMutation.isPending ? 'Saving...' : (formMode === 'edit' ? 'Update Category' : 'Save Category')}
+                    {addMutation.isPending || updateMutation.isPending ? 'Saving...' : (formMode === 'edit' ? 'Guardar Edición' : 'Guardar Categoría')}
                   </Button>
                   {formMode === 'edit' && (
                     <Button type="button" variant="outline" onClick={handleCancelEdit} className="w-full mt-2">
